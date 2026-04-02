@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-electron/
+"What Should I Do Next 1.0.0-arm64"
+*.log
+.DS_Store
+.env
+.vercel
+icon.iconset/
