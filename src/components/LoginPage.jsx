@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { logger } from '../lib/logger'
 
 export default function LoginPage({ onLogin, onSkip }) {
   const [mode, setMode]       = useState('login') // 'login' | 'register'
@@ -13,11 +14,21 @@ export default function LoginPage({ onLogin, onSkip }) {
     setLoading(true)
     try {
       if (mode === 'login') {
+        logger.auth.loginAttempt(email)
         const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
+        if (error) {
+          logger.auth.loginFailure(email, error.message)
+          throw error
+        }
+        logger.auth.loginSuccess(email)
       } else {
+        logger.auth.signupAttempt(email)
         const { error } = await supabase.auth.signUp({ email, password })
-        if (error) throw error
+        if (error) {
+          logger.auth.signupFailure(email, error.message)
+          throw error
+        }
+        logger.auth.signupSuccess(email)
       }
       onLogin()
     } catch (e) {
@@ -29,11 +40,15 @@ export default function LoginPage({ onLogin, onSkip }) {
 
   const handleGoogle = async () => {
     setError('')
+    logger.auth.oauthAttempt('google')
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
     })
-    if (error) setError(error.message)
+    if (error) {
+      logger.auth.oauthFailure('google', error.message)
+      setError(error.message)
+    }
   }
 
   return (

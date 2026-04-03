@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -9,6 +9,8 @@ function getSettingsPath() {
 }
 
 function createWindow() {
+  const isDev = process.env.ELECTRON_DEV === '1'
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -18,14 +20,48 @@ function createWindow() {
     trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true,
+      contextIsolation: true,     // keep renderer isolated from Node
+      webSecurity: true,          // enforce same-origin policy; never disable
+      allowRunningInsecureContent: false, // block mixed HTTP/HTTPS content
       preload: path.join(__dirname, 'preload.cjs'),
     },
     icon: path.join(__dirname, 'icon.icns'),
     backgroundColor: '#f7f7f8',
   })
 
-  const isDev = process.env.ELECTRON_DEV === '1'
+  // ── Block navigation to unexpected origins ──────────────────────────────────
+  // Prevents renderer-level XSS from redirecting the window to an attacker URL.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    let parsed
+    try { parsed = new URL(url) } catch { event.preventDefault(); return }
+
+    const allowed =
+      parsed.protocol === 'file:' ||                               // prod build
+      (isDev && url.startsWith('http://localhost:5173')) ||        // dev server
+      parsed.hostname.endsWith('supabase.co') ||                   // Supabase auth
+      parsed.hostname === 'accounts.google.com'                    // Google OAuth
+
+    if (!allowed) {
+      console.warn(`[SECURITY] Blocked navigation to: ${url}`)
+      event.preventDefault()
+    }
+  })
+
+  // ── Block unexpected popup windows ──────────────────────────────────────────
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    let parsed
+    try { parsed = new URL(url) } catch { return { action: 'deny' } }
+
+    const allowed =
+      parsed.hostname === 'accounts.google.com' ||
+      parsed.hostname.endsWith('supabase.co')
+
+    if (!allowed) {
+      console.warn(`[SECURITY] Blocked window.open to: ${url}`)
+      return { action: 'deny' }
+    }
+    return { action: 'allow' }
+  })
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
@@ -36,6 +72,33 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // ── Block all plaintext HTTP to external hosts (HTTPS only) ────────────────
+  // Requests to localhost are exempt so the Vite dev server works normally.
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: ['http://*/*'] },
+    (details, callback) => {
+      const url = details.url
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')) {
+        callback({ cancel: false })
+      } else {
+        console.warn(`[SECURITY] Blocked plaintext HTTP request: ${url}`)
+        callback({ cancel: true })
+      }
+    }
+  )
+
+  // ── Add security response headers to all requests ──────────────────────────
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'X-Content-Type-Options': ['nosniff'],
+        'X-Frame-Options': ['DENY'],
+        'Referrer-Policy': ['strict-origin-when-cross-origin'],
+      },
+    })
+  })
+
   // Nuke stale/corrupted service worker DB left by vite-plugin-pwa
   const swPath = path.join(app.getPath('userData'), 'Service Worker')
   try { if (fs.existsSync(swPath)) fs.rmSync(swPath, { recursive: true, force: true }) } catch {}
