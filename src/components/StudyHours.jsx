@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, X, TrendingUp, TrendingDown, Minus, Clock, Flame, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
 import { PomodoroTimer } from './PomodoroTimer'
+import { getMondayOfWeek } from '../utils/dates'
 
 const TODAY = new Date()
 TODAY.setHours(0, 0, 0, 0)
@@ -13,14 +14,6 @@ function weekDayNum() {
 }
 
 function shouldShowBehind() { return weekDayNum() > 1 }
-
-function getMondayOfWeek(date) {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  const diff = d.getDay() === 0 ? -6 : 1 - d.getDay()
-  d.setDate(d.getDate() + diff)
-  return d
-}
 
 function loadSessions() {
   try { return JSON.parse(localStorage.getItem('study-sessions')) || [] }
@@ -80,59 +73,99 @@ function last7Days(sessions) {
 
 function getStudySuggestions(subject, deficit, daysLeftInWeek, sessions) {
   const suggestions = []
-
-  // How long since last studied this subject
-  const subjectSessions = sessions.filter(s => s.subject === subject.key)
-  const lastSession = subjectSessions.sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+  const subjectSessions = sessions
+    .filter(s => s.subject === subject.key)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  const lastSession = subjectSessions[0]
   const daysSinceLast = lastSession
     ? Math.max(0, Math.round((TODAY - new Date(lastSession.date)) / 86400000))
     : null
+  const avgSessionLen = subjectSessions.length >= 2
+    ? subjectSessions.slice(0, 8).reduce((a, b) => a + b.hours, 0) / Math.min(subjectSessions.length, 8)
+    : null
+  const recentMoods = subjectSessions.slice(0, 3).map(s => s.mood).filter(Boolean)
+  const lowEnergy = recentMoods.length >= 2 && recentMoods.every(m => m === '😴' || m === '😐')
 
-  // Recovery session recommendation
+  // 1. Concrete recovery plan (split sensibly across remaining days)
   if (deficit > 0 && daysLeftInWeek > 0) {
-    const hoursToday = Math.ceil((deficit / daysLeftInWeek) * 2) / 2  // round up to nearest 0.5h
-    suggestions.push({
-      emoji: '⏱️',
-      text: daysLeftInWeek === 1
-        ? `Faz uma sessão de ${hoursToday}h ainda hoje para fechar a semana`
-        : `${hoursToday}h/dia nos próximos ${daysLeftInWeek} dias compensa o atraso`,
-    })
+    if (daysLeftInWeek === 1) {
+      if (deficit <= 1.5) {
+        suggestions.push({ emoji: '⏱️', text: `Faz ${deficit.toFixed(1)}h ainda hoje — uma sessão focada fecha o atraso` })
+      } else {
+        const blocks = Math.ceil(deficit / 1.5)
+        const blockLen = (deficit / blocks).toFixed(1)
+        suggestions.push({ emoji: '⏱️', text: `Divide as ${deficit.toFixed(1)}h em ${blocks} blocos de ${blockLen}h com 15–20min de pausa entre eles para não quebrar` })
+      }
+    } else {
+      const todayH = Math.min(Math.ceil(deficit * 0.45 * 2) / 2, avgSessionLen ? avgSessionLen * 1.1 : 2)
+      const restPerDay = Math.ceil(((deficit - todayH) / (daysLeftInWeek - 1)) * 2) / 2
+      suggestions.push({
+        emoji: '📅',
+        text: `Plano de recuperação: ${todayH.toFixed(1)}h hoje + ${restPerDay.toFixed(1)}h/dia nos ${daysLeftInWeek - 1} dias seguintes — resolve o atraso sem sobrecarregar um único dia`,
+      })
+    }
   }
 
-  // Last studied warning
-  if (daysSinceLast !== null && daysSinceLast >= 4) {
-    suggestions.push({
-      emoji: '⚠️',
-      text: `Não estudas ${subject.name} há ${daysSinceLast} dias — começa por rever os últimos apontamentos`,
-    })
-  } else if (daysSinceLast !== null && daysSinceLast >= 2) {
-    suggestions.push({
-      emoji: '🔁',
-      text: `Última sessão há ${daysSinceLast} dias — revisita o que fizeste antes de avançar`,
-    })
+  // 2. Recency — specific advice based on gap
+  if (daysSinceLast === null) {
+    suggestions.push({ emoji: '🆕', text: `Ainda não registaste nenhuma sessão de ${subject.name} — começa por mapear os tópicos principais e criar um mini-plano de estudo` })
+  } else if (daysSinceLast >= 6) {
+    suggestions.push({ emoji: '⚠️', text: `${daysSinceLast} dias sem estudar esta cadeira — reserva os primeiros 20min para uma revisão rápida do que já sabes antes de avançar para matéria nova. Sem isso, a sessão vai ser ineficiente.` })
+  } else if (daysSinceLast >= 3) {
+    suggestions.push({ emoji: '🔁', text: `Última sessão há ${daysSinceLast} dias — relê os últimos 10min de notas antes de arrancar para não perder o fio ao raciocínio` })
   }
 
-  // Study methods for this subject
-  const methods = subject.methods || []
-  if (methods.length > 0) {
-    suggestions.push({
-      emoji: '📋',
-      text: `Métodos configurados para esta cadeira:`,
-      methods,
-    })
-  } else {
-    suggestions.push({
-      emoji: '💡',
-      text: 'Experimenta: resumo dos apontamentos, prática de exercícios ou flashcards',
-    })
-  }
-
-  // Pomodoro tip if very behind
-  if (deficit > 2) {
+  // 3. Pomodoro with concrete numbers
+  if (deficit >= 0.75) {
+    const pomoCount = Math.max(1, Math.round(deficit * 60 / 25))
+    const pomoHours = (pomoCount * 25 / 60).toFixed(1)
     suggestions.push({
       emoji: '🍅',
-      text: 'Usa o Pomodoro (25+5 min) — ajuda a arrancar quando a motivação está baixa',
+      text: lowEnergy
+        ? `Com energia baixa, começa com 2 Pomodoros curtos (2×25min = 50min) — é menos intimidante e costuma desbloquear o ritmo`
+        : `${pomoCount} Pomodoros (${pomoCount}×25min ≈ ${pomoHours}h) cobrem o atraso — inicia o timer sem negociar contigo mesma`,
     })
+  }
+
+  // 4. Exam proximity
+  let upcomingExam = null
+  try {
+    const exams = JSON.parse(localStorage.getItem('exams')) || []
+    upcomingExam = exams
+      .filter(e => {
+        const d = Math.round((new Date(e.date + 'T12:00:00') - TODAY) / 86400000)
+        return d >= 0 && d <= 21 &&
+          (e.subject?.toLowerCase() === subject.name?.toLowerCase() || e.subject === subject.key ||
+           subject.name?.toLowerCase().includes(e.subject?.toLowerCase()))
+      })
+      .sort((a, b) => new Date(a.date) - new Date(b.date))[0]
+  } catch (err) { console.error('StudyHours: failed to load upcoming exam', err) }
+  if (upcomingExam) {
+    const d = Math.round((new Date(upcomingExam.date + 'T12:00:00') - TODAY) / 86400000)
+    const hoursPerDay = d > 0 ? (deficit / d).toFixed(1) : deficit.toFixed(1)
+    if (d <= 3) {
+      suggestions.push({ emoji: '🚨', text: `${upcomingExam.type || 'Teste'} daqui a ${d} dia${d !== 1 ? 's' : ''} — para o que tiveres a fazer e faz ${hoursPerDay}h/dia até lá. Foca em exercícios resolvidos, não em ler matéria nova.` })
+    } else {
+      suggestions.push({ emoji: '📌', text: `${upcomingExam.type || 'Teste'} em ${d} dias — com este atraso tens ~${hoursPerDay}h/dia disponíveis para te preparares. Não deixes acumular mais.` })
+    }
+  }
+
+  // 5. Technique based on deficit size and methods configured
+  const methods = subject.methods || []
+  if (methods.length > 0) {
+    const recommended = deficit > 2
+      ? methods[0]
+      : methods[Math.floor(Math.random() * methods.length)]
+    suggestions.push({
+      emoji: '📋',
+      text: `Para este atraso, o método mais rentável desta cadeira é provavelmente "${recommended}" — ${deficit > 1.5 ? 'faz isso primeiro antes de passar para outros' : 'deve dar para cobrir numa boa sessão'}`,
+    })
+  } else if (deficit > 3) {
+    suggestions.push({ emoji: '💡', text: `Com mais de 3h em atraso, divide assim: 1ª sessão → revisão dos apontamentos + identificar o que não sabes; 2ª sessão → exercícios sobre esses pontos fracos` })
+  } else if (deficit > 1) {
+    suggestions.push({ emoji: '💡', text: `Sessão de exercícios práticos > reler apontamentos — praticares ativamente recupera mais em menos tempo do que reler passivamente` })
+  } else {
+    suggestions.push({ emoji: '💡', text: `Com menos de 1h em falta, uma revisão activa de 45min (testa-te a ti própria em vez de releres) é suficiente` })
   }
 
   return suggestions
@@ -176,6 +209,13 @@ export default function StudyHours({ settings }) {
   const [showTargets, setShowTargets] = useState(false)
   const [showPomodoro, setShowPomodoro] = useState(false)
   const [expandedSuggestions, setExpandedSuggestions] = useState({})
+  const [showOnTrack, setShowOnTrack] = useState(true)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [editingSession, setEditingSession] = useState(null)
+  const [editDraft, setEditDraft] = useState({})
+  const [historySearch, setHistorySearch] = useState('')
+  const [historySubject, setHistorySubject] = useState('')
+  const [chartDays, setChartDays] = useState(7)
   const [form, setForm] = useState({
     subject: subjects[0]?.key || '',
     hours: '',
@@ -231,10 +271,50 @@ export default function StudyHours({ settings }) {
   const weekPct         = Math.min(100, shouldShowBehind() ? Math.round(weekHours / weekTarget * 100) : 100)
   const weekTargetNow   = weekTarget * (weekDayNum() / 7)
 
+  const saveEditSession = () => {
+    const hours = parseFloat(editDraft.hours)
+    if (!hours || hours <= 0) return
+    setSessions(prev => prev.map(s => s.id === editingSession
+      ? { ...s, hours, notes: editDraft.notes, mood: editDraft.mood, date: new Date(editDraft.date).toDateString() }
+      : s
+    ))
+    setEditingSession(null)
+    setEditDraft({})
+  }
+
   const streak    = currentStreak(sessions)
-  const chartData = last7Days(sessions)
+  const chartData = (() => {
+    const result = []
+    for (let i = chartDays - 1; i >= 0; i--) {
+      const d = new Date(TODAY)
+      d.setDate(TODAY.getDate() - i)
+      const key = d.toDateString()
+      const hours = sessions.filter(s => s.date === key).reduce((a, b) => a + b.hours, 0)
+      const label = chartDays <= 7
+        ? d.toLocaleDateString('pt-PT', { weekday: 'short' })
+        : d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'numeric' })
+      result.push({ label, hours, date: key })
+    }
+    return result
+  })()
   const maxChart  = Math.max(...chartData.map(d => d.hours), 1)
   const dowLabel  = DOW_LABELS[TODAY.getDay()]
+
+  // Weekday breakdown: average hours per day of week from all sessions
+  const dowBreakdown = (() => {
+    const totals = [0,0,0,0,0,0,0]
+    const counts = [0,0,0,0,0,0,0]
+    sessions.forEach(s => {
+      const dow = new Date(s.date).getDay()
+      totals[dow] += s.hours
+      counts[dow]++
+    })
+    return [1,2,3,4,5,6,0].map(dow => ({
+      label: ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow],
+      avg: counts[dow] > 0 ? totals[dow] / counts[dow] : 0,
+      dow,
+    }))
+  })()
 
   return (
     <div className="fade-in">
@@ -352,40 +432,86 @@ export default function StudyHours({ settings }) {
         </div>
       </div>
 
-      {/* Streak */}
-      <div className="stat-card" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div>
-          <div className="stat-label"><Flame size={12} /> Streak</div>
-          <div className="stat-value" style={{ fontSize: '1.5rem' }}>{streak} dias</div>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 40 }}>
-            {chartData.map(d => {
-              const h   = Math.max(0, (d.hours / maxChart) * 100)
-              const isT = d.date === TODAY.toDateString()
-              return (
-                <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                  <div style={{
-                    width: '100%', height: `${h}%`, minHeight: d.hours > 0 ? 4 : 0,
-                    background: isT ? 'var(--rose-400)' : 'var(--rose-200)',
-                    borderRadius: 3,
-                  }} />
-                  <span style={{ fontSize: '0.6rem', color: isT ? 'var(--rose-400)' : 'var(--gray-400)', fontWeight: isT ? 700 : 500 }}>
-                    {d.label}
-                  </span>
-                </div>
-              )
-            })}
+      {/* Streak + chart */}
+      <div className="stat-card" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
+          <div>
+            <div className="stat-label"><Flame size={12} /> Streak</div>
+            <div className="stat-value" style={{ fontSize: '1.5rem' }}>{streak} dias</div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[7,30].map(n => (
+              <button key={n} onClick={() => setChartDays(n)} style={{
+                padding: '3px 10px', borderRadius: 50, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: '0.7rem', fontWeight: 700, border: `1.5px solid ${chartDays === n ? 'var(--rose-300)' : 'var(--gray-200)'}`,
+                background: chartDays === n ? 'var(--rose-50)' : 'var(--white)', color: chartDays === n ? 'var(--rose-400)' : 'var(--gray-400)',
+              }}>{n}d</button>
+            ))}
           </div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: chartDays > 7 ? 2 : 5, height: 50 }}>
+          {chartData.map(d => {
+            const h   = Math.max(0, (d.hours / maxChart) * 100)
+            const isT = d.date === TODAY.toDateString()
+            return (
+              <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <div style={{
+                  width: '100%', height: `${h}%`, minHeight: d.hours > 0 ? 3 : 0,
+                  background: isT ? 'var(--rose-400)' : 'var(--rose-200)',
+                  borderRadius: 2,
+                }} />
+                {chartDays <= 14 && (
+                  <span style={{ fontSize: '0.55rem', color: isT ? 'var(--rose-400)' : 'var(--gray-400)', fontWeight: isT ? 700 : 500 }}>
+                    {d.label}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
+
+      {/* Weekday breakdown */}
+      {sessions.length >= 5 && (
+        <div className="stat-card" style={{ marginBottom: 14 }}>
+          <div className="stat-label">Média de horas por dia da semana</div>
+          {(() => {
+            const maxAvg = Math.max(...dowBreakdown.map(d => d.avg), 0.1)
+            const best = dowBreakdown.reduce((b, d) => d.avg > b.avg ? d : b, dowBreakdown[0])
+            return (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                {dowBreakdown.map(d => (
+                  <div key={d.dow} style={{
+                    padding: '4px 10px', borderRadius: 20,
+                    background: d.dow === best.dow ? 'var(--green-50)' : 'var(--gray-50)',
+                    border: `1.5px solid ${d.dow === best.dow ? 'var(--green-200)' : 'var(--gray-200)'}`,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                  }}>
+                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: d.dow === best.dow ? 'var(--green-600)' : 'var(--gray-500)' }}>{d.label}</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: d.avg > 0 ? (d.dow === best.dow ? 'var(--green-700)' : 'var(--gray-700)') : 'var(--gray-300)' }}>
+                      {d.avg > 0 ? `${d.avg.toFixed(1)}h` : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {/* Per subject */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-header">
           <span className="card-title">On Track — esperado ate {dowLabel}</span>
+          <button
+            onClick={() => setShowOnTrack(v => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: 4, display: 'flex', alignItems: 'center' }}
+          >
+            {showOnTrack ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
         </div>
-        <div style={{ padding: '8px 20px 16px' }}>
+        {showOnTrack && <div style={{ padding: '8px 20px 16px' }}>
           {subjects.length === 0 && (
             <p style={{ fontSize: '0.83rem', color: 'var(--gray-400)', padding: '8px 0' }}>
               Ainda sem cadeiras configuradas. Adiciona-as nas Definições.
@@ -450,32 +576,17 @@ export default function StudyHours({ settings }) {
                 {/* ── Suggestions panel ── */}
                 {isBehind && showSuggestions && (
                   <div style={{
-                    marginTop: 8, padding: '10px 12px',
+                    marginTop: 8, padding: '12px 14px',
                     background: '#fffbeb', border: '1px solid #fde68a',
                     borderRadius: 10,
                   }}>
-                    <p style={{ fontSize: '0.7rem', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
-                      💡 Para recuperar {deficit.toFixed(1)}h em atraso
+                    <p style={{ fontSize: '0.68rem', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>
+                      Como recuperar {deficit.toFixed(1)}h em atraso
                     </p>
                     {suggestions.map((sg, i) => (
-                      <div key={i} style={{ marginBottom: sg.methods ? 6 : 5 }}>
-                        <p style={{ fontSize: '0.78rem', color: '#78350f', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                          <span style={{ flexShrink: 0 }}>{sg.emoji}</span>
-                          <span>{sg.text}</span>
-                        </p>
-                        {sg.methods && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 4, marginLeft: 20 }}>
-                            {sg.methods.map((m, j) => (
-                              <span key={j} style={{
-                                background: s.color ? s.color + '22' : '#fef3c7',
-                                border: `1px solid ${s.color ? s.color + '55' : '#fde68a'}`,
-                                color: s.color || '#92400e',
-                                borderRadius: 20, padding: '2px 9px',
-                                fontSize: '0.72rem', fontWeight: 700,
-                              }}>{m}</span>
-                            ))}
-                          </div>
-                        )}
+                      <div key={i} style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <span style={{ flexShrink: 0, fontSize: '1rem', lineHeight: 1.4 }}>{sg.emoji}</span>
+                        <p style={{ fontSize: '0.8rem', color: '#78350f', lineHeight: 1.55, margin: 0 }}>{sg.text}</p>
                       </div>
                     ))}
                     <button
@@ -498,7 +609,7 @@ export default function StudyHours({ settings }) {
               </div>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {/* Add session */}
@@ -530,10 +641,10 @@ export default function StudyHours({ settings }) {
             </div>
             <div style={{ marginBottom: 12 }}>
               <label className="form-label">Notas (opcional)</label>
-              <input type="text" className="form-input" placeholder="O que estudaste..."
+              <textarea className="form-input" placeholder="O que estudaste..." rows={2}
                 value={form.notes}
                 onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && addSession()} />
+                style={{ resize: 'vertical', lineHeight: 1.5 }} />
             </div>
             <div style={{ marginBottom: 12 }}>
               <label className="form-label">Humor</label>
@@ -559,26 +670,82 @@ export default function StudyHours({ settings }) {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Historial</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="Pesquisar notas..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                style={{ fontSize: '0.78rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none', width: 140 }}
+              />
+              <select value={historySubject} onChange={e => setHistorySubject(e.target.value)}
+                style={{ fontSize: '0.78rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none' }}>
+                <option value="">Todas</option>
+                {subjects.map(s => <option key={s.key} value={s.key}>{s.emoji} {s.name}</option>)}
+              </select>
+            </div>
           </div>
           <div style={{ padding: '8px 20px 12px' }}>
-            {sessions.slice(0, 20).map(session => {
+            {sessions.filter(s => {
+              if (historySubject && s.subject !== historySubject) return false
+              if (historySearch && !(s.notes||'').toLowerCase().includes(historySearch.toLowerCase())) return false
+              return true
+            }).slice(0, 30).map(session => {
               const subj = subjects.find(s => s.key === session.subject)
+              const isEditing = editingSession === session.id
               return (
-                <div key={session.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '8px 0', borderBottom: '1px solid var(--gray-50)',
-                }}>
-                  <span>{subj?.emoji}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.83rem', color: subj?.textColor }}>{subj?.name}</span>
-                      {session.mood && <span style={{ fontSize: '0.9rem' }}>{session.mood}</span>}
+                <div key={session.id} style={{ borderBottom: '1px solid var(--gray-50)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
+                    <span>{subj?.emoji}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.83rem', color: subj?.textColor }}>{subj?.name}</span>
+                        {session.mood && <span style={{ fontSize: '0.9rem' }}>{session.mood}</span>}
+                      </div>
+                      {session.notes && <p style={{ fontSize: '0.73rem', color: 'var(--gray-400)', margin: 0 }}>{session.notes}</p>}
                     </div>
-                    {session.notes && <p style={{ fontSize: '0.73rem', color: 'var(--gray-400)', margin: 0 }}>{session.notes}</p>}
+                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-700)' }}>{session.hours}h</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)', minWidth: 80, textAlign: 'right' }}>{session.date}</span>
+                    <button className="btn btn-ghost" style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                      onClick={() => { setEditingSession(isEditing ? null : session.id); setEditDraft({ hours: session.hours, notes: session.notes || '', mood: session.mood || '😊', date: new Date(session.date).toISOString().split('T')[0] }) }}>
+                      ✏️
+                    </button>
+                    {confirmDeleteId === session.id ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button className="btn" onClick={() => { removeSession(session.id); setConfirmDeleteId(null) }}
+                          style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'var(--red-100)', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 6 }}>
+                          Apagar
+                        </button>
+                        <button className="btn" onClick={() => setConfirmDeleteId(null)}
+                          style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'var(--gray-100)', color: 'var(--gray-600)', border: '1px solid var(--gray-200)', borderRadius: 6 }}>
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost" onClick={() => setConfirmDeleteId(session.id)}><X size={12} /></button>
+                    )}
                   </div>
-                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-700)' }}>{session.hours}h</span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)', minWidth: 80, textAlign: 'right' }}>{session.date}</span>
-                  <button className="btn btn-ghost" onClick={() => { if (window.confirm('Apagar esta sessão?')) removeSession(session.id) }}><X size={12} /></button>
+                  {isEditing && (
+                    <div style={{ padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 8, marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                      <div>
+                        <label className="form-label">Horas</label>
+                        <input type="number" min="0.25" max="12" step="0.25" className="form-input" style={{ width: 70 }}
+                          value={editDraft.hours} onChange={e => setEditDraft(p => ({ ...p, hours: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="form-label">Data</label>
+                        <input type="date" className="form-input" style={{ width: 130 }}
+                          value={editDraft.date} onChange={e => setEditDraft(p => ({ ...p, date: e.target.value }))} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <label className="form-label">Notas</label>
+                        <input type="text" className="form-input" value={editDraft.notes}
+                          onChange={e => setEditDraft(p => ({ ...p, notes: e.target.value }))} />
+                      </div>
+                      <button className="btn btn-primary" style={{ fontSize: '0.78rem', padding: '6px 12px' }} onClick={saveEditSession}>Guardar</button>
+                      <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '6px 12px' }} onClick={() => setEditingSession(null)}>Cancelar</button>
+                    </div>
+                  )}
                 </div>
               )
             })}

@@ -1,15 +1,8 @@
 import { useState, useMemo } from 'react'
+import { getMondayOfWeek } from '../utils/dates'
 
 function loadSessions() {
   try { return JSON.parse(localStorage.getItem('study-sessions')) || [] } catch { return [] }
-}
-
-function getMondayOf(date) {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  const diff = d.getDay() === 0 ? -6 : 1 - d.getDay()
-  d.setDate(d.getDate() + diff)
-  return d
 }
 
 function formatDate(d) {
@@ -25,7 +18,7 @@ export default function StatsPage({ settings }) {
   const weeklyData = useMemo(() => {
     const numWeeks = range === '8w' ? 8 : range === '3m' ? 12 : 24
     const weeks = []
-    const now = getMondayOf(new Date())
+    const now = getMondayOfWeek(new Date())
     for (let i = numWeeks - 1; i >= 0; i--) {
       const monday = new Date(now)
       monday.setDate(now.getDate() - i * 7)
@@ -46,7 +39,7 @@ export default function StatsPage({ settings }) {
 
   // ── Subject totals ─────────────────────────────────────────────────────
   const subjectTotals = useMemo(() => {
-    const monday = getMondayOf(new Date())
+    const monday = getMondayOfWeek(new Date())
     return subjects.map(s => {
       const all   = sessions.filter(x => x.subject === s.key).reduce((a, b) => a + b.hours, 0)
       const week  = sessions.filter(x => x.subject === s.key && new Date(x.date) >= monday).reduce((a, b) => a + b.hours, 0)
@@ -61,7 +54,7 @@ export default function StatsPage({ settings }) {
     const days = []
     const today = new Date(); today.setHours(0, 0, 0, 0)
     // Start from Monday 13 weeks ago
-    const start = getMondayOf(new Date(today.getTime() - 12 * 7 * 86400000))
+    const start = getMondayOfWeek(new Date(today.getTime() - 12 * 7 * 86400000))
     const sessionMap = {}
     sessions.forEach(s => {
       const key = new Date(s.date).toDateString()
@@ -90,7 +83,7 @@ export default function StatsPage({ settings }) {
   const totalHours   = sessions.reduce((a, b) => a + b.hours, 0)
   const totalSessions = sessions.length
   const avgPerSession = totalSessions > 0 ? totalHours / totalSessions : 0
-  const monday = getMondayOf(new Date())
+  const monday = getMondayOfWeek(new Date())
   const weekHours = sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
 
   // Streak
@@ -118,7 +111,7 @@ export default function StatsPage({ settings }) {
     if (sessions.length < 5) return []
     const insights = []
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const thisMonday = getMondayOf(new Date())
+    const thisMonday = getMondayOfWeek(new Date())
 
     // Best day of week
     const dowH = Array(7).fill(0), dowC = Array(7).fill(0)
@@ -241,7 +234,7 @@ export default function StatsPage({ settings }) {
       <div className="fade-in">
         <div className="page-header">
           <h1>📊 Estatísticas</h1>
-          <p className="subtitle">Visão geral do teu progresso de estudo</p>
+          <p className="subtitle">Gráficos e análise histórica</p>
         </div>
         <div className="empty-state">
           <p style={{ fontSize: '2rem', marginBottom: 8 }}>📭</p>
@@ -256,7 +249,7 @@ export default function StatsPage({ settings }) {
     <div className="fade-in">
       <div className="page-header">
         <h1>📊 Estatísticas</h1>
-        <p className="subtitle">Visão geral do teu progresso de estudo</p>
+        <p className="subtitle">Gráficos e análise histórica — para registar sessões e metas vai a Horas ⏱️</p>
       </div>
 
       {/* Summary cards */}

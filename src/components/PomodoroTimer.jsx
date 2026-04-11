@@ -138,6 +138,28 @@ export function PomodoroTimer({ subjects: propSubjects }) {
           playDoneSound()
           setPendingMinutes(currentMode.minutes)
           setShowNotes(true)
+          // Auto-save immediately — notes dialog is optional enrichment
+          if (currentMode.isWork) {
+            const sessions = loadSessions()
+            const hours = parseFloat((currentMode.minutes / 60).toFixed(2))
+            const autoSession = {
+              id: Date.now(),
+              subject,
+              hours,
+              notes: `Pomodoro ${currentMode.minutes}min`,
+              date: new Date().toDateString(),
+              _pomodoroAutoSaved: true,
+            }
+            saveSessions([autoSession, ...sessions])
+            setCompleted(prev => prev + 1)
+            setLog(prev => [{
+              id: autoSession.id,
+              subject,
+              minutes: currentMode.minutes,
+              notes: '',
+              time: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }),
+            }, ...prev])
+          }
         }
       }
     }
@@ -195,7 +217,18 @@ export function PomodoroTimer({ subjects: propSubjects }) {
   }
 
   const confirmSave = () => {
-    saveSession(pendingMinutes, noteText)
+    if (isStopwatch) {
+      // Stopwatch: save now (no auto-save happened)
+      saveSession(pendingMinutes, noteText)
+    } else if (noteText.trim()) {
+      // Countdown: just update notes on the auto-saved session
+      const sessions = loadSessions()
+      const updated = sessions.map((s, i) => i === 0 && s._pomodoroAutoSaved
+        ? { ...s, notes: noteText.trim(), _pomodoroAutoSaved: undefined }
+        : s)
+      saveSessions(updated)
+      setLog(prev => prev.map((l, i) => i === 0 ? { ...l, notes: noteText.trim() } : l))
+    }
     setElapsed(0)
     setNoteText('')
     setShowNotes(false)
@@ -203,7 +236,9 @@ export function PomodoroTimer({ subjects: propSubjects }) {
   }
 
   const cancelSave = () => {
-    setElapsed(0)
+    // Countdown: session already auto-saved, just close
+    // Stopwatch: discard
+    if (isStopwatch) { setElapsed(0) }
     setNoteText('')
     setShowNotes(false)
     setPendingMinutes(0)
@@ -355,6 +390,9 @@ export function PomodoroTimer({ subjects: propSubjects }) {
           <p style={{ fontSize: '0.82rem', color: 'var(--gray-400)', marginBottom: 14 }}>
             {pendingMinutes} minutos · {subjects.find(s => s.key === subject)?.name}
           </p>
+          <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', marginBottom: 10 }}>
+            ✅ Sessão guardada automaticamente. Adiciona notas se quiseres (opcional).
+          </p>
           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
             O que estudaste?
           </label>
@@ -378,10 +416,10 @@ export function PomodoroTimer({ subjects: propSubjects }) {
           />
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={confirmSave} style={{ background: '#8b5cf6' }}>
-              Guardar sessão
+              {isStopwatch ? 'Guardar sessão' : 'Adicionar notas'}
             </button>
             <button className="btn btn-secondary" onClick={cancelSave}>
-              Descartar
+              {isStopwatch ? 'Descartar' : 'Fechar'}
             </button>
           </div>
         </div>

@@ -120,9 +120,24 @@ export default function SettingsPage({ settings, setSettings }) {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result)
+        if (typeof data !== 'object' || Array.isArray(data) || data === null)
+          throw new Error('Estrutura inválida')
+        const ALLOWED_KEYS = new Set([
+          'study-sessions','exams','topics','exam-schedule','extra-tasks',
+          'diary-entries','weekly-reviews','projects-v2','household-tasks',
+          'subject-targets','eisenhower-overrides','energy-levels','show-matrix',
+          'groq-key','user-settings','calendar-events','gcal-events',
+          'quick-links','schedule-blocks','daily-study-targets',
+        ])
         Object.entries(data).forEach(([key, value]) => {
+          const allowed = ALLOWED_KEYS.has(key)
+            || key.startsWith('schedule-blocks-')
+            || key.startsWith('tasks-')
+            || key.startsWith('schedule-done-')
+            || key.startsWith('schedule-snoozed-')
+          if (!allowed) return
           if (value === null || value === undefined) return
-          if (key === 'groq-key') localStorage.setItem(key, value)
+          if (key === 'groq-key') localStorage.setItem(key, String(value))
           else localStorage.setItem(key, JSON.stringify(value))
         })
         window.alert('Dados importados! A app vai recarregar.')

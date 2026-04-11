@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Check, Edit3, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { CalendarEmoji, smartEmoji } from './CalendarEmoji'
+import { daysUntil } from '../utils/dates'
 
 
 const STATUSES = [
@@ -45,12 +46,6 @@ function loadProjects() { try { return JSON.parse(localStorage.getItem('projects
 function saveProjects(p) { localStorage.setItem('projects-v2', JSON.stringify(p)) }
 function loadSessions() { try { return JSON.parse(localStorage.getItem('study-sessions')) || [] } catch { return [] } }
 
-function daysUntil(dateStr) {
-  if (!dateStr) return null
-  const today = new Date(); today.setHours(0,0,0,0)
-  const target = new Date(dateStr); target.setHours(0,0,0,0)
-  return Math.round((target - today) / 86400000)
-}
 
 function calcProgress(project) {
   const ms = project.milestones || []
@@ -842,7 +837,11 @@ export default function ProjectsPage({ settings }) {
     setSelected(p.id)
   }
 
-  const deleteProject = (id) => { setProjects(prev => prev.filter(p => p.id !== id)); if (selected === id) setSelected(null) }
+  const deleteProject = (id) => {
+    if (!window.confirm('Apagar projeto? Esta ação não pode ser desfeita.')) return
+    setProjects(prev => prev.filter(p => p.id !== id))
+    if (selected === id) setSelected(null)
+  }
 
   const allTags  = [...new Set(projects.flatMap(p => p.tags || []))]
   const filtered = filterTag ? projects.filter(p => (p.tags || []).includes(filterTag)) : projects

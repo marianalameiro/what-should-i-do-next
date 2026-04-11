@@ -2,38 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { getTasksForDay, getSubjectsMap } from '../data/schedule'
 import { Check, Plus, X, Settings2 } from 'lucide-react'
 import { CalendarView } from './CalendarView'
-
-const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-const DAY_FULL  = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
-const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 0]
-
-const QUADRANTS = {
-  Q1: { label: 'Urgente + Importante',       emoji: '🔴', color: '#fef2f2', border: '#fca5a5', text: '#991b1b' },
-  Q2: { label: 'Importante, não urgente',    emoji: '🟡', color: '#fefce8', border: '#fde047', text: '#854d0e' },
-  Q3: { label: 'Urgente, não importante',    emoji: '🟠', color: '#fff7ed', border: '#fdba74', text: '#9a3412' },
-  Q4: { label: 'Nem urgente nem importante', emoji: '⚪', color: '#fafafa', border: '#e4e4e7', text: '#52525b' },
-}
-
-const ENERGY_LEVELS = [
-  { id: 'high',      label: 'Alta',     emoji: '🔋', color: '#16a34a', bg: '#f0fdf4', border: '#86efac',
-    quadrantOrder: ['Q1','Q2','Q3','Q4'],
-    tip: 'Começa pelas tarefas mais difíceis e urgentes — estás no teu melhor!' },
-  { id: 'medium',    label: 'Média',    emoji: '😐', color: '#d97706', bg: '#fefce8', border: '#fde047',
-    quadrantOrder: ['Q2','Q1','Q3','Q4'],
-    tip: 'Foca nas tarefas importantes mas sem pressão imediata.' },
-  { id: 'low',       label: 'Baixa',    emoji: '🪫', color: '#ea580c', bg: '#fff7ed', border: '#fdba74',
-    quadrantOrder: ['Q3','Q2','Q4','Q1'],
-    tip: 'Trata das tarefas rápidas e leves. Guarda o difícil para depois.' },
-  { id: 'exhausted', label: 'Esgotada', emoji: '😴', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe',
-    quadrantOrder: ['Q4','Q3','Q2','Q1'],
-    tip: 'Só o essencial. Descansa quando puderes.' },
-]
-
-const PERIODS = [
-  { id: 'morning',   label: 'Manhã',  emoji: '🌅', hours: '6h–13h' },
-  { id: 'afternoon', label: 'Tarde',  emoji: '☀️', hours: '13h–19h' },
-  { id: 'evening',   label: 'Noite',  emoji: '🌙', hours: '19h–23h' },
-]
+import { getMondayOfWeek } from '../utils/dates'
+import { QUADRANTS, ENERGY_LEVELS, PERIODS, DAY_NAMES_SHORT as DAY_NAMES, DAY_NAMES_FULL as DAY_FULL, WEEK_DAYS } from '../constants'
 
 function getCurrentPeriod() {
   const h = new Date().getHours()
@@ -43,11 +13,11 @@ function getCurrentPeriod() {
 }
 
 const DEFAULT_RULES = [
-  { match: ['sheet-weekend', 'ficha'],         quadrant: 'Q1' },
-  { match: ['transcribe', 'cornell'],          quadrant: 'Q2' },
-  { match: ['flashcards', 'biblio', 'modelo'], quadrant: 'Q2' },
-  { match: ['review'],                         quadrant: 'Q3' },
-  { match: ['extra'],                          quadrant: 'Q4' },
+  { match: ['sheet-weekend', 'ficha', 'teste', 'exame', 'avaliação', 'entrega', 'prazo'],                       quadrant: 'Q1' },
+  { match: ['transcribe', 'transcrever', 'transcrição', 'cornell', 'resumo', 'apontamentos', 'síntese'],        quadrant: 'Q2' },
+  { match: ['flashcards', 'cartões', 'biblio', 'bibliografia', 'modelo', 'exercícios', 'pratica', 'prática'],   quadrant: 'Q2' },
+  { match: ['review', 'revisão', 'revisar', 'rever', 'reli', 'reler'],                                         quadrant: 'Q3' },
+  { match: ['extra', 'opcional', 'leitura extra', 'complementar'],                                             quadrant: 'Q4' },
 ]
 
 function autoClassify(taskId, taskLabel) {
@@ -62,15 +32,6 @@ function loadMatrix()  { try { return JSON.parse(localStorage.getItem('eisenhowe
 function saveMatrix(m) { localStorage.setItem('eisenhower-overrides', JSON.stringify(m)) }
 function loadEnergy()  { try { return JSON.parse(localStorage.getItem('energy-levels')) || {} } catch { return {} } }
 function saveEnergy(e) { localStorage.setItem('energy-levels', JSON.stringify(e)) }
-
-function getMondayOfWeek(date) {
-  const d = new Date(date)
-  const dow = d.getDay()
-  const diff = dow === 0 ? -6 : 1 - dow
-  d.setDate(d.getDate() + diff)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
 
 function getDateForDow(dow, monday) {
   const idx = WEEK_DAYS.indexOf(dow)
@@ -131,13 +92,23 @@ export default function DailyView() {
   const [newTaskQuadrant, setNewTaskQuadrant] = useState('Q1')
   const [dragIdx, setDragIdx]           = useState(null)
   const [matrixOverrides, setOverrides] = useState(loadMatrix)
-  const [showMatrix, setShowMatrix]     = useState(true)
+  const [showMatrix, setShowMatrix]     = useState(() => { try { return JSON.parse(localStorage.getItem('show-matrix')) ?? false } catch { return false } })
+  const [addedTask, setAddedTask]       = useState('')
   const [editingId, setEditingId]       = useState(null)
   const [energyLevels, setEnergyLevels] = useState(loadEnergy)
   const [activePeriod, setActivePeriod] = useState(getCurrentPeriod)
 
   const dateStr   = selectedDate.toDateString()
+  const isoDateStr = selectedDate.toISOString().split('T')[0]
   const schedule  = getTasksForDay(selectedDate.getDay())
+
+  // Labels de tarefas já com bloco no horário deste dia
+  const scheduledLabels = (() => {
+    try {
+      const blocks = JSON.parse(localStorage.getItem(`schedule-blocks-${isoDateStr}`)) || []
+      return new Set(blocks.map(b => b.title).filter(Boolean))
+    } catch { return new Set() }
+  })()
   const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6
   const isToday   = dateStr === today.toDateString()
 
@@ -149,6 +120,7 @@ export default function DailyView() {
   useEffect(() => { saveExtra(extraTasks) }, [extraTasks])
   useEffect(() => { saveMatrix(matrixOverrides) }, [matrixOverrides])
   useEffect(() => { saveEnergy(energyLevels) }, [energyLevels])
+  useEffect(() => { localStorage.setItem('show-matrix', JSON.stringify(showMatrix)) }, [showMatrix])
 
   // Regular tasks: mark as done for this day only
   const check = (id) => setDone(prev => ({ ...prev, [id]: true }))
@@ -165,17 +137,29 @@ export default function DailyView() {
 
   const addExtra = () => {
     if (!newTask.trim()) return
+    const label = newTask.trim()
     const id = `extra-${Date.now()}`
-    const updated = [...extraTasks, { id, label: newTask.trim(), isExtra: true }]
+    const updated = [...extraTasks, { id, label, isExtra: true }]
     setExtraTasks(updated)
     saveExtra(updated)
     setOverrides(prev => ({ ...prev, [id]: newTaskQuadrant }))
     setNewTask('')
+    setAddedTask(label)
+    setTimeout(() => setAddedTask(''), 2000)
   }
 
+  const snoozeExtra = (taskId) => {
+    // Mark done for today — task re-appears tomorrow since done is per-day
+    setDone(prev => ({ ...prev, [taskId]: true }))
+  }
+
+  const dragThrottleRef = useRef(0)
   const onExtraDragStart = (i) => setDragIdx(i)
   const onExtraDragOver = (e, i) => {
     e.preventDefault()
+    const now = Date.now()
+    if (now - dragThrottleRef.current < 60) return
+    dragThrottleRef.current = now
     if (dragIdx === null || dragIdx === i) return
     const updated = [...extraTasks]
     const [moved] = updated.splice(dragIdx, 1)
@@ -226,7 +210,7 @@ export default function DailyView() {
   useEffect(() => {
     if (pct === 100 && allCount > 0 && !confettiShown.current) {
       confettiShown.current = true
-      const pieces = Array.from({ length: 60 }, (_, i) => ({
+      const pieces = Array.from({ length: 25 }, (_, i) => ({
         id: i,
         left: Math.random() * 100,
         duration: 1.8 + Math.random() * 1.4,
@@ -259,7 +243,9 @@ export default function DailyView() {
   function renderTask(task, q, qKey) {
     const subject = task.subjectKey ? SUBJECTS[task.subjectKey] : null
 
-    const handleClick = () => check(task.id)
+    const handleClick = () => {
+      if (task.isExtra) { removeExtra(task.id) } else { check(task.id) }
+    }
 
     return (
       <div key={task.id} style={{ marginBottom: 3 }}>
@@ -279,6 +265,11 @@ export default function DailyView() {
           <span style={{ fontSize: '0.78rem', fontWeight: 500, color: q.text, flex: 1, lineHeight: 1.3 }}>
             {task.label}
           </span>
+          {scheduledLabels.has(task.label) && (
+            <span title="Já tem bloco no horário" style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 50, padding: '1px 6px', flexShrink: 0 }}>
+              📅
+            </span>
+          )}
           {task.isExtra && (
             <button
               onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
@@ -549,7 +540,13 @@ export default function DailyView() {
           <button className="btn btn-primary" onClick={addExtra}><Plus size={15} /> Adicionar</button>
         </div>
 
-        {extraTasks.filter(t => !done[t.id]).length > 0 && (
+        {addedTask && (
+          <p style={{ fontSize: '0.78rem', color: 'var(--green-500)', fontWeight: 700, marginBottom: 6 }}>
+            ✓ "{addedTask}" adicionada!
+          </p>
+        )}
+
+        {!showMatrix && extraTasks.filter(t => !done[t.id]).length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
             {extraTasks.filter(t => !done[t.id]).map((task, i) => (
               <div
@@ -568,6 +565,11 @@ export default function DailyView() {
               >
                 <span style={{ color: 'var(--gray-300)', fontSize: '1rem', lineHeight: 1 }}>⠿</span>
                 <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500, color: 'var(--gray-700)' }}>{task.label}</span>
+                <button
+                  onClick={() => snoozeExtra(task.id)}
+                  title="Adiar para amanhã"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 2px', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center' }}
+                >↪</button>
                 <button
                   onClick={() => removeExtra(task.id)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: 0, display: 'flex', alignItems: 'center' }}

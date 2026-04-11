@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Sparkles, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react'
+import { getMondayOfWeek } from '../utils/dates'
 
 const QUESTIONS = [
   { id: 'done',       label: 'O que conseguiste fazer esta semana?',                placeholder: 'Ex: Fiz as fichas de Genética, estudei 3h de Cálculo...' },
@@ -25,17 +26,8 @@ function getWeekNumber() {
   }
 }
 
-function getMondayOfWeek() {
-  const today = new Date()
-  const diff  = today.getDay() === 0 ? -6 : 1 - today.getDay()
-  const monday = new Date(today)
-  monday.setDate(today.getDate() + diff)
-  monday.setHours(0, 0, 0, 0)
-  return monday
-}
-
 function hoursThisWeek() {
-  const monday = getMondayOfWeek()
+  const monday = getMondayOfWeek(new Date())
   return loadSessions()
     .filter(s => new Date(s.date) >= monday)
     .reduce((a, b) => a + b.hours, 0)

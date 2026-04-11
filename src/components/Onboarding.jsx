@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, X, ChevronRight, ChevronLeft } from 'lucide-react'
+import { DAY_NAMES_SHORT } from '../constants'
 
 const USER_TYPES = [
   { id: 'student',      label: 'Estudante universitário', emoji: '🎓' },
@@ -20,7 +21,6 @@ const COLORS = [
 ]
 
 const EMOJIS = ['📚','🧠','🧬','📐','🎨','💻','🔬','📝','🎯','🌍','💡','🎵','⚡','🌱','🏛️','🔭']
-const DAY_NAMES = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
 const STEPS = ['Bem-vindo', 'Cadeiras', 'Plano', 'Metas', 'Aparência']
 
@@ -43,7 +43,7 @@ export default function Onboarding({ onComplete }) {
 
   const addSubject = () => {
     if (!newSubject.name.trim()) return
-    const key = newSubject.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now()
+    const key = newSubject.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') + '_' + Date.now()
     const methods = newSubject.methods.split('\n').map(m => m.trim()).filter(Boolean)
     setForm(p => ({ ...p, subjects: [...p.subjects, { key, name: newSubject.name.trim(), emoji: newSubject.emoji, color: newSubject.color, textColor: newSubject.textColor, methods }] }))
     setNewSubject({ name: '', emoji: '📚', color: COLORS[0].color, textColor: COLORS[0].textColor, methods: '' })
@@ -111,7 +111,7 @@ export default function Onboarding({ onComplete }) {
                 <input type="text" style={inputStyle} placeholder="Ex: Nome" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} autoFocus />
               </div>
 
-              <div>
+              <div style={{ marginBottom: 20 }}>
                 <label style={labelStyle}>O que melhor te descreve?</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   {USER_TYPES.map(t => (
@@ -126,6 +126,30 @@ export default function Onboarding({ onComplete }) {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Eisenhower matrix explainer */}
+              <div style={{ background: '#fefce8', border: '1.5px solid #fde047', borderRadius: 12, padding: '14px 16px' }}>
+                <p style={{ fontWeight: 800, fontSize: '0.8rem', color: '#854d0e', marginBottom: 8 }}>💡 Como vais organizar as tuas tarefas</p>
+                <p style={{ fontSize: '0.75rem', color: '#78350f', marginBottom: 10, lineHeight: 1.5 }}>
+                  A app usa a <strong>Matriz de Eisenhower</strong> para te ajudar a priorizar. Cada tarefa cai num de 4 quadrantes:
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {[
+                    { emoji: '🔴', label: 'Q1 — Faz agora', desc: 'Urgente + Importante', bg: '#fef2f2', border: '#fca5a5', color: '#991b1b' },
+                    { emoji: '🟡', label: 'Q2 — Planeia', desc: 'Importante, não urgente', bg: '#fefce8', border: '#fde047', color: '#854d0e' },
+                    { emoji: '🟠', label: 'Q3 — Delega', desc: 'Urgente, não importante', bg: '#fff7ed', border: '#fdba74', color: '#9a3412' },
+                    { emoji: '⚪', label: 'Q4 — Elimina', desc: 'Nem urgente nem importante', bg: '#fafafa', border: '#e4e4e7', color: '#52525b' },
+                  ].map(q => (
+                    <div key={q.label} style={{ background: q.bg, border: `1px solid ${q.border}`, borderRadius: 8, padding: '8px 10px' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.73rem', color: q.color, marginBottom: 2 }}>{q.emoji} {q.label}</p>
+                      <p style={{ fontSize: '0.68rem', color: q.color, opacity: 0.8 }}>{q.desc}</p>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '0.7rem', color: '#92400e', marginTop: 8, fontStyle: 'italic' }}>
+                  A app classifica as tarefas automaticamente — e tu podes sempre mover para outro quadrante.
+                </p>
               </div>
             </div>
           )}
@@ -194,7 +218,7 @@ export default function Onboarding({ onComplete }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[1,2,3,4,5,6,0].map(day => (
                   <div key={day}>
-                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>{DAY_NAMES[day]}</p>
+                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>{DAY_NAMES_SHORT[day]}</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {form.subjects.map(s => {
                         const active = (form.schedule[day] || []).includes(s.key)

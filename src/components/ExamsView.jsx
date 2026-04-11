@@ -1,16 +1,8 @@
 import { useState, useEffect } from "react"
 import { Plus, X, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react"
 import { CalendarEmoji } from './CalendarEmoji'
-
-
-const EVENT_TYPES = ["Exame", "Teste", "Mini-teste", "Apresentação"]
-
-const CONFIDENCE = [
-  { id: "unknown", label: "Não sei",       color: "#b91c1c", bg: "#fee2e2" },
-  { id: "little",  label: "Sei pouco",     color: "#b45309", bg: "#fef3c7" },
-  { id: "good",    label: "Sei bem",       color: "#1d4ed8", bg: "#dbeafe" },
-  { id: "great",   label: "Sei muito bem", color: "#15803d", bg: "#dcfce7" },
-]
+import { CONFIDENCE, EVENT_TYPES } from '../constants'
+import { daysUntil } from '../utils/dates'
 
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) || fallback }
@@ -19,12 +11,6 @@ function load(key, fallback) {
 
 function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value))
-}
-
-function daysUntil(date) {
-  const t = new Date(); const d = new Date(date)
-  t.setHours(0, 0, 0, 0); d.setHours(0, 0, 0, 0)
-  return Math.round((d - t) / (1000 * 60 * 60 * 24))
 }
 
 function urgencyPill(days) {
@@ -117,14 +103,15 @@ export default function ExamsView({ settings }) {
 
   function applyAIPlan() {
     if (!aiPlan) return
+    const examForSelected = exams.find(e => e.subject === selectedSubject && daysUntil(e.date) >= 0)
     setSchedule(prev => {
       const next = { ...prev }
-      // Build a flat map of topic name -> topic object
+      // Build map only from selected subject's topics
       const topicByName = {}
-      Object.values(topics).forEach(subTopics => {
-        subTopics.forEach(t => { topicByName[t.name.toLowerCase().trim()] = t })
-      })
+      ;(topics[selectedSubject] || []).forEach(t => { topicByName[t.name.toLowerCase().trim()] = t })
       Object.entries(aiPlan).forEach(([dateStr, topicNames]) => {
+        // Never schedule past the exam date
+        if (examForSelected && dateStr > examForSelected.date) return
         const toAdd = []
         topicNames.forEach(name => {
           const found = topicByName[name.toLowerCase().trim()]
@@ -144,42 +131,42 @@ export default function ExamsView({ settings }) {
   async function analyzeWithAI() {
     const groqKey = localStorage.getItem("groq-key")
     if (!groqKey) { setAiResult("⚠️ Configura a chave API Groq nas Definições."); return }
+
+    const subTopics = topics[selectedSubject] || []
+    if (!subTopics.length) { setAiResult("⚠️ Adiciona tópicos a esta cadeira primeiro."); return }
+
     const today = new Date()
     const todayStr = today.toLocaleDateString("pt-PT")
     const todayISO = today.toISOString().split("T")[0]
 
+    const exam = exams.find(e => e.subject === selectedSubject && daysUntil(e.date) >= 0)
+    const daysLeft = exam ? daysUntil(exam.date) : null
+    const examDateISO = exam ? exam.date : null
+    const examDateFmt = exam ? new Date(exam.date + "T12:00:00").toLocaleDateString("pt-PT") : null
+
+    const sub = subjects.find(s => s.name === selectedSubject)
+    const examHeader = exam
+      ? `**${sub?.emoji || ""} ${selectedSubject}** — ${exam.type} a ${examDateFmt} (daqui a ${daysLeft} dias)\n`
+      : `**${sub?.emoji || ""} ${selectedSubject}** — sem exame registado\n`
+
     let topicsBlock = ""
-    let hasContent = false
-    subjects.forEach(sub => {
-      const ts = topics[sub.name] || []
-      if (!ts.length) return
-      hasContent = true
-      const exam = exams.find(e => e.subject === sub.name)
-      topicsBlock += `**${sub.emoji} ${sub.name}**`
-      if (exam) topicsBlock += ` — ${exam.type} a ${new Date(exam.date + "T12:00:00").toLocaleDateString("pt-PT")} (${daysUntil(exam.date)} dias)`
-      topicsBlock += "\n"
-      ts.forEach(t => {
-        const conf = CONFIDENCE.find(c => c.id === t.confidence)
-        topicsBlock += `  - ${t.name} [${conf?.label || t.confidence}]`
-        if (t.doubts) topicsBlock += ` — dúvidas: ${t.doubts}`
-        topicsBlock += "\n"
-      })
+    subTopics.forEach(t => {
+      const conf = CONFIDENCE.find(c => c.id === t.confidence)
+      topicsBlock += `  - ${t.name} [${conf?.label || t.confidence}]`
+      if (t.doubts) topicsBlock += ` — dúvidas: ${t.doubts}`
       topicsBlock += "\n"
     })
-    if (!hasContent) { setAiResult("⚠️ Adiciona tópicos às cadeiras primeiro."); return }
 
-    const examsBlock = exams
-      .filter(e => daysUntil(e.date) >= 0)
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
-      .map(e => `- ${e.subject}: ${e.type} em ${new Date(e.date + "T12:00:00").toLocaleDateString("pt-PT")} (daqui a ${daysUntil(e.date)} dias)`)
-      .join("\n")
+    const deadlineNote = exam
+      ? `IMPORTANTE: Tens apenas ${daysLeft} dias até ao exame (${examDateISO}). O plano NÃO pode ter datas depois de ${examDateISO}.`
+      : `Não há exame registado. Distribui razoavelmente pelas próximas semanas.`
 
     const prompt = `Hoje é ${todayStr} (${todayISO}).
 
-TÓPICOS E AUTO-AVALIAÇÃO:
+TÓPICOS DE ${selectedSubject.toUpperCase()} E AUTO-AVALIAÇÃO:
+${examHeader}
 ${topicsBlock}
-EXAMES:
-${examsBlock}
+${deadlineNote}
 
 Responde em DUAS PARTES:
 
@@ -187,9 +174,10 @@ Responde em DUAS PARTES:
 Quais os tópicos mais urgentes? Qual a ordem de estudo? Quantas revisões recomendas para cada tópico e porquê (usa repetição espaçada)? Algum conselho específico para os tópicos com pior avaliação?
 
 **PARTE 2 — Plano de calendário:**
-Com base na repetição espaçada, distribui os tópicos por dias específicos entre hoje e cada exame.
+Com base na repetição espaçada, distribui os tópicos por dias específicos entre hoje e o exame.
 Tópicos "Não sei" precisam de 4-5 revisões. "Sei pouco" → 3 revisões. "Sei bem" → 2 revisões. "Sei muito bem" → 1 revisão.
 O espaçamento entre revisões deve aumentar progressivamente (1 dia, 3 dias, 7 dias, etc.).
+${exam ? `Não uses datas depois de ${examDateISO}. Tens apenas ${daysLeft} dias — adapta o número de revisões a esse limite.` : ""}
 
 Retorna o plano como JSON EXATAMENTE neste formato (no final da resposta):
 \`\`\`json
@@ -198,7 +186,7 @@ Retorna o plano como JSON EXATAMENTE neste formato (no final da resposta):
   "YYYY-MM-DD": ["Nome exacto do tópico 3"]
 }
 \`\`\`
-Usa APENAS datas entre ${todayISO} e a data do exame correspondente. Os nomes dos tópicos devem ser EXACTAMENTE iguais aos da lista acima.`
+Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os nomes dos tópicos devem ser EXACTAMENTE iguais aos da lista acima.`
 
     setAiLoading(true)
     setAiResult("")
@@ -476,9 +464,9 @@ Usa APENAS datas entre ${todayISO} e a data do exame correspondente. Os nomes do
             for (let i = 0; i < offset; i++) cells.push(null)
             for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
-            // Check if any exam falls on this month
+            // Only highlight the exam date for the currently selected subject
             const examDates = new Set(
-              exams.map(e => e.date).filter(d => {
+              exams.filter(e => e.subject === selectedSubject).map(e => e.date).filter(d => {
                 const [ey, em] = d.split("-").map(Number)
                 return ey === year && em === month + 1
               })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle, Clock, Flame, ChevronRight, Target, TrendingUp, TrendingDown, Minus, AlertTriangle, FolderKanban, Plus } from 'lucide-react'
 import { getTasksForDay } from '../data/schedule'
+import { getMondayOfWeek, daysUntil } from '../utils/dates'
 
 function saveSessions(s) { localStorage.setItem('study-sessions', JSON.stringify(s)) }
 
@@ -63,13 +64,6 @@ function weekDayNumber() {
 
 function shouldShowBehind() { return weekDayNumber() > 1 }
 
-function getMondayOfWeek() {
-  const monday = new Date(TODAY)
-  monday.setHours(0, 0, 0, 0)
-  const diff = monday.getDay() === 0 ? -6 : 1 - monday.getDay()
-  monday.setDate(monday.getDate() + diff)
-  return monday
-}
 
 function currentStreak(sessions) {
   const days = new Set(sessions.map(s => s.date))
@@ -82,19 +76,13 @@ function currentStreak(sessions) {
 }
 
 function hoursThisWeek(sessions) {
-  const monday = getMondayOfWeek()
+  const monday = getMondayOfWeek(TODAY)
   return sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
 }
 
-function daysUntil(dateStr) {
-  if (!dateStr) return null
-  const target = new Date(dateStr); target.setHours(0, 0, 0, 0)
-  const t = new Date(TODAY); t.setHours(0, 0, 0, 0)
-  return Math.round((target - t) / 86400000)
-}
 
 function hoursForSubjectThisWeek(sessions, key) {
-  const monday = getMondayOfWeek()
+  const monday = getMondayOfWeek(TODAY)
   return sessions.filter(s => s.subject === key && new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
 }
 
@@ -153,7 +141,20 @@ export default function Dashboard({ onNavigate, settings }) {
   const [weeklyTargets, setWeeklyTargets] = useState(loadWeeklyTargets)
   const [editTarget, setEditTarget] = useState(null)
   const [targetDraft, setTargetDraft] = useState('')
-  const links = loadLinks()
+  const [editingLinks, setEditingLinks] = useState(false)
+  const [links, setLinks] = useState(loadLinks)
+  const [newLink, setNewLink] = useState({ label: '', url: '', emoji: '🔗' })
+
+  const saveLinks = (updated) => {
+    setLinks(updated)
+    localStorage.setItem('quick-links', JSON.stringify(updated))
+  }
+  const addLink = () => {
+    if (!newLink.label.trim() || !newLink.url.trim()) return
+    saveLinks([...links, { ...newLink }])
+    setNewLink({ label: '', url: '', emoji: '🔗' })
+  }
+  const removeLink = (i) => saveLinks(links.filter((_, idx) => idx !== i))
 
   const saveQuickSession = () => {
     const h = parseFloat(quickForm.hours)
@@ -209,6 +210,18 @@ export default function Dashboard({ onNavigate, settings }) {
     return h > (hoursForSubjectThisWeek(sessions, best.key) || 0) ? s : best
   }, subjects[0]) : null
   const topSubjectHours = topSubject ? hoursForSubjectThisWeek(sessions, topSubject.key) : 0
+  // Weekly trend vs last week
+  const lastWeekHrs = (() => {
+    const monday = getMondayOfWeek(TODAY)
+    const lastMonday = new Date(monday); lastMonday.setDate(monday.getDate() - 7)
+    return sessions.filter(s => {
+      const d = new Date(s.date)
+      return d >= lastMonday && d < monday
+    }).reduce((a, b) => a + b.hours, 0)
+  })()
+  const isWeekend = TODAY.getDay() === 0 || TODAY.getDay() === 6
+  const trendPct = isWeekend && lastWeekHrs > 0 ? Math.round((weekHrs - lastWeekHrs) / lastWeekHrs * 100) : null
+
   const urgentDeadlines = projects
     .flatMap(p => (p.milestones || []).map(m => ({ ...m, projectName: p.name })))
     .filter(m => !m.done && daysUntil(m.date) >= 0 && daysUntil(m.date) <= 7)
@@ -239,21 +252,47 @@ export default function Dashboard({ onNavigate, settings }) {
       </div>
 
       {/* Quick Links */}
-      {links.length > 0 && (
-        <div style={{ marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           {links.map((link, i) => (
-            <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 14px', borderRadius: 50,
-              background: 'var(--white)', border: '1.5px solid var(--gray-200)',
-              fontSize: '0.8rem', fontWeight: 600, color: 'var(--gray-700)',
-              textDecoration: 'none', boxShadow: 'var(--shadow-xs)',
-            }}>
-              {link.emoji || '🔗'} {link.label}
-            </a>
+            <div key={i} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <a href={link.url} target="_blank" rel="noopener noreferrer" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 14px', borderRadius: 50,
+                background: 'var(--white)', border: '1.5px solid var(--gray-200)',
+                fontSize: '0.8rem', fontWeight: 600, color: 'var(--gray-700)',
+                textDecoration: 'none', boxShadow: 'var(--shadow-xs)',
+                paddingRight: editingLinks ? 28 : 14,
+              }}>
+                {link.emoji || '🔗'} {link.label}
+              </a>
+              {editingLinks && (
+                <button onClick={() => removeLink(i)} style={{
+                  position: 'absolute', right: 6, background: 'none', border: 'none',
+                  cursor: 'pointer', color: 'var(--gray-400)', fontSize: '0.75rem', lineHeight: 1, padding: 2,
+                }}>✕</button>
+              )}
+            </div>
           ))}
+          <button onClick={() => setEditingLinks(v => !v)} style={{
+            padding: '5px 10px', borderRadius: 50, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.72rem', fontWeight: 700, border: '1.5px dashed var(--gray-300)',
+            background: editingLinks ? 'var(--rose-50)' : 'transparent', color: editingLinks ? 'var(--rose-400)' : 'var(--gray-400)',
+          }}>{editingLinks ? '✓ Feito' : '+ Links'}</button>
         </div>
-      )}
+        {editingLinks && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <input value={newLink.emoji} onChange={e => setNewLink(p => ({ ...p, emoji: e.target.value }))}
+              style={{ width: 36, textAlign: 'center', fontFamily: 'inherit', fontSize: '1rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px' }} />
+            <input placeholder="Nome" value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))}
+              style={{ flex: 1, minWidth: 90, fontFamily: 'inherit', fontSize: '0.82rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '5px 8px' }} />
+            <input placeholder="URL" value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && addLink()}
+              style={{ flex: 2, minWidth: 140, fontFamily: 'inherit', fontSize: '0.82rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '5px 8px' }} />
+            <button className="btn btn-primary" onClick={addLink} style={{ fontSize: '0.78rem', padding: '5px 12px' }}>+ Adicionar</button>
+          </div>
+        )}
+      </div>
 
       {/* Exam alerts */}
       {alerts.length > 0 && (
@@ -279,7 +318,18 @@ export default function Dashboard({ onNavigate, settings }) {
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('hours')}>
           <div className="stat-label"><Clock size={12} /> Total de horas</div>
           <div className="stat-value">{totalHrs.toFixed(0)}<span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gray-400)' }}>h</span></div>
-          <div className="stat-sub">{weekHrs.toFixed(1)}h esta semana</div>
+          <div className="stat-sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {weekHrs.toFixed(1)}h esta semana
+            {trendPct !== null && (
+              <span style={{
+                fontSize: '0.68rem', fontWeight: 700, padding: '1px 5px', borderRadius: 50,
+                background: trendPct >= 0 ? '#f0fdf4' : '#fef2f2',
+                color: trendPct >= 0 ? 'var(--green-500)' : 'var(--red-400)',
+              }}>
+                {trendPct >= 0 ? '↑' : '↓'}{Math.abs(trendPct)}% vs semana passada
+              </span>
+            )}
+          </div>
         </div>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('today')}>
           <div className="stat-label"><CheckCircle size={12} /> Hoje</div>
@@ -477,27 +527,6 @@ export default function Dashboard({ onNavigate, settings }) {
           )}
         </div>
       </div>
-
-      {/* Today's tasks */}
-      {todayTasks.length > 0 && (
-        <div className="card dashboard-full" style={{ marginTop: 14 }}>
-          <div className="card-header">
-            <span className="card-title">Tarefas de hoje</span>
-            <button onClick={() => onNavigate('today')} style={{ fontSize: '0.75rem', color: 'var(--rose-400)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>Ver todas</button>
-          </div>
-          <div className="card-body" style={{ padding: '8px 20px' }}>
-            {todayTasks.slice(0, 6).map(task => (
-              <div key={task.id} className="today-task-row">
-                <div className={`today-task-check ${done[task.id] ? 'done' : ''}`}>
-                  {done[task.id] && <svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1.5,5 4,7.5 8.5,2" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                </div>
-                <span className={`today-task-label ${done[task.id] ? 'done' : ''}`}>{task.label}</span>
-              </div>
-            ))}
-            {todayTasks.length > 6 && <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', padding: '8px 0', fontWeight: 500 }}>+{todayTasks.length - 6} tarefas</p>}
-          </div>
-        </div>
-      )}
 
       {/* Quick actions */}
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>

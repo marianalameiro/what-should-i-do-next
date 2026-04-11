@@ -22,7 +22,7 @@ const TABS = [
   { id: "schedule", emoji: "🗓️", label: "Horário" },
   { id: "projects", emoji: "🗂", label: "Projetos" },
   { id: "exams", emoji: "🎯", label: "Exames" },
-  { id: "hours", emoji: "⏱️", label: "Horas" },
+  { id: "hours", emoji: "⏱️", label: "Horas & Metas" },
   { id: "diary", emoji: "📓", label: "Diário" },
   { id: "stats", emoji: "📊", label: "Estatísticas" },
   { id: "settings", emoji: "⚙️", label: "Definições" },
@@ -104,6 +104,18 @@ export default function App() {
     }
   }, [dragging])
 
+  // ───────── Keyboard navigation (1-9)
+  useEffect(() => {
+    const handle = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const map = { '1':'dashboard','2':'today','3':'schedule','4':'projects','5':'exams','6':'hours','7':'diary','8':'stats','9':'settings' }
+      if (map[e.key]) { e.preventDefault(); setTab(map[e.key]) }
+    }
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [])
+
   // ───────── Pomodoro sidebar ticker
   useEffect(() => {
     const interval = setInterval(() => {
@@ -146,7 +158,7 @@ export default function App() {
           }
         })
         localStorage.setItem(todayKey, '1')
-      } catch {}
+      } catch (err) { console.error('Exam notification failed', err) }
     }
 
     if (Notification.permission === 'granted') {
