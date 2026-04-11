@@ -321,7 +321,6 @@ export function CalendarView() {
               >
                 <div style={{
                   fontSize: '0.8rem', fontWeight: isToday ? 800 : 600,
-                  color: isToday ? 'var(--rose-400)' : 'var(--gray-700)',
                   marginBottom: 3,
                   width: 22, height: 22,
                   background: isToday ? 'var(--rose-400)' : 'transparent',

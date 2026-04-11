@@ -1,4 +1,23 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Component } from "react"
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(error) { return { error } }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 32, fontFamily: 'inherit' }}>
+        <p style={{ fontWeight: 700, color: '#dc2626', marginBottom: 8 }}>Erro ao carregar esta página</p>
+        <pre style={{ fontSize: '0.75rem', color: '#71717a', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          {this.state.error.message}{'\n'}{this.state.error.stack}
+        </pre>
+        <button onClick={() => this.setState({ error: null })} style={{ marginTop: 16, padding: '6px 14px', borderRadius: 8, border: '1px solid #e4e4e7', cursor: 'pointer', fontFamily: 'inherit' }}>
+          Tentar novamente
+        </button>
+      </div>
+    )
+    return this.props.children
+  }
+}
 import { supabase } from "./lib/supabase"
 import { useUserSettings } from "./hooks/useUserSettings"
 
@@ -325,24 +344,26 @@ export default function App() {
       </aside>
 
       <main className="main-content fade-in" key={tab}>
-        {tab === "dashboard" && <Dashboard onNavigate={setTab} settings={settings} />}
-        {tab === "today" && <DailyView settings={settings} />}
-        {tab === "schedule" && (
-          <SchedulePage
-            settings={settings}
-            setSettings={setSettings}
-            onNavigate={setTab}
-            onStartPomodoro={({ subjectKey, title }) => {
-              localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey, title }))
-            }}
-          />
-        )}
-        {tab === "projects" && <ProjectsPage settings={settings} />}
-        {tab === "exams" && <ExamsView settings={settings} />}
-        {tab === "hours" && <StudyHours settings={settings} />}
-        {tab === "diary" && <StudyDiary />}
-        {tab === "stats" && <StatsPage settings={settings} />}
-        {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
+        <ErrorBoundary key={tab}>
+          {tab === "dashboard" && <Dashboard onNavigate={setTab} settings={settings} />}
+          {tab === "today" && <DailyView settings={settings} />}
+          {tab === "schedule" && (
+            <SchedulePage
+              settings={settings}
+              setSettings={setSettings}
+              onNavigate={setTab}
+              onStartPomodoro={({ subjectKey, title }) => {
+                localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey, title }))
+              }}
+            />
+          )}
+          {tab === "projects" && <ProjectsPage settings={settings} />}
+          {tab === "exams" && <ExamsView settings={settings} />}
+          {tab === "hours" && <StudyHours settings={settings} />}
+          {tab === "diary" && <StudyDiary />}
+          {tab === "stats" && <StatsPage settings={settings} />}
+          {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
+        </ErrorBoundary>
       </main>
     </div>
   )
