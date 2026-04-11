@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Zap, Plus, X, Check, Settings2, Pencil, Trash2 } from 'lucide-react'
-import { getTasksForDay } from '/Users/mariana/Desktop/what-should-i-do-next/src/data/schedule'
+import { getTasksForDay } from '../data/schedule'
 import { MONTHS, DAY_NAMES_FULL as DAY_FULL, DAY_NAMES_SHORT as DAY_SHORT } from '../constants'
 import { getMondayOfWeek as getMondayOf } from '../utils/dates'
 
