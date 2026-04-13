@@ -4,6 +4,7 @@ import { Check, Plus, X, Settings2 } from 'lucide-react'
 import { CalendarView } from './CalendarView'
 import { getMondayOfWeek } from '../utils/dates'
 import { QUADRANTS, ENERGY_LEVELS, PERIODS, DAY_NAMES_SHORT as DAY_NAMES, DAY_NAMES_FULL as DAY_FULL, WEEK_DAYS } from '../constants'
+import { useToast, ToastContainer } from './Toast'
 
 function getCurrentPeriod() {
   const h = new Date().getHours()
@@ -90,6 +91,9 @@ export default function DailyView() {
   const [extraTasks, setExtraTasks]     = useState(loadExtra)
   const [newTask, setNewTask]           = useState('')
   const [newTaskQuadrant, setNewTaskQuadrant] = useState('Q1')
+  const [newTaskMins, setNewTaskMins]   = useState('')
+  const [newTaskRecurrence, setNewTaskRecurrence] = useState('none')
+  const [taskFilter, setTaskFilter]     = useState('all') // 'all'|'Q1'|'Q2'|'Q3'|'Q4'
   const [dragIdx, setDragIdx]           = useState(null)
   const [matrixOverrides, setOverrides] = useState(loadMatrix)
   const [showMatrix, setShowMatrix]     = useState(() => { try { return JSON.parse(localStorage.getItem('show-matrix')) ?? false } catch { return false } })
@@ -97,6 +101,7 @@ export default function DailyView() {
   const [editingId, setEditingId]       = useState(null)
   const [energyLevels, setEnergyLevels] = useState(loadEnergy)
   const [activePeriod, setActivePeriod] = useState(getCurrentPeriod)
+  const { toasts, toast, dismiss } = useToast()
 
   const dateStr   = selectedDate.toDateString()
   const isoDateStr = selectedDate.toISOString().split('T')[0]
@@ -127,25 +132,70 @@ export default function DailyView() {
 
   // Extra tasks: remove globally (disappears from all days)
   const removeExtra = (id) => {
+    let removedTask = null
+    let removedOverride = null
     setExtraTasks(prev => {
+      removedTask = prev.find(t => t.id === id)
       const updated = prev.filter(t => t.id !== id)
       saveExtra(updated)
       return updated
     })
-    setOverrides(prev => { const n = { ...prev }; delete n[id]; return n })
+    setOverrides(prev => { removedOverride = prev[id]; const n = { ...prev }; delete n[id]; return n })
+    toast({
+      message: 'Tarefa eliminada',
+      onUndo: () => {
+        if (!removedTask) return
+        setExtraTasks(prev => {
+          const updated = [...prev, removedTask]
+          saveExtra(updated)
+          return updated
+        })
+        if (removedOverride) setOverrides(prev => ({ ...prev, [id]: removedOverride }))
+      },
+    })
   }
 
   const addExtra = () => {
     if (!newTask.trim()) return
     const label = newTask.trim()
     const id = `extra-${Date.now()}`
-    const updated = [...extraTasks, { id, label, isExtra: true }]
+    const task = {
+      id, label, isExtra: true,
+      mins: newTaskMins ? parseInt(newTaskMins, 10) : null,
+      recurrence: newTaskRecurrence !== 'none' ? newTaskRecurrence : null,
+      createdDow: newTaskRecurrence !== 'none' ? new Date().getDay() : null,
+    }
+    const updated = [...extraTasks, task]
     setExtraTasks(updated)
     saveExtra(updated)
     setOverrides(prev => ({ ...prev, [id]: newTaskQuadrant }))
     setNewTask('')
+    setNewTaskMins('')
+    setNewTaskRecurrence('none')
     setAddedTask(label)
     setTimeout(() => setAddedTask(''), 2000)
+  }
+
+  // Carry-forward: import incomplete extra tasks from a past day into today
+  const carryForwardPastExtras = (pastDate) => {
+    const pastDoneMap = loadDone(pastDate)
+    const incomplete = extraTasks.filter(t => !pastDoneMap[t.id] && !done[t.id])
+    if (incomplete.length === 0) return
+    // They're already global extra tasks — just mark them undone for today (no action needed since done is per-day)
+    // But also copy any schedule tasks that were not done
+    const pastSchedule = getTasksForDay(pastDate.getDay())
+    const incompleteSched = pastSchedule.flatMap(g => g.tasks).filter(t => !pastDoneMap[t.id])
+    if (incompleteSched.length === 0 && incomplete.length === 0) return
+    // Add schedule tasks as extra tasks in today
+    incompleteSched.forEach(t => {
+      const alreadyAdded = extraTasks.some(e => e.label === t.label)
+      if (!alreadyAdded) {
+        const id = `extra-${Date.now()}-${t.id}`
+        const newT = { id, label: `${t.label} (de ${pastDate.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })})`, isExtra: true, carriedFrom: pastDate.toDateString() }
+        setExtraTasks(prev => { const u = [...prev, newT]; saveExtra(u); return u })
+        setOverrides(prev => ({ ...prev, [id]: autoClassify(id, t.label) }))
+      }
+    })
   }
 
   const snoozeExtra = (taskId) => {
@@ -183,7 +233,14 @@ export default function DailyView() {
   const allScheduledTasks = schedule.flatMap(g =>
     g.tasks.map(t => ({ ...t, subjectKey: g.subjectKey, isExtra: false }))
   )
-  const allExtraTasks = extraTasks.map(t => ({ ...t, subjectKey: null, isExtra: true }))
+  // Filter recurring extra tasks: daily shows every day, weekly only on same day of week
+  const visibleExtraTasks = extraTasks.filter(t => {
+    if (!t.recurrence) return true
+    if (t.recurrence === 'daily') return true
+    if (t.recurrence === 'weekly') return selectedDate.getDay() === t.createdDow
+    return true
+  })
+  const allExtraTasks = visibleExtraTasks.map(t => ({ ...t, subjectKey: null, isExtra: true }))
   const allTasks     = [...allScheduledTasks, ...allExtraTasks]
   const pendingTasks = allTasks.filter(t => !done[t.id])
 
@@ -191,7 +248,7 @@ export default function DailyView() {
   Object.keys(QUADRANTS).forEach(q => { byQuadrant[q] = [] })
   pendingTasks.forEach(task => {
     const q = getQuadrant(task.id, task.label)
-    byQuadrant[q].push(task)
+    if (taskFilter === 'all' || taskFilter === q) byQuadrant[q].push(task)
   })
 
   const orderedQuadrants = currentEnergy
@@ -264,7 +321,9 @@ export default function DailyView() {
           {subject && <span style={{ fontSize: '0.8rem' }}>{subject.emoji}</span>}
           <span style={{ fontSize: '0.78rem', fontWeight: 500, color: q.text, flex: 1, lineHeight: 1.3 }}>
             {task.label}
+            {task.recurrence && <span style={{ fontSize: '0.62rem', marginLeft: 4, opacity: 0.6 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
           </span>
+          {task.mins && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: q.text, opacity: 0.6, flexShrink: 0 }}>{task.mins}min</span>}
           {scheduledLabels.has(task.label) && (
             <span title="Já tem bloco no horário" style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 50, padding: '1px 6px', flexShrink: 0 }}>
               📅
@@ -315,6 +374,7 @@ export default function DailyView() {
 
   return (
     <div className="fade-in">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {confetti.map(p => (
         <div key={p.id} className="confetti-piece" style={{
           left: `${p.left}%`,
@@ -365,22 +425,39 @@ export default function DailyView() {
             {allCount === 0 ? 'Sem tarefas para este dia!' : `${doneCount} de ${allCount} tarefas concluídas`}
           </p>
         </div>
-        {allCount > 0 && (
-          <button
-            onClick={() => setShowMatrix(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', borderRadius: 50,
-              border: '1.5px solid var(--gray-200)',
-              background: showMatrix ? 'var(--rose-50)' : 'var(--white)',
-              color: showMatrix ? 'var(--rose-400)' : 'var(--gray-500)',
-              fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
-            }}
-          >
-            <Settings2 size={13} />
-            {showMatrix ? 'Vista normal' : 'Matriz'}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {!isToday && selectedDate < today && (
+            <button
+              onClick={() => carryForwardPastExtras(selectedDate)}
+              title="Passa as tarefas não feitas para hoje"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 50,
+                border: '1.5px solid var(--gray-200)',
+                background: 'var(--white)', color: 'var(--gray-500)',
+                fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+              }}
+            >
+              ↗ Passar para hoje
+            </button>
+          )}
+          {allCount > 0 && (
+            <button
+              onClick={() => setShowMatrix(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 50,
+                border: '1.5px solid var(--gray-200)',
+                background: showMatrix ? 'var(--rose-50)' : 'var(--white)',
+                color: showMatrix ? 'var(--rose-400)' : 'var(--gray-500)',
+                fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+              }}
+            >
+              <Settings2 size={13} />
+              {showMatrix ? 'Vista normal' : 'Matriz'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Progress */}
@@ -526,6 +603,18 @@ export default function DailyView() {
         </div>
       )}
 
+      {/* Filter bar */}
+      {pendingTasks.length > 0 && (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button onClick={() => setTaskFilter('all')} style={{ padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', border: `2px solid ${taskFilter === 'all' ? 'var(--gray-400)' : 'var(--gray-200)'}`, background: taskFilter === 'all' ? 'var(--gray-100)' : 'var(--white)', color: 'var(--gray-600)' }}>Todas</button>
+          {Object.entries(QUADRANTS).map(([qKey, q]) => (
+            byQuadrant[qKey]?.length > 0 || taskFilter === qKey ? (
+              <button key={qKey} onClick={() => setTaskFilter(taskFilter === qKey ? 'all' : qKey)} style={{ padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', border: `2px solid ${taskFilter === qKey ? q.border : 'var(--gray-200)'}`, background: taskFilter === qKey ? q.color : 'var(--white)', color: taskFilter === qKey ? q.text : 'var(--gray-400)' }}>{q.emoji} {q.label}</button>
+            ) : null
+          ))}
+        </div>
+      )}
+
       {/* Add extra task */}
       <div className="extra-section">
         <p className="extra-title"><Plus size={15} /> Tarefas extra</p>
@@ -538,6 +627,20 @@ export default function DailyView() {
             onKeyDown={e => e.key === 'Enter' && addExtra()}
           />
           <button className="btn btn-primary" onClick={addExtra}><Plus size={15} /> Adicionar</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <input
+            type="number" min={5} max={480} placeholder="⏱ min (opcional)"
+            value={newTaskMins} onChange={e => setNewTaskMins(e.target.value)}
+            style={{ width: 130, fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 10px', background: 'var(--white)', color: 'var(--gray-900)' }}
+          />
+          <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)}
+            style={{ fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 10px', background: 'var(--white)', color: 'var(--gray-900)', cursor: 'pointer' }}>
+            <option value="none">Sem recorrência</option>
+            <option value="daily">🔁 Diária</option>
+            <option value="weekly">📅 Semanal</option>
+          </select>
         </div>
 
         {addedTask && (
@@ -564,7 +667,11 @@ export default function DailyView() {
                 }}
               >
                 <span style={{ color: 'var(--gray-300)', fontSize: '1rem', lineHeight: 1 }}>⠿</span>
-                <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500, color: 'var(--gray-700)' }}>{task.label}</span>
+                <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500, color: 'var(--gray-700)' }}>
+                  {task.label}
+                  {task.recurrence && <span style={{ marginLeft: 5, fontSize: '0.65rem', opacity: 0.6 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
+                </span>
+                {task.mins && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)' }}>{task.mins}min</span>}
                 <button
                   onClick={() => snoozeExtra(task.id)}
                   title="Adiar para amanhã"
@@ -592,7 +699,7 @@ export default function DailyView() {
           ))}
         </div>
         <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', fontWeight: 500, marginTop: 8 }}>
-          Clica numa tarefa extra para a concluir · o ✕ apaga-a permanentemente 🌿
+          Clica numa tarefa extra para a concluir · o ✕ apaga-a permanentemente · ↪ adia para amanhã
         </p>
       </div>
 

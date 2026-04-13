@@ -14,6 +14,14 @@ const DEFAULT_SETTINGS = {
   wakeTime: '08:00',
   sleepTime: '23:00',
   classTimes: [],
+  notifications: {
+    studyProgress: true,
+    streakRisk: true,
+    weeklyReview: true,
+    longBreak: true,
+    examDay: true,
+  },
+  sidebarCompact: false,
 }
 
 const LS_KEY = 'user-settings'

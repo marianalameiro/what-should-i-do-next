@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
 import { WeeklyReview } from './WeeklyReview'
+import { useToast, ToastContainer } from './Toast'
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
@@ -23,17 +24,77 @@ function saveEntries(e) {
 export default function StudyDiary() {
   const SUBJECTS = loadSubjects()
 
+  const DIARY_MOODS = [
+    { id: 'great',   emoji: '🔥', label: 'Óptimo' },
+    { id: 'good',    emoji: '😊', label: 'Bem' },
+    { id: 'okay',    emoji: '😐', label: 'Normal' },
+    { id: 'tired',   emoji: '😴', label: 'Cansada' },
+    { id: 'hard',    emoji: '😤', label: 'Difícil' },
+  ]
+  const COMMON_TAGS = ['focada', 'distraída', 'produtiva', 'dificuldades', 'boa sessão', 'cansaço', 'motivada', 'frustrada']
+
   const [entries, setEntries]       = useState(loadEntries)
+  const { toasts, toast, dismiss }  = useToast()
   const [text, setText]             = useState('')
   const [subject, setSubject]       = useState(() => loadSubjects()[0]?.key || '')
+  const [entryMood, setEntryMood]   = useState('')
+  const [entryTags, setEntryTags]   = useState([])
+  const [newTag, setNewTag]         = useState('')
   const [loading, setLoading]       = useState(false)
   const [reanalysing, setReanalysing] = useState(null)
   const [expanded, setExpanded]     = useState(null)
   const [showReview, setShowReview] = useState(false)
   const [filterSubject, setFilterSubject] = useState('')
   const [filterText, setFilterText] = useState('')
+  const [filterTag, setFilterTag]   = useState('')
   const PAGE_SIZE = 10
   const [page, setPage]             = useState(0)
+
+  // Diary streak — entry ids are Date.now() timestamps, reliable for date extraction
+  const diaryStreak = (() => {
+    const days = new Set(entries.map(e => new Date(e.id).toDateString()))
+    let streak = 0
+    const d = new Date(); d.setHours(0,0,0,0)
+    if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1)
+    while (days.has(d.toDateString())) { streak++; d.setDate(d.getDate() - 1) }
+    return streak
+  })()
+
+  const exportToPDF = async () => {
+    try {
+      const { jsPDF } = await import('jspdf')
+      const doc = new jsPDF()
+      doc.setFont('helvetica')
+      doc.setFontSize(18)
+      doc.text('Diário de Estudo', 14, 20)
+      doc.setFontSize(10)
+      doc.setTextColor(120)
+      doc.text(`Exportado a ${new Date().toLocaleDateString('pt-PT')} · ${entries.length} entradas`, 14, 28)
+      let y = 38
+      const toShow = filterText || filterSubject ? filtered : entries
+      toShow.forEach((entry, i) => {
+        if (y > 270) { doc.addPage(); y = 20 }
+        doc.setFontSize(10)
+        doc.setTextColor(40)
+        doc.setFont('helvetica', 'bold')
+        const subj = SUBJECTS.find(s => s.key === entry.subject)
+        doc.text(`${entry.date}  ${subj?.name || ''}`, 14, y)
+        y += 5
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(80)
+        const lines = doc.splitTextToSize(entry.text, 180)
+        lines.forEach(line => {
+          if (y > 270) { doc.addPage(); y = 20 }
+          doc.text(line, 14, y); y += 5
+        })
+        y += 4
+        if (i < toShow.length - 1) {
+          doc.setDrawColor(220); doc.line(14, y, 196, y); y += 4
+        }
+      })
+      doc.save(`diario-estudo-${new Date().toISOString().split('T')[0]}.pdf`)
+    } catch (err) { console.error('PDF export failed', err) }
+  }
 
   useEffect(() => { saveEntries(entries) }, [entries])
 
@@ -107,16 +168,24 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
       subject,
       text: text.trim(),
       advice,
+      mood: entryMood || null,
+      tags: entryTags.length > 0 ? [...entryTags] : [],
       date: new Date().toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' }),
       time: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }),
     }
     setEntries(prev => [entry, ...prev])
     setText('')
+    setEntryMood('')
+    setEntryTags([])
     setExpanded(entry.id)
     setLoading(false)
   }
 
-  const removeEntry = (id) => setEntries(prev => prev.filter(e => e.id !== id))
+  const removeEntry = (id) => {
+    let removed = null
+    setEntries(prev => { removed = prev.find(e => e.id === id); return prev.filter(e => e.id !== id) })
+    toast({ message: 'Entrada eliminada', onUndo: () => { if (removed) setEntries(prev => [removed, ...prev].sort((a, b) => b.id - a.id)) } })
+  }
 
   const reanalyseEntry = async (entry) => {
     setReanalysing(entry.id)
@@ -128,19 +197,31 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
   const filtered = entries
     .filter(e => !filterSubject || e.subject === filterSubject)
     .filter(e => !filterText || e.text.toLowerCase().includes(filterText.toLowerCase()) || (e.advice || '').toLowerCase().includes(filterText.toLowerCase()))
+    .filter(e => !filterTag || (e.tags || []).includes(filterTag))
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   return (
     <div className="fade-in">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <h1>📓 Diário de Estudo</h1>
-          <p className="subtitle">Escreve como correu o estudo — a IA orienta-te com base no que escreveste</p>
+          <p className="subtitle">
+            Escreve como correu o estudo — a IA orienta-te com base no que escreveste
+            {diaryStreak > 0 && <span style={{ marginLeft: 8, fontWeight: 700, color: '#ea580c' }}>🔥 {diaryStreak} dia{diaryStreak !== 1 ? 's' : ''} seguidos</span>}
+          </p>
         </div>
-        <button className={showReview ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => setShowReview(v => !v)}>
-          🔁 Weekly Review
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {entries.length > 0 && (
+            <button className="btn btn-secondary" onClick={exportToPDF} style={{ fontSize: '0.78rem' }}>
+              <Download size={13} /> Exportar PDF
+            </button>
+          )}
+          <button className={showReview ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => setShowReview(v => !v)}>
+            🔁 Weekly Review
+          </button>
+        </div>
       </div>
 
       {showReview && (
@@ -192,6 +273,48 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
           onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
         />
 
+        {/* Mood selector */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Humor:</span>
+          {DIARY_MOODS.map(m => (
+            <button key={m.id} onClick={() => setEntryMood(entryMood === m.id ? '' : m.id)} style={{
+              padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+              border: `2px solid ${entryMood === m.id ? '#c0455a' : 'var(--gray-200)'}`,
+              background: entryMood === m.id ? '#fff0f3' : 'var(--white)',
+              color: entryMood === m.id ? '#c0455a' : 'var(--gray-500)',
+            }}>{m.emoji} {m.label}</button>
+          ))}
+        </div>
+
+        {/* Tags */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+            {COMMON_TAGS.map(tag => (
+              <button key={tag} onClick={() => setEntryTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} style={{
+                padding: '2px 8px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer',
+                border: `1.5px solid ${entryTags.includes(tag) ? '#c0455a' : 'var(--gray-200)'}`,
+                background: entryTags.includes(tag) ? '#fff0f3' : 'var(--white)', color: entryTags.includes(tag) ? '#c0455a' : 'var(--gray-400)',
+              }}>{tag}</button>
+            ))}
+            <input
+              value={newTag} onChange={e => setNewTag(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && newTag.trim()) { setEntryTags(p => [...p, newTag.trim()]); setNewTag('') } }}
+              placeholder="+ tag personalizada"
+              style={{ fontSize: '0.7rem', border: '1.5px solid var(--gray-200)', borderRadius: 50, padding: '2px 10px', fontFamily: 'inherit', background: 'var(--white)', color: 'var(--gray-700)', outline: 'none', width: 130 }}
+            />
+          </div>
+          {entryTags.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {entryTags.map(tag => (
+                <span key={tag} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 50, background: '#fff0f3', border: '1px solid #fda4af', fontSize: '0.7rem', fontWeight: 700, color: '#c0455a' }}>
+                  #{tag}
+                  <button onClick={() => setEntryTags(p => p.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0455a', padding: 0, lineHeight: 1, fontSize: '0.8rem' }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           className="btn btn-primary"
           onClick={addEntry}
@@ -211,11 +334,7 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
           <select
             value={filterSubject}
             onChange={e => { setFilterSubject(e.target.value); setPage(0) }}
-            style={{
-              fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px',
-              border: '1px solid var(--gray-200)', borderRadius: 8,
-              background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer',
-            }}
+            style={{ fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer' }}
           >
             <option value="">Todas as cadeiras</option>
             {SUBJECTS.map(s => <option key={s.key} value={s.key}>{s.emoji} {s.name}</option>)}
@@ -225,12 +344,19 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
             value={filterText}
             onChange={e => { setFilterText(e.target.value); setPage(0) }}
             placeholder="Pesquisar entradas…"
-            style={{
-              flex: 1, minWidth: 160, fontFamily: 'inherit', fontSize: '0.82rem',
-              padding: '6px 10px', border: '1px solid var(--gray-200)',
-              borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)',
-            }}
+            style={{ flex: 1, minWidth: 140, fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)' }}
           />
+          {(() => {
+            const allTags = [...new Set(entries.flatMap(e => e.tags || []))]
+            if (allTags.length === 0) return null
+            return (
+              <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(0) }}
+                style={{ fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer' }}>
+                <option value="">Todas as tags</option>
+                {allTags.map(t => <option key={t} value={t}>#{t}</option>)}
+              </select>
+            )
+          })()}
         </div>
       )}
 
@@ -238,7 +364,8 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
       {entries.length === 0 ? (
         <div className="empty-state">
           <div className="e-emoji">📓</div>
-          <p>Sem entradas ainda. Escreve sobre o teu estudo de hoje!</p>
+          <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>O teu diário está vazio</p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>Escreve a tua primeira reflexão sobre o estudo de hoje — a IA ajuda-te a melhorar!</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="empty-state">
@@ -264,9 +391,13 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
                 >
                   <span style={{ fontSize: '1.1rem' }}>{subj?.emoji}</span>
                   <div style={{ flex: 1 }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--gray-800)' }}>
-                      {subj?.name}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--gray-800)' }}>{subj?.name}</span>
+                      {entry.mood && <span style={{ fontSize: '0.9rem' }}>{DIARY_MOODS.find(m => m.id === entry.mood)?.emoji}</span>}
+                      {(entry.tags || []).map(tag => (
+                        <span key={tag} style={{ padding: '1px 7px', borderRadius: 50, background: '#fff0f3', border: '1px solid #fda4af', fontSize: '0.65rem', fontWeight: 700, color: '#c0455a' }}>#{tag}</span>
+                      ))}
+                    </div>
                     <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', margin: 0 }}>
                       {entry.date} às {entry.time}
                     </p>

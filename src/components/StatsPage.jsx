@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { getMondayOfWeek } from '../utils/dates'
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 function loadSessions() {
   try { return JSON.parse(localStorage.getItem('study-sessions')) || [] } catch { return [] }
@@ -11,6 +12,7 @@ function formatDate(d) {
 
 export default function StatsPage({ settings }) {
   const [range, setRange] = useState('8w') // '8w' | '3m' | 'all'
+  const [moodView, setMoodView] = useState('dist') // 'dist' | 'corr'
   const subjects = settings?.subjects || []
   const [sessions] = useState(loadSessions)
 
@@ -29,7 +31,7 @@ export default function StatsPage({ settings }) {
           const d = new Date(s.date)
           return d >= monday && d < sunday
         })
-        .reduce((a, b) => a + b.hours, 0)
+        .reduce((a, b) => a + (b.hours || 0), 0)
       weeks.push({ label: formatDate(monday), hours: parseFloat(hours.toFixed(1)) })
     }
     return weeks
@@ -41,8 +43,8 @@ export default function StatsPage({ settings }) {
   const subjectTotals = useMemo(() => {
     const monday = getMondayOfWeek(new Date())
     return subjects.map(s => {
-      const all   = sessions.filter(x => x.subject === s.key).reduce((a, b) => a + b.hours, 0)
-      const week  = sessions.filter(x => x.subject === s.key && new Date(x.date) >= monday).reduce((a, b) => a + b.hours, 0)
+      const all   = sessions.filter(x => x.subject === s.key).reduce((a, b) => a + (b.hours || 0), 0)
+      const week  = sessions.filter(x => x.subject === s.key && new Date(x.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
       return { ...s, all: parseFloat(all.toFixed(1)), week: parseFloat(week.toFixed(1)) }
     }).sort((a, b) => b.all - a.all)
   }, [sessions, subjects])
@@ -80,11 +82,11 @@ export default function StatsPage({ settings }) {
   }
 
   // ── Summary stats ─────────────────────────────────────────────────────
-  const totalHours   = sessions.reduce((a, b) => a + b.hours, 0)
+  const totalHours   = sessions.reduce((a, b) => a + (b.hours || 0), 0)
   const totalSessions = sessions.length
   const avgPerSession = totalSessions > 0 ? totalHours / totalSessions : 0
   const monday = getMondayOfWeek(new Date())
-  const weekHours = sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
+  const weekHours = sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
 
   // Streak
   const streak = useMemo(() => {
@@ -228,6 +230,101 @@ export default function StatsPage({ settings }) {
   for (let i = 0; i < heatmapData.length; i += 7) {
     heatWeeks.push(heatmapData.slice(i, i + 7))
   }
+
+  // ── Personal records ──────────────────────────────────────────────────
+  const records = useMemo(() => {
+    if (sessions.length === 0) return null
+    const bestSession = Math.max(...sessions.map(s => s.hours))
+    const dayMap = {}
+    sessions.forEach(s => { dayMap[s.date] = (dayMap[s.date] || 0) + s.hours })
+    const bestDay = Math.max(...Object.values(dayMap), 0)
+    const weekMap = {}
+    sessions.forEach(s => {
+      const monday = getMondayOfWeek(new Date(s.date)).toDateString()
+      weekMap[monday] = (weekMap[monday] || 0) + s.hours
+    })
+    const bestWeek = Math.max(...Object.values(weekMap), 0)
+    const allDates = new Set(sessions.map(s => new Date(s.date).toDateString()))
+    let maxStreak = 0, cur = 0
+    const iter = new Date(); iter.setHours(0,0,0,0); iter.setDate(iter.getDate() - 365)
+    const today = new Date(); today.setHours(0,0,0,0)
+    while (iter <= today) {
+      if (allDates.has(iter.toDateString())) { cur++; maxStreak = Math.max(maxStreak, cur) } else cur = 0
+      iter.setDate(iter.getDate() + 1)
+    }
+    return { bestSession: parseFloat(bestSession.toFixed(1)), bestDay: parseFloat(bestDay.toFixed(1)), bestWeek: parseFloat(bestWeek.toFixed(1)), maxStreak }
+  }, [sessions])
+
+  // ── Goal projection ───────────────────────────────────────────────────
+  const goalProjection = useMemo(() => {
+    const periodStart  = settings?.periodStart ? new Date(settings.periodStart + 'T00:00:00') : null
+    const periodEnd    = settings?.periodEnd   ? new Date(settings.periodEnd   + 'T23:59:59') : null
+    const totalTarget  = settings?.hoursGoal || 0
+    if (!periodStart || !periodEnd || !totalTarget) return null
+    const now = new Date()
+    const daysSinceStart = Math.max(1, (now - periodStart) / 86400000)
+    const daysTotal      = Math.max(1, (periodEnd - periodStart) / 86400000)
+    const daysRemaining  = Math.max(0, (periodEnd - now) / 86400000)
+    const dailyPace      = totalHours / daysSinceStart
+    const projectedTotal = totalHours + dailyPace * daysRemaining
+    const pct            = Math.min(100, Math.round(totalHours / totalTarget * 100))
+    let finishDate = null
+    if (dailyPace > 0 && totalHours < totalTarget) {
+      const daysNeeded = (totalTarget - totalHours) / dailyPace
+      finishDate = new Date(now.getTime() + daysNeeded * 86400000)
+    }
+    return { pct, projectedTotal: parseFloat(projectedTotal.toFixed(0)), totalTarget, finishDate, daysRemaining: Math.round(daysRemaining), onTrack: projectedTotal >= totalTarget }
+  }, [sessions, settings, totalHours])
+
+  // ── Radar chart data (balance across subjects) ────────────────────────
+  const radarData = useMemo(() => {
+    if (subjects.length < 3) return null
+    const totalH = subjects.reduce((a, s) => a + subjectTotals.find(x => x.key === s.key)?.all || 0, 0)
+    if (totalH === 0) return null
+    return subjects.map(s => {
+      const st = subjectTotals.find(x => x.key === s.key)
+      const val = Math.round(((st?.all || 0) / totalH) * 100)
+      return { subject: s.name.length > 10 ? s.name.slice(0, 9) + '…' : s.name, val, fullMark: 100 }
+    })
+  }, [subjects, subjectTotals])
+
+  // ── Intraday timeline (sessions with startTime) ───────────────────────
+  const intradayData = useMemo(() => {
+    const withTime = sessions.filter(s => s.startTime && s.hours > 0)
+    if (withTime.length < 3) return null
+    const slots = Array(24).fill(0)
+    withTime.forEach(s => {
+      const startH = new Date(s.startTime).getHours()
+      const endH = Math.min(23, startH + Math.ceil(s.hours))
+      for (let h = startH; h <= endH; h++) slots[h] += s.hours / Math.max(1, endH - startH + 1)
+    })
+    return slots.map((h, i) => ({ hour: i, hours: parseFloat(h.toFixed(2)) }))
+  }, [sessions])
+
+  // ── Weekly goals history (last 8 weeks) ──────────────────────────────
+  const weeklyGoalHistory = useMemo(() => {
+    const weeklyTarget = (settings?.hoursGoal || 0) / Math.max(1, settings?.subjects?.length || 1)
+    const totalWeeklyTarget = settings?.subjects?.length
+      ? (settings?.hoursGoal || 0) / (Math.max(1, (new Date(settings?.periodEnd || Date.now()) - new Date(settings?.periodStart || Date.now())) / 86400000) / 7)
+      : 0
+    if (totalWeeklyTarget <= 0) return null
+    const result = []
+    const now = getMondayOfWeek(new Date())
+    for (let i = 7; i >= 0; i--) {
+      const monday = new Date(now); monday.setDate(now.getDate() - i * 7)
+      const sunday = new Date(monday); sunday.setDate(monday.getDate() + 7)
+      const h = sessions.filter(s => { const d = new Date(s.date); return d >= monday && d < sunday }).reduce((a, b) => a + (b.hours || 0), 0)
+      const isCurrentWeek = i === 0
+      result.push({
+        label: monday.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }),
+        hours: parseFloat(h.toFixed(1)),
+        target: parseFloat(totalWeeklyTarget.toFixed(1)),
+        hit: h >= totalWeeklyTarget,
+        current: isCurrentWeek,
+      })
+    }
+    return result
+  }, [sessions, settings])
 
   if (sessions.length === 0) {
     return (
@@ -388,41 +485,75 @@ export default function StatsPage({ settings }) {
         </div>
       </div>
 
-      {/* Mood breakdown */}
+      {/* Mood breakdown + correlation */}
       {(() => {
         const MOOD_LABELS = { '😴': 'Cansada', '😐': 'Normal', '😊': 'Bem', '🔥': 'Flow' }
+        const MOOD_COLORS = { '😴': '#94a3b8', '😐': '#f59e0b', '😊': '#34d399', '🔥': '#f97316' }
         const moodSessions = sessions.filter(s => s.mood)
         if (moodSessions.length === 0) return null
-        const counts = {}
-        moodSessions.forEach(s => { counts[s.mood] = (counts[s.mood] || 0) + 1 })
+        const counts = {}, hours = {}
+        moodSessions.forEach(s => {
+          counts[s.mood] = (counts[s.mood] || 0) + 1
+          hours[s.mood] = (hours[s.mood] || 0) + (s.hours || 0)
+        })
         const total = moodSessions.length
+        const avgHours = Object.fromEntries(Object.keys(counts).map(m => [m, hours[m] / counts[m]]))
+        const maxAvg = Math.max(...Object.values(avgHours), 0.1)
         return (
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="card-header">
               <span className="card-title">Humor nas sessões</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => setMoodView('dist')} className={moodView === 'dist' ? 'btn btn-primary' : 'btn btn-secondary'} style={{ fontSize: '0.72rem', padding: '4px 10px' }}>Frequência</button>
+                <button onClick={() => setMoodView('corr')} className={moodView === 'corr' ? 'btn btn-primary' : 'btn btn-secondary'} style={{ fontSize: '0.72rem', padding: '4px 10px' }}>Média de horas</button>
+              </div>
             </div>
             <div className="card-body">
-              {Object.entries(MOOD_LABELS).map(([emoji, label]) => {
-                const count = counts[emoji] || 0
-                const pct = Math.round(count / total * 100)
-                return (
-                  <div key={emoji} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji}</span>
-                    <span style={{ fontSize: '0.83rem', fontWeight: 600, color: 'var(--gray-700)', width: 70 }}>{label}</span>
-                    <div className="progress-wrap" style={{ flex: 1, height: 8 }}>
-                      <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: 'var(--rose-300)' }} />
+              {moodView === 'dist' ? (
+                Object.entries(MOOD_LABELS).map(([emoji, label]) => {
+                  const count = counts[emoji] || 0
+                  const pct = Math.round(count / total * 100)
+                  return (
+                    <div key={emoji} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji}</span>
+                      <span style={{ fontSize: '0.83rem', fontWeight: 600, color: 'var(--gray-700)', width: 70 }}>{label}</span>
+                      <div className="progress-wrap" style={{ flex: 1, height: 8 }}>
+                        <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: MOOD_COLORS[emoji] || 'var(--rose-300)' }} />
+                      </div>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--gray-500)', fontWeight: 600, minWidth: 70, textAlign: 'right' }}>{count} sess. ({pct}%)</span>
                     </div>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--gray-500)', fontWeight: 600, minWidth: 60, textAlign: 'right' }}>{count} ({pct}%)</span>
-                  </div>
-                )
-              })}
+                  )
+                })
+              ) : moodView === 'corr' ? (
+                <>
+                  {Object.entries(MOOD_LABELS).map(([emoji, label]) => {
+                    const avg = avgHours[emoji] || 0
+                    const pct = avg / maxAvg * 100
+                    return (
+                      <div key={emoji} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji}</span>
+                        <span style={{ fontSize: '0.83rem', fontWeight: 600, color: 'var(--gray-700)', width: 70 }}>{label}</span>
+                        <div className="progress-wrap" style={{ flex: 1, height: 8 }}>
+                          <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: MOOD_COLORS[emoji] || 'var(--rose-300)', opacity: avg === 0 ? 0.2 : 1 }} />
+                        </div>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--gray-500)', fontWeight: 600, minWidth: 70, textAlign: 'right' }}>
+                          {avg > 0 ? `${avg.toFixed(1)}h/sess.` : '—'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                  <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', marginTop: 4 }}>
+                    Média de horas estudadas por sessão em cada estado de humor
+                  </p>
+                </>
+              ) : null}
             </div>
           </div>
         )
       })()}
 
       {/* Day of week breakdown */}
-      <div className="card">
+      <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <span className="card-title">Horas por dia da semana</span>
         </div>
@@ -448,6 +579,132 @@ export default function StatsPage({ settings }) {
           </div>
         </div>
       </div>
+
+      {/* Personal records */}
+      {records && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">🏆 Recordes pessoais</span></div>
+          <div className="card-body">
+            <div className="dashboard-grid-3" style={{ margin: 0 }}>
+              {[
+                { label: 'Melhor sessão',   value: `${records.bestSession}h`, sub: 'numa única sessão' },
+                { label: 'Melhor dia',      value: `${records.bestDay}h`,     sub: 'num único dia' },
+                { label: 'Melhor semana',   value: `${records.bestWeek}h`,    sub: 'numa única semana' },
+                { label: 'Maior streak',    value: `${records.maxStreak}d`,   sub: `streak atual: ${streak}d${streak === records.maxStreak && records.maxStreak > 0 ? ' 🎉' : ''}` },
+              ].map(r => (
+                <div key={r.label} className="stat-card" style={{ textAlign: 'center' }}>
+                  <div className="stat-label">{r.label}</div>
+                  <div className="stat-value" style={{ fontSize: '1.6rem' }}>{r.value}</div>
+                  <div className="stat-sub">{r.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goal projection */}
+      {goalProjection && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">🎯 Projeção da meta</span></div>
+          <div className="card-body">
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: '0.83rem', fontWeight: 700, color: 'var(--gray-700)' }}>
+                  {goalProjection.pct}% da meta — {totalHours.toFixed(0)}h de {goalProjection.totalTarget}h
+                </span>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: goalProjection.onTrack ? '#16a34a' : '#dc2626' }}>
+                  {goalProjection.onTrack ? '✅ No bom caminho' : '⚠️ Ritmo insuficiente'}
+                </span>
+              </div>
+              <div className="progress-wrap" style={{ height: 10 }}>
+                <div className="progress-fill" style={{ width: `${goalProjection.pct}%`, height: '100%', background: goalProjection.onTrack ? '#16a34a' : 'var(--rose-400)' }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--gray-600)' }}>
+              <span>📈 Projeção: <strong>{goalProjection.projectedTotal}h</strong> até ao fim do período</span>
+              <span>⏳ Faltam <strong>{goalProjection.daysRemaining} dias</strong></span>
+              {goalProjection.finishDate && goalProjection.daysRemaining > 0 && (
+                <span>🏁 Meta atingida a: <strong>{goalProjection.finishDate.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}</strong></span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Weekly goals history */}
+      {weeklyGoalHistory && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">📋 Histórico de metas semanais</span></div>
+          <div className="card-body">
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
+              {weeklyGoalHistory.map((w, i) => {
+                const maxH = Math.max(...weeklyGoalHistory.map(x => Math.max(x.hours, x.target)), 1)
+                const barH = Math.max(4, (w.hours / maxH) * 90)
+                const targetH = Math.max(1, (w.target / maxH) * 90)
+                return (
+                  <div key={i} title={`${w.label}: ${w.hours}h / ${w.target}h`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--gray-500)', fontWeight: 600 }}>{w.hours > 0 ? `${w.hours}h` : ''}</span>
+                    <div style={{ position: 'relative', width: '100%', height: 90, display: 'flex', alignItems: 'flex-end' }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: targetH, borderTop: '2px dashed var(--gray-300)', pointerEvents: 'none' }} />
+                      <div style={{ width: '100%', borderRadius: 4, height: barH, background: w.current ? 'var(--rose-300)' : w.hit ? '#16a34a' : w.hours > 0 ? '#f97316' : 'var(--gray-100)' }} />
+                    </div>
+                    <span style={{ fontSize: '0.58rem', color: 'var(--gray-400)', textAlign: 'center', lineHeight: 1.2 }}>{w.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 10, fontSize: '0.7rem', color: 'var(--gray-400)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#16a34a', display: 'inline-block' }} /> Meta atingida</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#f97316', display: 'inline-block' }} /> Abaixo da meta</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--rose-300)', display: 'inline-block' }} /> Semana atual</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Radar chart */}
+      {radarData && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">🕸️ Equilíbrio entre cadeiras</span></div>
+          <div className="card-body">
+            <ResponsiveContainer width="100%" height={260}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="var(--gray-200)" />
+                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: 'var(--gray-600)', fontWeight: 600 }} />
+                <Radar name="% do total" dataKey="val" stroke="var(--rose-400)" fill="var(--rose-400)" fillOpacity={0.25} />
+                <Tooltip formatter={(v) => [`${v}%`, '% do total']} contentStyle={{ fontSize: '0.78rem', borderRadius: 8, border: '1px solid var(--gray-200)' }} />
+              </RadarChart>
+            </ResponsiveContainer>
+            <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', textAlign: 'center', marginTop: 4 }}>
+              Percentagem do tempo total dedicada a cada cadeira
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Intraday timeline */}
+      {intradayData && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">🕐 Quando costumas estudar</span></div>
+          <div className="card-body">
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 70 }}>
+              {intradayData.map((slot, i) => {
+                const max = Math.max(...intradayData.map(x => x.hours), 0.1)
+                return (
+                  <div key={i} title={`${i}h: ${slot.hours.toFixed(1)}h de estudo`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <div style={{ width: '100%', borderRadius: 2, height: Math.max(2, (slot.hours / max) * 55), background: slot.hours > 0 ? 'var(--rose-300)' : 'var(--gray-100)' }} />
+                    {i % 4 === 0 && <span style={{ fontSize: '0.58rem', color: 'var(--gray-400)' }}>{i}h</span>}
+                  </div>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', marginTop: 8 }}>
+              Baseado em sessões com hora de início registada ({sessions.filter(s => s.startTime).length} sessões)
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

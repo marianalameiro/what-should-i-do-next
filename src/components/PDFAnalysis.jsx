@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Upload, Sparkles, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Upload, Sparkles, Trash2, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
@@ -299,9 +299,20 @@ Format your response clearly with these sections. Be specific and reference actu
                     borderRadius: 10, padding: '14px 16px',
                     fontSize: '0.88rem', lineHeight: 1.7,
                     color: 'var(--gray-700)', whiteSpace: 'pre-wrap',
+                    marginBottom: 10,
                   }}>
                     {a.feedback}
                   </div>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: '0.8rem', gap: 5 }}
+                    onClick={() => {
+                      localStorage.setItem('ai-pdf-context', a.feedback)
+                      alert('Contexto carregado no AI Chat! 🌸')
+                    }}
+                  >
+                    <MessageSquare size={13} /> Usar no AI Chat
+                  </button>
                 </div>
               )}
             </div>

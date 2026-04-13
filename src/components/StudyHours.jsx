@@ -35,19 +35,19 @@ function getTargetForKey(targets, key, fallback = 110) {
 }
 
 function hoursForSubject(sessions, key) {
-  return sessions.filter(s => s.subject === key).reduce((a, b) => a + b.hours, 0)
+  return sessions.filter(s => s.subject === key).reduce((a, b) => a + (b.hours || 0), 0)
 }
 
 function hoursForSubjectThisWeek(sessions, key) {
   const monday = getMondayOfWeek(TODAY)
   return sessions
     .filter(s => s.subject === key && new Date(s.date) >= monday)
-    .reduce((a, b) => a + b.hours, 0)
+    .reduce((a, b) => a + (b.hours || 0), 0)
 }
 
 function hoursThisWeek(sessions) {
   const monday = getMondayOfWeek(TODAY)
-  return sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
+  return sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
 }
 
 function currentStreak(sessions) {
@@ -65,7 +65,7 @@ function last7Days(sessions) {
     const d = new Date(TODAY)
     d.setDate(TODAY.getDate() - i)
     const key = d.toDateString()
-    const hours = sessions.filter(s => s.date === key).reduce((a, b) => a + b.hours, 0)
+    const hours = sessions.filter(s => s.date === key).reduce((a, b) => a + (b.hours || 0), 0)
     result.push({ label: d.toLocaleDateString('pt-PT', { weekday: 'short' }), hours, date: key })
   }
   return result
@@ -81,7 +81,7 @@ function getStudySuggestions(subject, deficit, daysLeftInWeek, sessions) {
     ? Math.max(0, Math.round((TODAY - new Date(lastSession.date)) / 86400000))
     : null
   const avgSessionLen = subjectSessions.length >= 2
-    ? subjectSessions.slice(0, 8).reduce((a, b) => a + b.hours, 0) / Math.min(subjectSessions.length, 8)
+    ? subjectSessions.slice(0, 8).reduce((a, b) => a + (b.hours || 0), 0) / Math.min(subjectSessions.length, 8)
     : null
   const recentMoods = subjectSessions.slice(0, 3).map(s => s.mood).filter(Boolean)
   const lowEnergy = recentMoods.length >= 2 && recentMoods.every(m => m === '😴' || m === '😐')
@@ -219,10 +219,15 @@ export default function StudyHours({ settings }) {
   const [form, setForm] = useState({
     subject: subjects[0]?.key || '',
     hours: '',
+    mins: '0',
     notes: '',
     mood: '😊',
     date: TODAY.toISOString().split('T')[0],
+    projectId: '',
   })
+
+  const activeProjects = (() => { try { return JSON.parse(localStorage.getItem('projects-v2')) || [] } catch { return [] } })()
+    .filter(p => p.status !== 'completed')
 
   useEffect(() => { saveSessions(sessions) }, [sessions])
   useEffect(() => { saveTargets(targets) }, [targets])
@@ -230,16 +235,21 @@ export default function StudyHours({ settings }) {
   const getTarget = (key) => getTargetForKey(targets, key, defaultTarget)
 
   const addSession = () => {
-    if (!form.hours || parseFloat(form.hours) <= 0) return
+    const h = parseFloat(form.hours) || 0
+    const m = parseInt(form.mins) || 0
+    const totalHours = parseFloat((h + m / 60).toFixed(2))
+    if (totalHours <= 0) return
     setSessions(prev => [{
       id: Date.now(),
       subject: form.subject,
-      hours: parseFloat(form.hours),
+      hours: totalHours,
       notes: form.notes,
       mood: form.mood,
       date: new Date(form.date).toDateString(),
+      startTime: null,
+      projectId: form.projectId || null,
     }, ...prev])
-    setForm(p => ({ ...p, hours: '', notes: '', mood: '😊' }))
+    setForm(p => ({ ...p, hours: '', mins: '0', notes: '', mood: '😊', projectId: '' }))
     setShowForm(false)
   }
 
@@ -262,7 +272,7 @@ export default function StudyHours({ settings }) {
   }
 
   const totalTarget     = subjects.reduce((a, s) => a + getTarget(s.key), 0)
-  const totalHours      = sessions.reduce((a, b) => a + b.hours, 0)
+  const totalHours      = sessions.reduce((a, b) => a + (b.hours || 0), 0)
   const totalPct        = Math.min(100, totalTarget === 0 ? 100 : Math.round(totalHours / totalTarget * 100))
 
   const avgWeeklyTarget = subjects.reduce((a, s) => a + getTarget(s.key) / WEEKS_REMAINING, 0)
@@ -289,7 +299,7 @@ export default function StudyHours({ settings }) {
       const d = new Date(TODAY)
       d.setDate(TODAY.getDate() - i)
       const key = d.toDateString()
-      const hours = sessions.filter(s => s.date === key).reduce((a, b) => a + b.hours, 0)
+      const hours = sessions.filter(s => s.date === key).reduce((a, b) => a + (b.hours || 0), 0)
       const label = chartDays <= 7
         ? d.toLocaleDateString('pt-PT', { weekday: 'short' })
         : d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'numeric' })
@@ -620,7 +630,7 @@ export default function StudyHours({ settings }) {
       {showForm && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-body">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label className="form-label">Cadeira</label>
                 <select className="form-input" value={form.subject} onChange={e => setForm(p => ({ ...p, subject: e.target.value }))}>
@@ -629,9 +639,17 @@ export default function StudyHours({ settings }) {
               </div>
               <div>
                 <label className="form-label">Horas</label>
-                <input type="number" min="0.25" max="12" step="0.25" className="form-input"
-                  placeholder="1.5" value={form.hours}
+                <input type="number" min="0" max="12" step="1" className="form-input"
+                  placeholder="0" value={form.hours}
                   onChange={e => setForm(p => ({ ...p, hours: e.target.value }))} />
+              </div>
+              <div>
+                <label className="form-label">Minutos</label>
+                <select className="form-input" value={form.mins} onChange={e => setForm(p => ({ ...p, mins: e.target.value }))}>
+                  {[0,5,10,15,20,25,30,35,40,45,50,55].map(m => (
+                    <option key={m} value={m}>{String(m).padStart(2,'0')}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="form-label">Data</label>
@@ -658,6 +676,19 @@ export default function StudyHours({ settings }) {
                 ))}
               </div>
             </div>
+            {activeProjects.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <label className="form-label">Projeto (opcional)</label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setForm(p => ({ ...p, projectId: '' }))} style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${!form.projectId ? '#8b5cf6' : 'var(--gray-200)'}`, background: !form.projectId ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: !form.projectId ? '#5b21b6' : 'var(--gray-500)', fontWeight: !form.projectId ? 700 : 500 }}>Nenhum</button>
+                  {activeProjects.map(p => (
+                    <button key={p.id} type="button" onClick={() => setForm(f => ({ ...f, projectId: p.id }))} style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${form.projectId === p.id ? '#8b5cf6' : 'var(--gray-200)'}`, background: form.projectId === p.id ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: form.projectId === p.id ? '#5b21b6' : 'var(--gray-500)', fontWeight: form.projectId === p.id ? 700 : 500 }}>
+                      {p.emoji || '🗂'} {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <button className="btn btn-primary" onClick={addSession}>
               <Plus size={14} /> Guardar sessao
             </button>
@@ -666,6 +697,13 @@ export default function StudyHours({ settings }) {
       )}
 
       {/* History */}
+      {sessions.length === 0 && (
+        <div className="empty-state" style={{ marginBottom: 20 }}>
+          <div className="e-emoji">⏱️</div>
+          <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Ainda sem sessões registadas</p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>Usa o formulário acima para registar a tua primeira sessão de estudo!</p>
+        </div>
+      )}
       {sessions.length > 0 && (
         <div className="card">
           <div className="card-header">

@@ -47,6 +47,201 @@ const TABS = [
   { id: "settings", emoji: "⚙️", label: "Definições" },
 ]
 
+function QuickLogModal({ onClose, settings }) {
+  const subjects = settings?.subjects || []
+  const [subject, setSubject] = useState(subjects[0]?.key || '')
+  const [hours, setHours]     = useState('')
+  const [mins, setMins]       = useState('0')
+  const [notes, setNotes]     = useState('')
+  const [saved, setSaved]     = useState(false)
+
+  const save = () => {
+    const h = parseFloat(hours) || 0
+    const m = parseInt(mins) || 0
+    const total = parseFloat((h + m / 60).toFixed(2))
+    if (total <= 0 || !subject) return
+    try {
+      const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+      sessions.unshift({ id: Date.now(), subject, hours: total, notes, mood: '😊', date: new Date().toDateString(), startTime: null })
+      localStorage.setItem('study-sessions', JSON.stringify(sessions))
+    } catch {}
+    setSaved(true)
+    setTimeout(onClose, 900)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9997, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
+      <div style={{ background: 'var(--white)', borderRadius: 14, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)' }}>
+          <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--gray-800)', margin: 0 }}>⏱️ Registar sessão</p>
+        </div>
+        {saved ? (
+          <div style={{ padding: '28px 20px', textAlign: 'center', fontSize: '1.5rem' }}>✅</div>
+        ) : (
+          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {subjects.map(s => (
+                <button key={s.key} onClick={() => setSubject(s.key)} style={{ padding: '5px 12px', borderRadius: 50, border: `2px solid ${subject === s.key ? s.color : 'var(--gray-200)'}`, background: subject === s.key ? s.color + '33' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', color: subject === s.key ? s.textColor : 'var(--gray-500)' }}>
+                  {s.emoji} {s.name}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4, textTransform: 'uppercase' }}>Horas</label>
+                <input type="number" min="0" max="12" step="1" placeholder="0" value={hours} onChange={e => setHours(e.target.value)} autoFocus
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '1rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4, textTransform: 'uppercase' }}>Minutos</label>
+                <select value={mins} onChange={e => setMins(e.target.value)}
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '1rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)', boxSizing: 'border-box' }}>
+                  {[0,5,10,15,20,25,30,35,40,45,50,55].map(m => <option key={m} value={m}>{String(m).padStart(2,'0')}</option>)}
+                </select>
+              </div>
+            </div>
+            <input type="text" placeholder="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()}
+              style={{ fontFamily: 'inherit', fontSize: '0.88rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)' }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={save} disabled={!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--rose-400)', color: '#fff', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', opacity: (!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)) ? 0.5 : 1 }}>
+                Guardar
+              </button>
+              <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--gray-200)', background: 'var(--white)', fontFamily: 'inherit', cursor: 'pointer', color: 'var(--gray-500)' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CommandPalette({ onClose, onNavigate }) {
+  const [query, setQuery] = useState('')
+  const [sel, setSel] = useState(0)
+  const inputRef = useRef(null)
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  const navItems = TABS.map(t => ({ ...t, type: 'nav', action: () => onNavigate(t.id) }))
+
+  const searchItems = (() => {
+    if (!query.trim()) return []
+    const q = query.toLowerCase()
+    const results = []
+    try {
+      const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+      sessions.filter(s => (s.subject || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q))
+        .slice(0, 4).forEach(s => results.push({
+          id: `session-${s.id}`, emoji: '⏱️', type: 'session',
+          label: s.subject || 'Sessão', sub: `${s.hours}h · ${s.date}${s.notes ? ' · ' + s.notes.slice(0, 40) : ''}`,
+          action: () => onNavigate('hours'),
+        }))
+    } catch {}
+    try {
+      const exams = JSON.parse(localStorage.getItem('exams') || '[]')
+      exams.filter(e => (e.subject || '').toLowerCase().includes(q) || (e.type || '').toLowerCase().includes(q))
+        .slice(0, 3).forEach(e => results.push({
+          id: `exam-${e.id}`, emoji: '🎯', type: 'exam',
+          label: e.subject || 'Exame', sub: `${e.type || ''} · ${e.date ? new Date(e.date + 'T12:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }) : ''}`,
+          action: () => onNavigate('exams'),
+        }))
+    } catch {}
+    try {
+      const diary = JSON.parse(localStorage.getItem('diary-entries') || '[]')
+      diary.filter(e => (e.text || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q))
+        .slice(0, 3).forEach(e => results.push({
+          id: `diary-${e.id}`, emoji: '📓', type: 'diary',
+          label: (e.text || '').slice(0, 50) || 'Entrada', sub: `Diário · ${new Date(e.id).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}`,
+          action: () => onNavigate('diary'),
+        }))
+    } catch {}
+    return results
+  })()
+
+  const allItems = query.trim()
+    ? [
+        ...navItems.filter(i => i.label.toLowerCase().includes(query.toLowerCase())),
+        ...searchItems,
+      ]
+    : navItems
+
+  const filtered = allItems
+
+  const handleKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(s + 1, filtered.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setSel(s => Math.max(s - 1, 0)) }
+    if (e.key === 'Enter' && filtered[sel]) { filtered[sel].action(); onClose() }
+  }
+
+  const TYPE_LABEL = { nav: 'Páginas', session: 'Sessões', exam: 'Exames', diary: 'Diário' }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 120 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: 'var(--white)', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: 500, maxWidth: '90vw', overflow: 'hidden' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--gray-100)' }}>
+          <span style={{ fontSize: '1rem' }}>🔍</span>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => { setQuery(e.target.value); setSel(0) }}
+            onKeyDown={handleKey}
+            placeholder="Pesquisar páginas, sessões, exames, diário..."
+            style={{ flex: 1, border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: '0.95rem', background: 'transparent', color: 'var(--gray-900)' }}
+          />
+          <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)', fontWeight: 700 }}>ESC</span>
+        </div>
+        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+          {filtered.length === 0 ? (
+            <p style={{ padding: '20px 16px', color: 'var(--gray-400)', fontSize: '0.88rem', textAlign: 'center' }}>Nenhum resultado para "{query}"</p>
+          ) : (() => {
+            const els = []
+            let lastType = null
+            filtered.forEach((item, i) => {
+              if (item.type !== lastType) {
+                lastType = item.type
+                els.push(
+                  <p key={`hd-${item.type}`} style={{ padding: '6px 16px 2px', fontSize: '0.68rem', fontWeight: 800, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                    {TYPE_LABEL[item.type] || item.type}
+                  </p>
+                )
+              }
+              els.push(
+                <button
+                  key={item.id}
+                  onClick={() => { item.action(); onClose() }}
+                  style={{
+                    width: '100%', padding: '9px 16px', border: 'none', textAlign: 'left',
+                    background: i === sel ? 'var(--pink-50)' : 'transparent',
+                    fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+                    color: 'var(--gray-800)',
+                  }}
+                >
+                  <span style={{ fontSize: '1rem', flexShrink: 0 }}>{item.emoji}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: i === sel ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    {item.sub && <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--gray-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</span>}
+                  </span>
+                </button>
+              )
+            })
+            return els
+          })()}
+        </div>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gray-100)', fontSize: '0.7rem', color: 'var(--gray-400)', display: 'flex', gap: 12 }}>
+          <span>↑↓ navegar</span><span>↵ abrir</span><span>esc fechar</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const isElectron = typeof window !== "undefined" && window.electronAPI
 
 export default function App() {
@@ -55,6 +250,9 @@ export default function App() {
   const [dragging, setDragging] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [pomodoroTick, setPomodoroTick] = useState(null)
+  const [todayHours, setTodayHours] = useState(0)
+  const [deepWork, setDeepWork] = useState(() => localStorage.getItem('deep-work-mode') === '1')
+  const [quickLog, setQuickLog] = useState(false)
 
   const dragOrigin = useRef(null)
 
@@ -123,9 +321,17 @@ export default function App() {
     }
   }, [dragging])
 
-  // ───────── Keyboard navigation (1-9)
+  // ───────── Keyboard navigation (1-9) + Cmd+K command palette
+  const [cmdOpen, setCmdOpen] = useState(false)
+
   useEffect(() => {
     const handle = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCmdOpen(v => !v)
+        return
+      }
+      if (e.key === 'Escape') { setCmdOpen(false); return }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const map = { '1':'dashboard','2':'today','3':'schedule','4':'projects','5':'exams','6':'hours','7':'diary','8':'stats','9':'settings' }
@@ -135,8 +341,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', handle)
   }, [])
 
-  // ───────── Pomodoro sidebar ticker
+  // ───────── Pomodoro sidebar ticker + today hours + deep work
   useEffect(() => {
+    function readTodayHours() {
+      try {
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const todayStr = new Date().toDateString()
+        return parseFloat(sessions.filter(s => s.date === todayStr).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
+      } catch { return 0 }
+    }
     const interval = setInterval(() => {
       try {
         const raw = JSON.parse(localStorage.getItem('pomodoro-timer-state'))
@@ -150,18 +363,98 @@ export default function App() {
           setPomodoroTick(null)
         }
       } catch { setPomodoroTick(null) }
+      setTodayHours(readTodayHours())
     }, 1000)
+    setTodayHours(readTodayHours())
     return () => clearInterval(interval)
   }, [])
 
-  // ───────── Exam notifications (once per day)
+  // ───────── Notification system (all types in one interval)
   useEffect(() => {
     if (typeof Notification === 'undefined') return
-    const todayKey = `exam-notified-${new Date().toDateString()}`
-    if (localStorage.getItem(todayKey)) return
     if (Notification.permission === 'denied') return
 
-    const notify = () => {
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function getNotifSettings() {
+      try {
+        const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+        return { wakeHour: parseInt((s.wakeTime || '08:00').split(':')[0], 10),
+                 sleepHour: parseInt((s.sleepTime || '23:00').split(':')[0], 10),
+                 n: { studyProgress: true, streakRisk: true, weeklyReview: true, longBreak: true, examDay: true, ...s.notifications } }
+      } catch { return { wakeHour: 8, sleepHour: 23, n: { studyProgress:true,streakRisk:true,weeklyReview:true,longBreak:true,examDay:true } } }
+    }
+
+    function getTodayStats() {
+      try {
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const todayStr = new Date().toDateString()
+        const hours = parseFloat(sessions.filter(s => s.date === todayStr).reduce((a, b) => a + (b.hours || 0), 0).toFixed(2))
+        const days = new Set(sessions.map(s => s.date))
+        if (hours > 0) days.add(todayStr)
+        let streak = 0
+        const d = new Date(); d.setHours(0, 0, 0, 0)
+        if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1)
+        while (days.has(d.toDateString())) { streak++; d.setDate(d.getDate() - 1) }
+        return { hours, streak }
+      } catch { return { hours: 0, streak: 0 } }
+    }
+
+    function notify(title, body) {
+      try { new Notification(title, { body, silent: false }) } catch {}
+    }
+
+    // ── Study progress (hourly) ───────────────────────────────────────────────
+    function checkStudyProgress(h, todayStr, { hours, streak }) {
+      const lastKey = `study-notif-hour-${todayStr}`
+      const lastHour = parseInt(localStorage.getItem(lastKey) ?? '-1', 10)
+      if (h <= lastHour) return
+      localStorage.setItem(lastKey, String(h))
+      const fmt = hours === 0 ? '0' : Number.isInteger(hours) ? `${hours}` : hours.toFixed(1)
+      let title, body
+      if (hours === 0) {
+        if (h < 11)      { title = '☀️ Bom dia!';            body = 'Ainda não estudaste hoje. Que tal um Pomodoro para começar?' }
+        else if (h < 15) { title = '📚 Ainda sem horas hoje'; body = 'Há tempo! Mesmo 30 minutos fazem diferença.' }
+        else if (h < 19) { title = '⏰ Tarde de estudo?';     body = 'Ainda está a tempo de registar horas hoje!' }
+        else             { title = '🌙 Como correu o dia?';   body = 'Não te esqueças de registar sessões manuais se estudaste offline.' }
+      } else if (hours < 1) { title = `📖 ${fmt}h hoje`;              body = 'Bom começo! Mantém o ritmo.' }
+      else if (hours < 2)   { title = `📚 ${fmt}h de estudo hoje`;    body = 'Estás a ir bem. Continua assim!' }
+      else if (hours < 4)   { title = `⚡ ${fmt}h de produtividade`;  body = 'Excelente sessão de estudo! Mantém o foco.' }
+      else if (hours < 6)   { title = `🔥 ${fmt}h hoje — óptimo!`;   body = 'Dia muito produtivo. Faz uma pausa quando precisares.' }
+      else                   { title = `🏆 ${fmt}h hoje`;              body = 'Sessão épica! Mereces descansar um pouco.' }
+      if (streak >= 3) body += ` 🔥 ${streak} dias seguidos!`
+      notify(title, body)
+    }
+
+    // ── Streak at risk (once at 21h if no study today and streak > 0) ────────
+    function checkStreakRisk(h, todayStr, { hours, streak }) {
+      if (h !== 21) return
+      const key = `streak-risk-${todayStr}`
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+      if (hours === 0 && streak > 0) {
+        notify(`🔥 Streak em risco!`, `Tens ${streak} dia${streak !== 1 ? 's' : ''} de streak. Estuda um pouco hoje para não perder!`)
+      }
+    }
+
+    // ── Weekly review reminder (Sunday 20h) ──────────────────────────────────
+    function checkWeeklyReview(h, todayStr) {
+      if (new Date().getDay() !== 0 || h !== 20) return
+      const key = `review-reminded-${todayStr}`
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+      try {
+        const reviews = JSON.parse(localStorage.getItem('weekly-reviews') || '[]')
+        const thisMonday = new Date(); thisMonday.setHours(0,0,0,0); thisMonday.setDate(thisMonday.getDate() - thisMonday.getDay() + 1)
+        const doneThisWeek = reviews.some(r => r.generatedOn && new Date(r.generatedOn) >= thisMonday)
+        if (!doneThisWeek) notify('📓 Review semanal', 'Ainda não fizeste a review desta semana. Dedica 5 minutos antes de dormir!')
+      } catch {}
+    }
+
+    // ── Exam notifications: countdown days + on the day itself ───────────────
+    function checkExams(todayStr) {
+      const key = `exam-notified-${todayStr}`
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
       try {
         const exams = JSON.parse(localStorage.getItem('exams') || '[]')
         const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -169,22 +462,90 @@ export default function App() {
           if (!exam.date) return
           const d = new Date(exam.date + 'T12:00:00')
           const days = Math.round((d - today) / 86400000)
-          if ([1, 3, 7].includes(days)) {
-            new Notification(`📅 ${exam.subject}`, {
-              body: days === 1 ? `Amanhã tens ${exam.type}!` : `${exam.type} daqui a ${days} dias`,
-              silent: false,
-            })
-          }
+          if (days === 0) notify(`🎯 Hoje tens ${exam.type || 'exame'}!`, `${exam.subject} — bom trabalho, vai confiante!`)
+          else if ([1, 3, 7].includes(days)) notify(`📅 ${exam.subject}`, days === 1 ? `Amanhã tens ${exam.type}!` : `${exam.type} daqui a ${days} dias`)
         })
-        localStorage.setItem(todayKey, '1')
-      } catch (err) { console.error('Exam notification failed', err) }
+      } catch {}
+    }
+
+    // ── Long break after 4 pomodoros ────────────────────────────────────────
+    function checkLongBreak(todayStr) {
+      try {
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const today = new Date().toDateString()
+        const key = `long-break-notif-count-${todayStr}`
+        const lastCount = parseInt(localStorage.getItem(key) || '0', 10)
+        const pomosToday = sessions.filter(s => s.date === today && (s.notes?.startsWith('Pomodoro') || s._pomodoroAutoSaved !== undefined)).length
+        // notify each time the count crosses a multiple of 4
+        const newMultiple = Math.floor(pomosToday / 4)
+        const oldMultiple = Math.floor(lastCount / 4)
+        if (newMultiple > oldMultiple && pomosToday >= 4) {
+          localStorage.setItem(key, String(pomosToday))
+          notify('☕ Pausa longa!', `Fizeste ${pomosToday} Pomodoros hoje. Mereces uma pausa de 20–30 minutos!`)
+        } else {
+          localStorage.setItem(key, String(pomosToday))
+        }
+      } catch {}
+    }
+
+    // ── Long session (3h+ today without 30min gap) ───────────────────────────
+    function checkLongSession(todayStr) {
+      try {
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const today = new Date().toDateString()
+        const todaySessions = sessions.filter(s => s.date === today && s.startTime)
+          .sort((a, b) => a.startTime - b.startTime)
+        if (todaySessions.length === 0) return
+        // Check if last session ended more than 30 min ago and total hours >= 3
+        const lastEnd = todaySessions[todaySessions.length - 1].startTime + (todaySessions[todaySessions.length - 1].hours || 0) * 3600000
+        const gapMins = (Date.now() - lastEnd) / 60000
+        const totalH = todaySessions.reduce((a, b) => a + (b.hours || 0), 0)
+        const key = `long-session-notif-${todayStr}-${Math.floor(totalH)}`
+        if (totalH >= 3 && gapMins < 60 && !localStorage.getItem(key)) {
+          localStorage.setItem(key, '1')
+          notify('🧠 Sessão longa!', `Já estudaste ${totalH.toFixed(1)}h hoje. Faz uma pausa de pelo menos 20 minutos!`)
+        }
+      } catch {}
+    }
+
+    // ── Main check loop ──────────────────────────────────────────────────────
+    function checkAll() {
+      const now = new Date()
+      const h = now.getHours()
+      const todayStr = now.toDateString()
+      const { wakeHour, sleepHour, n } = getNotifSettings()
+
+      // Exam check always runs once per day at wake
+      if (n.examDay) checkExams(todayStr)
+
+      if (h < wakeHour || h >= sleepHour) return
+
+      // Deep work mode: skip study/break notifications while pomodoro running
+      const pomRunning = (() => { try { return JSON.parse(localStorage.getItem('pomodoro-timer-state'))?.running } catch { return false } })()
+      const deepWorkOn = localStorage.getItem('deep-work-mode') === '1'
+      if (deepWorkOn && pomRunning) return
+
+      const stats = getTodayStats()
+      if (n.studyProgress)  checkStudyProgress(h, todayStr, stats)
+      if (n.streakRisk)     checkStreakRisk(h, todayStr, stats)
+      if (n.weeklyReview)   checkWeeklyReview(h, todayStr)
+      if (n.longBreak)      checkLongBreak(todayStr)
+      if (n.longBreak)      checkLongSession(todayStr)
+    }
+
+    let interval
+    function setup() {
+      checkAll()
+      interval = setInterval(checkAll, 60 * 1000)
     }
 
     if (Notification.permission === 'granted') {
-      notify()
+      setup()
     } else {
-      Notification.requestPermission().then(p => { if (p === 'granted') notify() })
+      Notification.requestPermission().then(p => { if (p === 'granted') setup() })
     }
+
+    return () => clearInterval(interval)
   }, [])
 
   // ───────── Logout
@@ -234,6 +595,15 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {cmdOpen && (
+        <CommandPalette
+          onClose={() => setCmdOpen(false)}
+          onNavigate={(id) => { setTab(id); setCmdOpen(false) }}
+        />
+      )}
+      {quickLog && (
+        <QuickLogModal onClose={() => setQuickLog(false)} settings={settings} />
+      )}
       {focusMode && (
         <button
           onClick={() => setFocusMode(false)}
@@ -251,16 +621,50 @@ export default function App() {
       <aside
         className="sidebar"
         onMouseDown={onSidebarMouseDown}
-        style={{ cursor: dragging ? "grabbing" : "grab", display: focusMode ? 'none' : undefined }}
+        style={{ cursor: dragging ? "grabbing" : "grab", display: focusMode ? 'none' : undefined, width: settings?.sidebarCompact ? 64 : undefined }}
       >
         <div className="drag-region" />
 
-        <div className="sidebar-brand">
-          <p className="sidebar-brand-name">{appName}</p>
-          <p className="sidebar-brand-date">{dateLabel}</p>
-        </div>
+        {!settings?.sidebarCompact && (
+          <div className="sidebar-brand">
+            <p className="sidebar-brand-name">{appName}</p>
+            <p className="sidebar-brand-date">{dateLabel}</p>
+          </div>
+        )}
 
-        <p className="sidebar-section">Menu</p>
+        {!settings?.sidebarCompact && <p className="sidebar-section">Menu</p>}
+        {!settings?.sidebarCompact && (
+          <button
+            onClick={() => setCmdOpen(true)}
+            style={{
+              margin: '0 10px 6px', padding: '6px 10px',
+              background: 'var(--gray-50)', border: '1px solid var(--gray-200)',
+              borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              color: 'var(--gray-400)', fontSize: '0.72rem', fontWeight: 600,
+            }}
+          >
+            <span>Navegar...</span>
+            <span style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 4, padding: '1px 5px', fontSize: '0.65rem' }}>⌘K</span>
+          </button>
+        )}
+        <button
+          onClick={() => setQuickLog(true)}
+          style={{
+            margin: settings?.sidebarCompact ? '0 10px 6px' : '0 10px 10px',
+            padding: settings?.sidebarCompact ? '10px 0' : '9px 10px',
+            background: 'var(--rose-400)', border: 'none',
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center',
+            justifyContent: settings?.sidebarCompact ? 'center' : 'flex-start',
+            gap: 8, color: '#fff', fontSize: '0.82rem', fontWeight: 700,
+            width: 'calc(100% - 20px)',
+          }}
+          title="Registar sessão de estudo"
+        >
+          <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>
+          {!settings?.sidebarCompact && 'Registar horas'}
+        </button>
 
         <nav className="sidebar-nav">
           {TABS.map((t) => (
@@ -268,9 +672,11 @@ export default function App() {
               key={t.id}
               className={`nav-btn ${tab === t.id ? "active" : ""}`}
               onClick={() => setTab(t.id)}
+              title={settings?.sidebarCompact ? t.label : undefined}
+              style={settings?.sidebarCompact ? { justifyContent: 'center', padding: '10px 0' } : undefined}
             >
               <span className="nav-icon">{smartEmoji(t.emoji)}</span>
-              {t.label}
+              {!settings?.sidebarCompact && t.label}
             </button>
           ))}
         </nav>
@@ -291,17 +697,41 @@ export default function App() {
               }}
             >
               <span style={{ fontSize: '1rem' }}>🍅</span>
-              <div style={{ textAlign: 'left' }}>
-                <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--rose-400)', margin: 0, letterSpacing: -0.5 }}>
-                  {mm}:{ss}
-                </p>
-                <p style={{ fontSize: '0.65rem', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
-                  {isStopwatch ? 'A contar' : 'Pomodoro a correr'}
-                </p>
-              </div>
+              {!settings?.sidebarCompact && (
+                <div style={{ textAlign: 'left' }}>
+                  <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--rose-400)', margin: 0, letterSpacing: -0.5 }}>
+                    {mm}:{ss}
+                  </p>
+                  <p style={{ fontSize: '0.65rem', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
+                    {isStopwatch ? 'A contar' : 'Pomodoro a correr'}
+                  </p>
+                </div>
+              )}
             </button>
           )
         })()}
+
+        {todayHours > 0 && !settings?.sidebarCompact && (
+          <button
+            onClick={() => setTab('hours')}
+            style={{
+              margin: '4px 10px', padding: '8px 12px',
+              background: 'var(--pink-50)', border: '1.5px solid var(--pink-100)',
+              borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', gap: 8, width: 'calc(100% - 20px)',
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>⏱️</span>
+            <div style={{ textAlign: 'left' }}>
+              <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--purple-dark)', margin: 0 }}>
+                {todayHours}h hoje
+              </p>
+              <p style={{ fontSize: '0.65rem', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
+                horas estudadas
+              </p>
+            </div>
+          </button>
+        )}
 
         <div
           style={{
@@ -328,16 +758,38 @@ export default function App() {
             className="nav-btn"
             onClick={() => setFocusMode(true)}
             style={{ color: "var(--gray-400)", fontSize: "0.78rem" }}
+            title="Modo foco"
           >
-            <span className="nav-icon">🎯</span> Modo foco
+            <span className="nav-icon">🎯</span> {!settings?.sidebarCompact && 'Modo foco'}
+          </button>
+          <button
+            className="nav-btn"
+            onClick={() => {
+              const next = !deepWork
+              setDeepWork(next)
+              localStorage.setItem('deep-work-mode', next ? '1' : '0')
+            }}
+            style={{ color: deepWork ? 'var(--purple-dark)' : 'var(--gray-400)', fontSize: "0.78rem", fontWeight: deepWork ? 800 : undefined }}
+            title="Deep work (sem notificações durante Pomodoro)"
+          >
+            <span className="nav-icon">🧠</span> {!settings?.sidebarCompact && (deepWork ? 'Deep work ON' : 'Deep work')}
+          </button>
+          <button
+            className="nav-btn"
+            onClick={() => setSettings(s => ({ ...s, sidebarCompact: !s.sidebarCompact }))}
+            style={{ color: "var(--gray-400)", fontSize: "0.78rem" }}
+            title={settings?.sidebarCompact ? 'Expandir sidebar' : 'Compactar sidebar'}
+          >
+            <span className="nav-icon">{settings?.sidebarCompact ? '→' : '←'}</span> {!settings?.sidebarCompact && 'Compactar'}
           </button>
           {!isElectron && (
             <button
               className="nav-btn"
               onClick={signOut}
               style={{ color: "var(--gray-400)", fontSize: "0.78rem" }}
+              title="Sair"
             >
-              <span className="nav-icon">🚪</span> Sair
+              <span className="nav-icon">🚪</span> {!settings?.sidebarCompact && 'Sair'}
             </button>
           )}
         </div>

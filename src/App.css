@@ -25,25 +25,45 @@
   --rose-400: var(--accent-400);
   --rose-500: var(--accent-500);
 
+  /* Pink aliases (same as rose) */
+  --pink-50:  var(--accent-50);
+  --pink-100: var(--accent-100);
+
+  --amber-50:  #fffbeb;
   --amber-100: #fef3c7;
   --amber-300: #fbbf24;
   --amber-400: #f59e0b;
 
+  --blue-50:   #eff6ff;
   --blue-100:  #dbeafe;
   --blue-400:  #60a5fa;
   --blue-500:  #3b82f6;
 
+  --green-50:  #f0fdf4;
   --green-100: #dcfce7;
   --green-400: #4ade80;
   --green-500: #22c55e;
 
+  --red-50:    #fef2f2;
   --red-100:   #fee2e2;
   --red-400:   #f87171;
   --red-500:   #ef4444;
 
+  --orange-50:  #fff7ed;
+  --orange-100: #ffedd5;
+
+  --purple-50:  #faf5ff;
   --purple-100: #f3e8ff;
+  --purple-200: #e9d5ff;
   --purple-400: #c084fc;
   --purple-500: #a855f7;
+  --purple-dark: #5b21b6;
+
+  --indigo-50:  #eef2ff;
+  --indigo-100: #e0e7ff;
+
+  --cyan-50:    #ecfeff;
+  --cyan-100:   #cffafe;
 
   --gray-50:   #fafafa;
   --gray-100:  #f4f4f5;
@@ -92,11 +112,24 @@
   --shadow-md: 0 2px 8px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.4);
   --shadow-lg: 0 4px 16px rgba(0,0,0,0.6), 0 8px 32px rgba(0,0,0,0.5);
 
-  --amber-100: #2d2208;
-  --blue-100:  #0c1a33;
-  --green-100: #0a2218;
-  --red-100:   #2d0c0c;
+  --amber-50:   #1c1500;
+  --amber-100:  #2d2208;
+  --blue-50:    #060e1f;
+  --blue-100:   #0c1a33;
+  --green-50:   #04130a;
+  --green-100:  #0a2218;
+  --red-50:     #180505;
+  --red-100:    #2d0c0c;
+  --orange-50:  #1a0d00;
+  --orange-100: #2d1800;
+  --purple-50:  #130833;
   --purple-100: #1e0e33;
+  --purple-200: #2d1a4d;
+  --purple-dark: #c4b5fd;
+  --indigo-50:  #080d26;
+  --indigo-100: #0f1540;
+  --cyan-50:    #021a1f;
+  --cyan-100:   #053540;
 }
 
 [data-theme="dark"] ::-webkit-scrollbar-thumb { background: var(--gray-200); }
@@ -311,6 +344,7 @@ body {
   animation: confetti-fall linear forwards; pointer-events: none; z-index: 9999;
 }
 .fade-in { animation: fadeUp 0.25s ease; }
+@keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 .form-label { display: block; font-size: 0.72rem; font-weight: 700; color: var(--gray-500); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
 .form-input { width: 100%; font-family: inherit; font-size: 0.85rem; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); padding: 8px 10px; outline: none; background: var(--white); color: var(--gray-900); transition: border-color 0.12s, box-shadow 0.12s; }

@@ -59,6 +59,41 @@ export default function SettingsPage({ settings, setSettings }) {
     update('subjects', settings.subjects.map(s => s.key === key ? { ...s, methods } : s))
   }
 
+  const updateSubjectNotes = (key, notes) => {
+    update('subjects', settings.subjects.map(s => s.key === key ? { ...s, notes } : s))
+  }
+
+  const updateSubjectResources = (key, resources) => {
+    update('subjects', settings.subjects.map(s => s.key === key ? { ...s, resources } : s))
+  }
+
+  const moveSubject = (key, dir) => {
+    const arr = [...settings.subjects]
+    const i = arr.findIndex(s => s.key === key)
+    const j = i + dir
+    if (j < 0 || j >= arr.length) return
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    update('subjects', arr)
+  }
+
+  const [newResourceUrl, setNewResourceUrl] = useState('')
+  const [newResourceLabel, setNewResourceLabel] = useState('')
+
+  const addResource = (key) => {
+    if (!newResourceUrl.trim()) return
+    const subject = settings.subjects.find(s => s.key === key)
+    const resources = [...(subject.resources || []), { label: newResourceLabel.trim() || newResourceUrl.trim(), url: newResourceUrl.trim() }]
+    updateSubjectResources(key, resources)
+    setNewResourceUrl('')
+    setNewResourceLabel('')
+  }
+
+  const removeResource = (subjectKey, idx) => {
+    const subject = settings.subjects.find(s => s.key === subjectKey)
+    const resources = (subject.resources || []).filter((_, i) => i !== idx)
+    updateSubjectResources(subjectKey, resources)
+  }
+
   const toggleSchedule = (day, subjectKey) => {
     const current = settings.schedule[day] || []
     const next    = current.includes(subjectKey) ? current.filter(k => k !== subjectKey) : [...current, subjectKey]
@@ -79,6 +114,43 @@ export default function SettingsPage({ settings, setSettings }) {
   const saveLinks = (updated) => { setLinksState(updated); localStorage.setItem('quick-links', JSON.stringify(updated)) }
 
   const [apiKey, setApiKeyState] = useState(() => localStorage.getItem('groq-key') || '')
+
+  // ── Auto-backup (3 rolling snapshots) ─────────────────────────────────────
+  const AUTO_BACKUP_KEYS = ['wsidnx-auto-bk-0', 'wsidnx-auto-bk-1', 'wsidnx-auto-bk-2']
+  const [autoBackups, setAutoBackups] = useState(() =>
+    AUTO_BACKUP_KEYS.map(k => { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } }).filter(Boolean)
+  )
+
+  const saveAutoBackup = () => {
+    const staticKeys = [
+      'study-sessions','exams','projects-v2','diary-entries','weekly-reviews',
+      'subject-targets','user-settings','calendar-events','extra-tasks',
+      'eisenhower-overrides','energy-levels','quick-links','schedule-blocks',
+    ]
+    const data = {}
+    staticKeys.forEach(k => { try { data[k] = JSON.parse(localStorage.getItem(k)) } catch {} })
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k.startsWith('tasks-')) { try { data[k] = JSON.parse(localStorage.getItem(k)) } catch {} }
+    }
+    const snapshot = { ts: Date.now(), data }
+    // Rotate: shift existing backups down, save new as slot 0
+    const prev = AUTO_BACKUP_KEYS.map(k => { try { return localStorage.getItem(k) } catch { return null } })
+    AUTO_BACKUP_KEYS.forEach((k, i) => {
+      if (i === 0) localStorage.setItem(k, JSON.stringify(snapshot))
+      else if (prev[i - 1]) localStorage.setItem(k, prev[i - 1])
+    })
+    setAutoBackups([snapshot, ...AUTO_BACKUP_KEYS.slice(1).map(k => { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } }).filter(Boolean)])
+  }
+
+  const restoreAutoBackup = (snapshot) => {
+    if (!window.confirm('Restaurar este backup? Os dados atuais serão substituídos.')) return
+    Object.entries(snapshot.data).forEach(([k, v]) => {
+      try { localStorage.setItem(k, JSON.stringify(v)) } catch {}
+    })
+    window.alert('Backup restaurado! A app vai recarregar.')
+    window.location.reload()
+  }
 
   const saveApiKey = (val) => {
     setApiKeyState(val)
@@ -161,15 +233,18 @@ export default function SettingsPage({ settings, setSettings }) {
   }
 
   const SECTIONS = [
-    { id: 'profile',    label: 'Perfil',        emoji: '👤' },
-    { id: 'subjects',   label: 'Cadeiras',      emoji: '📚' },
-    { id: 'schedule',   label: 'Plano diário',  emoji: '📅' },
-    { id: 'goals',      label: 'Metas',         emoji: '🎯' },
-    { id: 'links',      label: 'Links rápidos', emoji: '🔗' },
-    { id: 'appearance', label: 'Aparência',      emoji: '✨' },
-    { id: 'accent',     label: 'Cor de acento', emoji: '🎨' },
-    { id: 'data',       label: 'Dados & API',   emoji: '🔧' },
+    { id: 'profile',       label: 'Perfil',          emoji: '👤' },
+    { id: 'subjects',      label: 'Cadeiras',         emoji: '📚' },
+    { id: 'schedule',      label: 'Plano diário',     emoji: '📅' },
+    { id: 'goals',         label: 'Metas',            emoji: '🎯' },
+    { id: 'links',         label: 'Links rápidos',    emoji: '🔗' },
+    { id: 'notifications', label: 'Notificações',     emoji: '🔔' },
+    { id: 'appearance',    label: 'Aparência',         emoji: '✨' },
+    { id: 'accent',        label: 'Cor de acento',    emoji: '🎨' },
+    { id: 'data',          label: 'Dados & API',      emoji: '🔧' },
   ]
+
+  const notifUpdate = (key, val) => update('notifications', { ...(settings.notifications || {}), [key]: val })
 
   return (
     <div className="fade-in">
@@ -220,13 +295,17 @@ export default function SettingsPage({ settings, setSettings }) {
       {/* ── SUBJECTS ── */}
       {section === 'subjects' && (
         <div>
-          {settings.subjects.map(s => (
+          {settings.subjects.map((s, idx) => (
             <div key={s.key} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', marginBottom: 10, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderLeft: `4px solid ${s.color}` }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <button onClick={() => moveSubject(s.key, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>▲</button>
+                  <button onClick={() => moveSubject(s.key, 1)} disabled={idx === settings.subjects.length - 1} style={{ background: 'none', border: 'none', cursor: idx === settings.subjects.length - 1 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>▼</button>
+                </div>
                 <span style={{ fontSize: '1.2rem' }}>{s.emoji}</span>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontWeight: 700, fontSize: '0.88rem', color: s.textColor }}>{s.name}</p>
-                  <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>{s.methods?.length || 0} métodos</p>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>{s.methods?.length || 0} métodos · {(s.resources || []).length} recursos</p>
                 </div>
                 <button onClick={() => setEditingSubject(editingSubject === s.key ? null : s.key)} style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
                   {editingSubject === s.key ? 'Fechar' : 'Editar'}
@@ -234,15 +313,56 @@ export default function SettingsPage({ settings, setSettings }) {
                 <button className="btn btn-ghost" onClick={() => removeSubject(s.key)}><Trash2 size={13} /></button>
               </div>
               {editingSubject === s.key && (
-                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)' }}>
-                  <label style={labelStyle}>Métodos de estudo (um por linha)</label>
-                  <textarea
-                    rows={4}
-                    style={{ ...inputStyle, resize: 'vertical' }}
-                    value={(s.methods || []).join('\n')}
-                    onChange={e => updateSubjectMethods(s.key, e.target.value)}
-                    placeholder={'Ex:\nLer o capítulo\nFazer resumo\nPraticar exercícios'}
-                  />
+                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div>
+                    <label style={labelStyle}>Métodos de estudo (um por linha)</label>
+                    <textarea
+                      rows={4}
+                      style={{ ...inputStyle, resize: 'vertical' }}
+                      value={(s.methods || []).join('\n')}
+                      onChange={e => updateSubjectMethods(s.key, e.target.value)}
+                      placeholder={'Ex:\nLer o capítulo\nFazer resumo\nPraticar exercícios'}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Notas rápidas</label>
+                    <textarea
+                      rows={3}
+                      style={{ ...inputStyle, resize: 'vertical' }}
+                      value={s.notes || ''}
+                      onChange={e => updateSubjectNotes(s.key, e.target.value)}
+                      placeholder="Notas, dicas, professores, horários..."
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Recursos & links</label>
+                    {(s.resources || []).map((r, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.8rem', color: 'var(--purple-dark)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          🔗 {r.label}
+                        </a>
+                        <button onClick={() => removeResource(s.key, i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: '0.85rem' }}>×</button>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                      <input
+                        type="text"
+                        placeholder="Label (opcional)"
+                        value={newResourceLabel}
+                        onChange={e => setNewResourceLabel(e.target.value)}
+                        style={{ ...inputStyle, flex: 1 }}
+                      />
+                      <input
+                        type="url"
+                        placeholder="URL"
+                        value={newResourceUrl}
+                        onChange={e => setNewResourceUrl(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addResource(s.key)}
+                        style={{ ...inputStyle, flex: 2 }}
+                      />
+                      <button className="btn btn-secondary" onClick={() => addResource(s.key)}>+</button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -492,6 +612,47 @@ export default function SettingsPage({ settings, setSettings }) {
       )}
 
       {/* ── DATA & API ── */}
+      {/* ── NOTIFICATIONS ── */}
+      {section === 'notifications' && (
+        <div className="card">
+          <div className="card-body">
+            <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginBottom: 20 }}>
+              Ativa ou desativa cada tipo de notificação. As notificações requerem permissão do sistema.
+            </p>
+            {[
+              { key: 'studyProgress', label: 'Progresso de estudo (cada hora)', desc: 'Avisa quantas horas estudaste durante o dia' },
+              { key: 'streakRisk',    label: 'Streak em risco',                 desc: 'Alerta às 21h se ainda não estudaste e tens streak ativo' },
+              { key: 'weeklyReview',  label: 'Lembrete de review semanal',      desc: 'Avisa ao domingo à noite se não fizeste a review da semana' },
+              { key: 'longBreak',     label: 'Pausa longa após 4 Pomodoros',    desc: 'Sugere uma pausa mais longa depois de 4 sessões seguidas' },
+              { key: 'examDay',       label: 'Notificação no dia do exame',     desc: 'Lembra-te de exames/testes no próprio dia' },
+            ].map(({ key, label, desc }) => {
+              const val = settings.notifications?.[key] !== false
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 16 }}>
+                  <div>
+                    <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gray-700)', margin: 0 }}>{label}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: '2px 0 0' }}>{desc}</p>
+                  </div>
+                  <button
+                    onClick={() => notifUpdate(key, !val)}
+                    style={{
+                      flexShrink: 0, width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                      background: val ? 'var(--rose-400)' : 'var(--gray-200)',
+                      transition: 'background 0.2s', position: 'relative',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: 3, left: val ? 23 : 3, width: 18, height: 18,
+                      borderRadius: '50%', background: 'white', transition: 'left 0.2s',
+                    }} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {section === 'data' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="card">
@@ -531,6 +692,36 @@ export default function SettingsPage({ settings, setSettings }) {
                 📂 Importar JSON
                 <input type="file" accept=".json" onChange={importData} style={{ display: 'none' }} />
               </label>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-body">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div>
+                  <p style={{ fontSize: '0.83rem', color: 'var(--gray-600)', fontWeight: 600, margin: 0 }}>Auto-backup (3 cópias)</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: '2px 0 0' }}>Guarda um snapshot manual dos teus dados</p>
+                </div>
+                <button className="btn btn-secondary" onClick={saveAutoBackup} style={{ fontSize: '0.78rem' }}>
+                  📸 Guardar agora
+                </button>
+              </div>
+              {autoBackups.length === 0 ? (
+                <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>Nenhum backup guardado ainda.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {autoBackups.map((bk, i) => (
+                    <div key={bk.ts} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 8 }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--gray-600)', fontWeight: 600 }}>
+                        Cópia {i + 1} — {new Date(bk.ts).toLocaleString('pt-PT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <button onClick={() => restoreAutoBackup(bk)} style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                        Restaurar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

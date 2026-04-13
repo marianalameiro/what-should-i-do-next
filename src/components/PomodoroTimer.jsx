@@ -85,6 +85,10 @@ export function PomodoroTimer({ subjects: propSubjects }) {
   const [showNotes, setShowNotes]     = useState(false)
   const [pendingMinutes, setPendingMinutes] = useState(0)
   const [noteText, setNoteText]       = useState('')
+  const [sessionProject, setSessionProject] = useState('')
+
+  const projects = (() => { try { return JSON.parse(localStorage.getItem('projects-v2')) || [] } catch { return [] } })()
+    .filter(p => p.status !== 'completed')
   const didMount        = useRef(false)
   const intervalRef     = useRef(null)
   // Wall-clock based timing — source of truth to avoid setInterval drift
@@ -148,6 +152,8 @@ export function PomodoroTimer({ subjects: propSubjects }) {
               hours,
               notes: `Pomodoro ${currentMode.minutes}min`,
               date: new Date().toDateString(),
+              startTime: wallStartRef.current,
+              projectId: sessionProject || null,
               _pomodoroAutoSaved: true,
             }
             saveSessions([autoSession, ...sessions])
@@ -188,6 +194,8 @@ export function PomodoroTimer({ subjects: propSubjects }) {
       hours,
       notes: notes || (isStopwatch ? 'Contador livre' : `Pomodoro ${totalMinutes}min`),
       date: new Date().toDateString(),
+      startTime: Date.now() - totalMinutes * 60 * 1000,
+      projectId: sessionProject || null,
     }
     saveSessions([newSession, ...sessions])
     setCompleted(prev => prev + 1)
@@ -414,6 +422,30 @@ export function PomodoroTimer({ subjects: propSubjects }) {
             onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
             onKeyDown={e => e.key === 'Enter' && e.metaKey && confirmSave()}
           />
+          {projects.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                Ligar a projeto (opcional)
+              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setSessionProject('')}
+                  style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${!sessionProject ? '#8b5cf6' : 'var(--gray-200)'}`, background: !sessionProject ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: !sessionProject ? '#5b21b6' : 'var(--gray-500)', fontWeight: !sessionProject ? 700 : 500 }}
+                >
+                  Nenhum
+                </button>
+                {projects.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSessionProject(p.id)}
+                    style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${sessionProject === p.id ? '#8b5cf6' : 'var(--gray-200)'}`, background: sessionProject === p.id ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: sessionProject === p.id ? '#5b21b6' : 'var(--gray-500)', fontWeight: sessionProject === p.id ? 700 : 500 }}
+                  >
+                    {p.emoji || '🗂'} {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={confirmSave} style={{ background: '#8b5cf6' }}>
               {isStopwatch ? 'Guardar sessão' : 'Adicionar notas'}

@@ -3,6 +3,7 @@ import { Plus, X, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-re
 import { CalendarEmoji } from './CalendarEmoji'
 import { CONFIDENCE, EVENT_TYPES } from '../constants'
 import { daysUntil } from '../utils/dates'
+import { useToast, ToastContainer } from './Toast'
 
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) || fallback }
@@ -40,14 +41,17 @@ export default function ExamsView({ settings }) {
   const [dragging, setDragging]               = useState(null)
   const [dragOver, setDragOver]               = useState(null)
   const [newTopic, setNewTopic]               = useState("")
+  const { toasts, toast, dismiss }            = useToast()
 
   const [form, setForm] = useState({
     subject: firstSubjectName,
     type: "Exame",
     date: "",
     minGrade: 10,
+    ects: "",
     notes: "",
   })
+  const [examTab, setExamTab] = useState("upcoming") // "upcoming" | "past"
 
   useEffect(() => save("exams", exams),             [exams])
   useEffect(() => save("topics", topics),           [topics])
@@ -55,12 +59,37 @@ export default function ExamsView({ settings }) {
 
   function addExam() {
     if (!form.date) return
-    setExams(prev => [...prev, { id: Date.now(), ...form, sheets: [] }])
+    setExams(prev => [...prev, { id: Date.now(), ...form, ects: form.ects ? parseFloat(form.ects) : null, sheets: [] }])
     setShowForm(false)
-    setForm({ subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, notes: "" })
+    setForm({ subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, ects: "", notes: "" })
   }
 
-  function removeExam(id) { setExams(e => e.filter(x => x.id !== id)) }
+  function updateActualGrade(id, grade) {
+    setExams(prev => prev.map(e => e.id === id ? { ...e, actualGrade: grade === "" ? null : parseFloat(grade) } : e))
+  }
+
+  // study hours per exam subject (all time)
+  function studyHoursForExam(exam) {
+    try {
+      const sessions = JSON.parse(localStorage.getItem("study-sessions") || "[]")
+      return parseFloat(sessions.filter(s => s.subject === exam.subject || s.subject === subjects.find(x => x.name === exam.subject)?.key).reduce((a, b) => a + b.hours, 0).toFixed(1))
+    } catch { return 0 }
+  }
+
+  // weighted average from past exams with actualGrade + ects
+  const weightedAverage = (() => {
+    const past = exams.filter(e => e.actualGrade != null && e.ects > 0)
+    if (past.length === 0) return null
+    const sumEcts = past.reduce((a, e) => a + e.ects, 0)
+    const sumWeighted = past.reduce((a, e) => a + e.actualGrade * e.ects, 0)
+    return parseFloat((sumWeighted / sumEcts).toFixed(2))
+  })()
+
+  function removeExam(id) {
+    let removed = null
+    setExams(e => { removed = e.find(x => x.id === id); return e.filter(x => x.id !== id) })
+    toast({ message: 'Exame eliminado', onUndo: () => { if (removed) setExams(e => [...e, removed].sort((a, b) => new Date(a.date) - new Date(b.date))) } })
+  }
 
   const subjectTopics = topics[selectedSubject] || []
 
@@ -228,6 +257,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
 
   return (
     <div className="fade-in">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
       {/* ── Header ── */}
       <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
@@ -269,6 +299,10 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                 <label className="form-label">Nota mínima</label>
                 <input className="form-input" type="number" min={0} max={20} value={form.minGrade} onChange={e => setForm({ ...form, minGrade: Number(e.target.value) })} />
               </div>
+              <div>
+                <label className="form-label">ECTS (para média ponderada)</label>
+                <input className="form-input" type="number" min={0} max={30} placeholder="ex: 6" value={form.ects} onChange={e => setForm({ ...form, ects: e.target.value })} />
+              </div>
             </div>
             <div>
               <label className="form-label">Notas (opcional)</label>
@@ -282,21 +316,55 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         </div>
       )}
 
-      {/* ── Exams list ── */}
+      {/* ── Weighted average banner ── */}
+      {weightedAverage !== null && (
+        <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #fdf2f4, #fce7f3)' }}>
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--rose-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Média ponderada (ECTS)</p>
+              <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', margin: 0, lineHeight: 1.2 }}>{weightedAverage}<span style={{ fontSize: '1rem', color: 'var(--gray-400)' }}>/20</span></p>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', textAlign: 'right' }}>
+              <p style={{ margin: 0 }}>Baseada em {exams.filter(e => e.actualGrade != null && e.ects > 0).length} avaliações</p>
+              <p style={{ margin: '2px 0 0', fontWeight: 600, color: weightedAverage >= 10 ? '#16a34a' : '#dc2626' }}>{weightedAverage >= 18 ? '⭐ Excelente' : weightedAverage >= 14 ? '✅ Bom' : weightedAverage >= 10 ? '👍 Aprovada' : '⚠️ Reprovada'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Exams list tabs ── */}
+      {sortedExams.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          {[['upcoming','📅 A vir'],['past','🗂️ Arquivo']].map(([id, label]) => (
+            <button key={id} onClick={() => setExamTab(id)}
+              style={{ padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+                border: `2px solid ${examTab === id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
+                background: examTab === id ? 'var(--rose-50)' : 'var(--white)', color: examTab === id ? 'var(--rose-400)' : 'var(--gray-500)' }}>
+              {label} ({sortedExams.filter(e => (daysUntil(e.date) >= 0) === (id === 'upcoming')).length})
+            </button>
+          ))}
+        </div>
+      )}
+
       {sortedExams.length === 0 ? (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="empty-state">
-            <div className="e-emoji">📋</div>
-            <p>Sem eventos registados</p>
-            <p style={{ fontSize: "0.78rem", marginTop: 4 }}>Adiciona o teu primeiro exame ou teste acima</p>
+            <div className="e-emoji">🎯</div>
+            <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Ainda sem exames registados</p>
+            <p style={{ fontSize: "0.78rem", marginTop: 4, color: 'var(--gray-400)' }}>Adiciona os teus exames para controlar prazos e preparação</p>
+            <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => setShowForm(true)}>
+              <Plus size={14} /> Adicionar exame
+            </button>
           </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-          {sortedExams.map(exam => {
+          {sortedExams.filter(e => (daysUntil(e.date) >= 0) === (examTab === 'upcoming')).map(exam => {
             const days = daysUntil(exam.date)
             const pill = urgencyPill(days)
             const open = expanded === exam.id
+            const isPast = days < 0
+            const studyH = studyHoursForExam(exam)
             return (
               <div key={exam.id} className="card">
                 <div
@@ -304,24 +372,31 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   onClick={() => setExpanded(open ? null : exam.id)}
                 >
                   <div style={{
-                    textAlign: "center", background: "var(--gray-50)", border: "1px solid var(--gray-200)",
+                    textAlign: "center", background: isPast ? '#f0fdf4' : "var(--gray-50)", border: `1px solid ${isPast ? '#bbf7d0' : 'var(--gray-200)'}`,
                     borderRadius: "var(--radius)", padding: "8px 14px", minWidth: 64, flexShrink: 0,
                   }}>
-                    <div style={{ fontSize: "1.4rem", fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: days <= 7 ? "var(--red-400)" : days <= 21 ? "var(--amber-400)" : "var(--green-500)" }}>
-                      {Math.abs(days)}
-                    </div>
-                    <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>
-                      {days < 0 ? "atrás" : "dias"}
-                    </div>
+                    {isPast && exam.actualGrade != null ? (
+                      <>
+                        <div style={{ fontSize: "1.4rem", fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: exam.actualGrade >= 10 ? '#16a34a' : '#dc2626' }}>{exam.actualGrade}</div>
+                        <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>nota</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: "1.4rem", fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: days <= 7 ? "var(--red-400)" : days <= 21 ? "var(--amber-400)" : "var(--green-500)" }}>{Math.abs(days)}</div>
+                        <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>{days < 0 ? "atrás" : "dias"}</div>
+                      </>
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                       <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--gray-900)" }}>{exam.subject}</span>
-                      <span className={pill.cls}>{pill.label}</span>
+                      {!isPast && <span className={pill.cls}>{pill.label}</span>}
+                      {isPast && exam.actualGrade != null && <span className={exam.actualGrade >= exam.minGrade ? "status-pill status-green" : "status-pill status-red"}>{exam.actualGrade >= exam.minGrade ? "✅ Aprovada" : "❌ Reprovada"}</span>}
                     </div>
                     <div style={{ fontSize: "0.78rem", color: "var(--gray-400)", fontWeight: 500 }}>
-                      {exam.type} · {new Date(exam.date).toLocaleDateString("pt-PT", { day: "numeric", month: "long" })} · Meta: {exam.minGrade}/20
+                      {exam.type} · {new Date(exam.date).toLocaleDateString("pt-PT", { day: "numeric", month: "long" })} · Meta: {exam.minGrade}/20{exam.ects ? ` · ${exam.ects} ECTS` : ''}
                     </div>
+                    {studyH > 0 && <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", marginTop: 2 }}>⏱️ {studyH}h de estudo registadas nesta cadeira</div>}
                     {exam.notes && <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 3 }}>{exam.notes}</div>}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
@@ -333,12 +408,37 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                 </div>
                 {open && (
                   <div style={{ borderTop: "1px solid var(--gray-100)", padding: "14px 18px" }}>
-                    <p style={{ fontSize: "0.83rem", color: "var(--gray-500)" }}>Plano de estudo automático — em breve.</p>
+                    {isPast && (
+                      <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                          Nota obtida (0–20)
+                        </label>
+                        <input
+                          className="form-input"
+                          type="number" min={0} max={20} step={0.1}
+                          value={exam.actualGrade ?? ""}
+                          placeholder="Insere a nota que tiraste…"
+                          onChange={e => updateActualGrade(exam.id, e.target.value)}
+                          style={{ maxWidth: 160 }}
+                        />
+                        {exam.actualGrade != null && (
+                          <p style={{ fontSize: "0.75rem", marginTop: 6, color: exam.actualGrade >= exam.minGrade ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
+                            {exam.actualGrade >= exam.minGrade ? `✅ Acima da meta (${exam.minGrade}/20)` : `❌ Abaixo da meta (${exam.minGrade}/20)`}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!isPast && <p style={{ fontSize: "0.83rem", color: "var(--gray-500)" }}>Ainda não passou a data — o resultado ficará disponível aqui após o exame.</p>}
                   </div>
                 )}
               </div>
             )
           })}
+          {sortedExams.filter(e => (daysUntil(e.date) >= 0) === (examTab === 'upcoming')).length === 0 && (
+            <div className="card"><div className="empty-state" style={{ padding: 24 }}>
+              <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem' }}>{examTab === 'upcoming' ? 'Nenhum exame futuro — boas férias! 🎉' : 'Nenhum exame passado ainda.'}</p>
+            </div></div>
+          )}
         </div>
       )}
 

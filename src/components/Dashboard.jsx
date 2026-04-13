@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { CheckCircle, Clock, Flame, ChevronRight, Target, TrendingUp, TrendingDown, Minus, AlertTriangle, FolderKanban, Plus } from 'lucide-react'
 import { getTasksForDay } from '../data/schedule'
 import { getMondayOfWeek, daysUntil } from '../utils/dates'
+import { SundayPlanning } from './SundayPlanning'
 
 function saveSessions(s) { localStorage.setItem('study-sessions', JSON.stringify(s)) }
 
@@ -49,6 +50,7 @@ function loadProjects()      { try { return JSON.parse(localStorage.getItem('pro
 function loadTargets()       { try { return JSON.parse(localStorage.getItem('subject-targets')) || {} } catch { return {} } }
 function loadWeeklyTargets() { try { return JSON.parse(localStorage.getItem('weekly-targets')) || {} } catch { return {} } }
 function loadLinks()         { try { return JSON.parse(localStorage.getItem('quick-links')) || [] } catch { return [] } }
+function loadDiary()         { try { return JSON.parse(localStorage.getItem('diary-entries')) || [] } catch { return [] } }
 
 const MOODS = [
   { emoji: '😴', label: 'Cansada' },
@@ -77,13 +79,13 @@ function currentStreak(sessions) {
 
 function hoursThisWeek(sessions) {
   const monday = getMondayOfWeek(TODAY)
-  return sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
+  return sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
 }
 
 
 function hoursForSubjectThisWeek(sessions, key) {
   const monday = getMondayOfWeek(TODAY)
-  return sessions.filter(s => s.subject === key && new Date(s.date) >= monday).reduce((a, b) => a + b.hours, 0)
+  return sessions.filter(s => s.subject === key && new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
 }
 
 function trackStatus(done, target) {
@@ -121,7 +123,7 @@ function examAlert(exam, sessions, subjects) {
     const key = subjects.find(sub => sub.name.toLowerCase() === exam.subject.toLowerCase() || sub.key === exam.subject)?.key
     return s.subject === key
   })
-  const totalHours = subjectSessions.reduce((a, b) => a + b.hours, 0)
+  const totalHours = subjectSessions.reduce((a, b) => a + (b.hours || 0), 0)
   const avgGrade = exam.sheets?.length > 0 ? exam.sheets.reduce((a, b) => a + b.grade, 0) / exam.sheets.length : null
   const recommendedTotal = days <= 7 ? days * 2 : days * 0.8
   const onTrack = totalHours >= recommendedTotal * 0.6
@@ -130,6 +132,55 @@ function examAlert(exam, sessions, subjects) {
   if (!onTrack) issues.push(`Faltam ~${Math.max(0, recommendedTotal - totalHours).toFixed(1)}h de estudo para chegar ao exame preparada`)
   if (avgGrade !== null && avgGrade < exam.minGrade) issues.push(`Média das fichas (${avgGrade.toFixed(1)}/20) abaixo da meta (${exam.minGrade}/20)`)
   return { exam, days, issues }
+}
+
+const ACHIEVEMENTS = [
+  { id: 'first_session',   emoji: '🌱', title: 'Primeira sessão',      desc: 'Registaste a tua primeira sessão de estudo',  check: (s) => s.length >= 1 },
+  { id: 'first_exam',      emoji: '🎯', title: 'Primeiro exame',        desc: 'Adicionaste o teu primeiro exame',             check: (_s, e) => e.length >= 1 },
+  { id: 'first_diary',     emoji: '📓', title: 'Primeira entrada',      desc: 'Escreveste a tua primeira entrada no diário',  check: (_s, _e, d) => d.length >= 1 },
+  { id: 'streak_3',        emoji: '🔥', title: '3 dias seguidos',       desc: 'Estudaste 3 dias consecutivos',               check: (_s, _e, _d, streak) => streak >= 3 },
+  { id: 'streak_7',        emoji: '⚡', title: 'Semana completa',        desc: 'Estudaste 7 dias seguidos',                   check: (_s, _e, _d, streak) => streak >= 7 },
+  { id: 'streak_14',       emoji: '💫', title: '2 semanas seguidas',    desc: 'Estudaste 14 dias consecutivos',              check: (_s, _e, _d, streak) => streak >= 14 },
+  { id: 'streak_30',       emoji: '🏆', title: 'Mês sem falhar',        desc: '30 dias de estudo consecutivos!',             check: (_s, _e, _d, streak) => streak >= 30 },
+  { id: 'hours_10',        emoji: '📚', title: '10 horas',              desc: 'Registaste 10 horas de estudo no total',      check: (s) => s.reduce((a,b) => a+(b.hours||0),0) >= 10 },
+  { id: 'hours_50',        emoji: '🎓', title: '50 horas',              desc: 'Chegaste às 50 horas de estudo!',             check: (s) => s.reduce((a,b) => a+(b.hours||0),0) >= 50 },
+  { id: 'hours_100',       emoji: '💯', title: '100 horas',             desc: 'Centenária do estudo — 100 horas!',           check: (s) => s.reduce((a,b) => a+(b.hours||0),0) >= 100 },
+  { id: 'hours_200',       emoji: '🚀', title: '200 horas',             desc: '200 horas de dedicação pura',                 check: (s) => s.reduce((a,b) => a+(b.hours||0),0) >= 200 },
+  { id: 'marathon',        emoji: '🏃', title: 'Maratona',              desc: 'Uma sessão de 3h ou mais de seguida',         check: (s) => s.some(x => x.hours >= 3) },
+  { id: 'flow_queen',      emoji: '🌊', title: 'Flow Queen',            desc: '5 sessões em modo Flow 🔥',                   check: (s) => s.filter(x => x.mood === '🔥').length >= 5 },
+  { id: 'all_subjects',    emoji: '🌈', title: 'Polivalente',           desc: 'Estudaste todas as cadeiras na mesma semana', check: (s, _e, _d, _st, subjects) => {
+    if (subjects.length < 2) return false
+    const monday = getMondayOfWeek(new Date())
+    const wk = new Set(s.filter(x => new Date(x.date) >= monday).map(x => x.subject))
+    return subjects.every(sub => wk.has(sub.key))
+  }},
+  { id: 'early_bird',      emoji: '🌅', title: 'Madrugadora',           desc: 'Sessão iniciada antes das 8h da manhã',       check: (s) => s.some(x => x.startTime && new Date(x.startTime).getHours() < 8) },
+  { id: 'night_owl',       emoji: '🌙', title: 'Coruja Noturna',        desc: 'Sessão iniciada depois das 22h',              check: (s) => s.some(x => x.startTime && new Date(x.startTime).getHours() >= 22) },
+]
+
+function computeAchievements(sessions, exams, diary, streak, subjects) {
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('achievements') || '{}') } catch { return {} } })()
+  const now = {}
+  ACHIEVEMENTS.forEach(a => {
+    if (saved[a.id]?.earned) { now[a.id] = saved[a.id]; return }
+    if (a.check(sessions, exams, diary, streak, subjects)) {
+      now[a.id] = { earned: true, ts: Date.now() }
+    }
+  })
+  try { localStorage.setItem('achievements', JSON.stringify(now)) } catch {}
+  return now
+}
+
+function loadWater() {
+  try {
+    const d = localStorage.getItem('water-date')
+    if (d !== new Date().toDateString()) return 0
+    return parseInt(localStorage.getItem('water-glasses') || '0', 10)
+  } catch { return 0 }
+}
+function saveWater(n) {
+  localStorage.setItem('water-date', new Date().toDateString())
+  localStorage.setItem('water-glasses', String(n))
 }
 
 export default function Dashboard({ onNavigate, settings }) {
@@ -144,6 +195,13 @@ export default function Dashboard({ onNavigate, settings }) {
   const [editingLinks, setEditingLinks] = useState(false)
   const [links, setLinks] = useState(loadLinks)
   const [newLink, setNewLink] = useState({ label: '', url: '', emoji: '🔗' })
+  const [water, setWater] = useState(loadWater)
+  const [showSundayPlanning, setShowSundayPlanning] = useState(false)
+
+  const addWater = () => { const n = water + 1; setWater(n); saveWater(n) }
+  const removeWater = () => { const n = Math.max(0, water - 1); setWater(n); saveWater(n) }
+
+  const isSunday = TODAY.getDay() === 0
 
   const saveLinks = (updated) => {
     setLinks(updated)
@@ -180,12 +238,14 @@ export default function Dashboard({ onNavigate, settings }) {
 
   const sessions = loadSessions()
   const exams    = loadExams()
+  const diary    = loadDiary()
   const done     = loadDone()
   const projects = loadProjects()
 
-  const streak   = currentStreak(sessions)
+  const streak       = currentStreak(sessions)
+  const achievements = useMemo(() => computeAchievements(sessions, exams, diary, streak, subjects), [sessions, exams, diary, streak, subjects])
   const weekHrs  = hoursThisWeek(sessions)
-  const totalHrs = sessions.reduce((a, b) => a + b.hours, 0)
+  const totalHrs = sessions.reduce((a, b) => a + (b.hours || 0), 0)
   const quote    = QUOTES[(new Date().getDate() - 1) % QUOTES.length]
 
   const todaySchedule = getTasksForDay(TODAY.getDay())
@@ -217,7 +277,7 @@ export default function Dashboard({ onNavigate, settings }) {
     return sessions.filter(s => {
       const d = new Date(s.date)
       return d >= lastMonday && d < monday
-    }).reduce((a, b) => a + b.hours, 0)
+    }).reduce((a, b) => a + (b.hours || 0), 0)
   })()
   const isWeekend = TODAY.getDay() === 0 || TODAY.getDay() === 6
   const trendPct = isWeekend && lastWeekHrs > 0 ? Math.round((weekHrs - lastWeekHrs) / lastWeekHrs * 100) : null
@@ -229,6 +289,8 @@ export default function Dashboard({ onNavigate, settings }) {
 
   return (
     <div className="fade-in">
+      {showSundayPlanning && <SundayPlanning onClose={() => setShowSundayPlanning(false)} />}
+
       {/* Greeting */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: '1.7rem', fontWeight: 800, letterSpacing: -0.8, color: 'var(--gray-900)', marginBottom: 2 }}>
@@ -299,14 +361,14 @@ export default function Dashboard({ onNavigate, settings }) {
         <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {alerts.map(({ exam, days, issues }) => (
             <div key={exam.id} style={{
-              background: '#fff7ed', border: '1.5px solid #fed7aa',
+              background: 'var(--orange-50)', border: '1.5px solid var(--orange-100)',
               borderRadius: 'var(--radius)', padding: '12px 16px',
               display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer',
             }} onClick={() => onNavigate('exams')}>
-              <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+              <AlertTriangle size={16} color="var(--amber-400)" style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <p style={{ fontWeight: 700, fontSize: '0.83rem', color: '#92400e', marginBottom: 3 }}>{exam.subject} · {days} dias</p>
-                {issues.map((issue, i) => <p key={i} style={{ fontSize: '0.78rem', color: '#b45309', margin: 0 }}>• {issue}</p>)}
+                <p style={{ fontWeight: 700, fontSize: '0.83rem', color: 'var(--amber-400)', marginBottom: 3 }}>{exam.subject} · {days} dias</p>
+                {issues.map((issue, i) => <p key={i} style={{ fontSize: '0.78rem', color: 'var(--amber-400)', margin: 0 }}>• {issue}</p>)}
               </div>
             </div>
           ))}
@@ -345,6 +407,64 @@ export default function Dashboard({ onNavigate, settings }) {
           <div className="stat-sub">{streak === 0 ? 'Começa hoje!' : streak === 1 ? '1 dia seguido' : `${streak} dias seguidos`}</div>
         </div>
       </div>
+
+      {/* Water counter */}
+      <div style={{
+        background: 'var(--white)', border: '1px solid var(--gray-100)',
+        borderRadius: 'var(--radius)', padding: '12px 16px', marginBottom: 14,
+        display: 'flex', alignItems: 'center', gap: 12,
+        boxShadow: 'var(--shadow-xs)',
+      }}>
+        <span style={{ fontSize: '1.2rem' }}>💧</span>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', margin: 0 }}>Água hoje</p>
+          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} style={{
+                width: 18, height: 18, borderRadius: 4,
+                background: i < water ? '#60a5fa' : 'var(--gray-100)',
+                border: `1.5px solid ${i < water ? '#3b82f6' : 'var(--gray-200)'}`,
+                transition: 'all 0.15s',
+              }} />
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={removeWater} disabled={water === 0} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid var(--gray-200)', background: 'var(--white)', cursor: water === 0 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '1rem', color: 'var(--gray-400)', opacity: water === 0 ? 0.4 : 1 }}>−</button>
+          <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#3b82f6', minWidth: 20, textAlign: 'center' }}>{water}</span>
+          <button onClick={addWater} disabled={water >= 8} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid var(--gray-200)', background: 'var(--white)', cursor: water >= 8 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '1rem', color: '#3b82f6', opacity: water >= 8 ? 0.4 : 1 }}>+</button>
+        </div>
+        <p style={{ fontSize: '0.7rem', color: 'var(--gray-400)', margin: 0, minWidth: 40, textAlign: 'right' }}>
+          {water >= 8 ? '🎉 Meta!' : `${8 - water} em falta`}
+        </p>
+      </div>
+
+      {/* Sunday planning banner */}
+      {isSunday ? (
+        <div style={{
+          background: 'linear-gradient(135deg, var(--purple-50) 0%, var(--rose-50) 100%)',
+          border: '2px solid var(--purple-200)', borderRadius: 'var(--radius)',
+          padding: '14px 16px', marginBottom: 14,
+          display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+        }} onClick={() => setShowSundayPlanning(true)}>
+          <span style={{ fontSize: '1.5rem' }}>🗓️</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--purple-dark)', margin: 0 }}>É domingo — hora de planear a semana!</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--purple-500)', margin: 0, marginTop: 2 }}>5 minutos de planeamento = semana muito mais produtiva</p>
+          </div>
+          <button className="btn btn-primary" style={{ background: 'var(--purple-500)', fontSize: '0.8rem' }} onClick={e => { e.stopPropagation(); setShowSundayPlanning(true) }}>
+            Planear
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowSundayPlanning(true)}
+          className="btn btn-ghost"
+          style={{ marginBottom: 14, fontSize: '0.78rem', color: 'var(--gray-400)' }}
+        >
+          🗓️ Planeamento semanal
+        </button>
+      )}
 
       {/* Stats mini-widget */}
       {topSubject && topSubjectHours > 0 && (
@@ -404,46 +524,61 @@ export default function Dashboard({ onNavigate, settings }) {
           </div>
           <div className="card-body" style={{ padding: '12px 20px' }}>
             {subjects.map(s => {
-              const hrs        = hoursForSubjectThisWeek(sessions, s.key)
-              const weeklyGoal = weeklyTargets[s.key] !== undefined ? parseFloat(weeklyTargets[s.key]) : getTarget(s.key) / WEEKS_REMAINING
-              const tNow       = weeklyGoal * (weekDayNumber() / 7)
-              const pct        = Math.min(100, tNow < 0.1 ? 100 : Math.round(hrs / tNow * 100))
-              const status     = trackStatus(hrs, tNow)
+              const hrs           = hoursForSubjectThisWeek(sessions, s.key)
+              const totalHrsSubj  = sessions.filter(x => x.subject === s.key).reduce((a, b) => a + (b.hours || 0), 0)
+              const semesterGoal  = getTarget(s.key)
+              const weeklyGoal    = weeklyTargets[s.key] !== undefined ? parseFloat(weeklyTargets[s.key]) : semesterGoal / WEEKS_REMAINING
+              const tNow          = weeklyGoal * (weekDayNumber() / 7)
+              const pct           = Math.min(100, tNow < 0.1 ? 100 : Math.round(hrs / tNow * 100))
+              const semPct        = Math.min(100, semesterGoal > 0 ? Math.round(totalHrsSubj / semesterGoal * 100) : 0)
+              const status        = trackStatus(hrs, tNow)
               return (
-                <div key={s.key} className="track-row">
-                  <span className="track-emoji">{s.emoji}</span>
-                  <span className="track-name">{s.name}</span>
-                  <div style={{ flex: 2, margin: '0 12px' }}>
-                    <div className="progress-wrap">
-                      <div className="progress-fill" style={{ width: `${pct}%`, background: status === 'green' ? 'var(--green-400)' : status === 'amber' ? '#f59e0b' : 'var(--red-400)' }} />
+                <div key={s.key} style={{ marginBottom: 14 }}>
+                  <div className="track-row" style={{ marginBottom: 5 }}>
+                    <span className="track-emoji">{s.emoji}</span>
+                    <span className="track-name">{s.name}</span>
+                    <div style={{ flex: 2, margin: '0 12px' }}>
+                      <div className="progress-wrap">
+                        <div className="progress-fill" style={{ width: `${pct}%`, background: status === 'green' ? 'var(--green-400)' : status === 'amber' ? '#f59e0b' : 'var(--red-400)' }} />
+                      </div>
                     </div>
-                  </div>
-                  <span className={`status-pill status-${status}`} style={{ marginRight: 8 }}>{trackIcon(status)} {trackLabel(hrs, tNow)}</span>
-                  {editTarget === s.key ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <input type="number" min="0.5" max="40" step="0.5" value={targetDraft}
-                        onChange={e => setTargetDraft(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            const val = parseFloat(targetDraft)
-                            if (!isNaN(val) && val > 0) {
-                              const updated = { ...weeklyTargets, [s.key]: val }
-                              setWeeklyTargets(updated)
-                              localStorage.setItem('weekly-targets', JSON.stringify(updated))
+                    <span className={`status-pill status-${status}`} style={{ marginRight: 8 }}>{trackIcon(status)} {trackLabel(hrs, tNow)}</span>
+                    {editTarget === s.key ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <input type="number" min="0.5" max="40" step="0.5" value={targetDraft}
+                          onChange={e => setTargetDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              const val = parseFloat(targetDraft)
+                              if (!isNaN(val) && val > 0) {
+                                const updated = { ...weeklyTargets, [s.key]: val }
+                                setWeeklyTargets(updated)
+                                localStorage.setItem('weekly-targets', JSON.stringify(updated))
+                              }
+                              setEditTarget(null)
                             }
-                            setEditTarget(null)
-                          }
-                          if (e.key === 'Escape') setEditTarget(null)
-                        }}
-                        autoFocus
-                        style={{ width: 46, fontSize: '0.72rem', border: '1px solid var(--rose-300)', borderRadius: 5, padding: '2px 4px', textAlign: 'center', fontFamily: 'inherit' }}
-                      />
-                      <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>h/sem</span>
-                    </span>
-                  ) : (
-                    <span className="track-hours" title="Clica para editar meta semanal" onClick={() => { setEditTarget(s.key); setTargetDraft(weeklyGoal.toFixed(1)) }} style={{ cursor: 'pointer' }}>
-                      {hrs.toFixed(1)}h / {weeklyGoal.toFixed(1)}h
-                    </span>
+                            if (e.key === 'Escape') setEditTarget(null)
+                          }}
+                          autoFocus
+                          style={{ width: 46, fontSize: '0.72rem', border: '1px solid var(--rose-300)', borderRadius: 5, padding: '2px 4px', textAlign: 'center', fontFamily: 'inherit' }}
+                        />
+                        <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>h/sem</span>
+                      </span>
+                    ) : (
+                      <span className="track-hours" title="Clica para editar meta semanal" onClick={() => { setEditTarget(s.key); setTargetDraft(weeklyGoal.toFixed(1)) }} style={{ cursor: 'pointer' }}>
+                        {hrs.toFixed(1)}h / {weeklyGoal.toFixed(1)}h
+                      </span>
+                    )}
+                  </div>
+                  {semesterGoal > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 28 }}>
+                      <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--gray-100)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${semPct}%`, background: s.color || 'var(--rose-300)', borderRadius: 4, transition: 'width 0.3s' }} />
+                      </div>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--gray-400)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {totalHrsSubj.toFixed(0)}h / {semesterGoal}h semestre ({semPct}%)
+                      </span>
+                    </div>
                   )}
                 </div>
               )
@@ -476,12 +611,12 @@ export default function Dashboard({ onNavigate, settings }) {
                   {urgentDeadlines.slice(0, 2).map((m, i) => (
                     <div key={i} style={{
                       display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 10px', background: '#fef2f2',
-                      border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 5,
+                      padding: '7px 10px', background: 'var(--red-50)',
+                      border: '1px solid var(--red-100)', borderRadius: 8, marginBottom: 5,
                     }}>
                       <span style={{ fontSize: '0.8rem' }}>🚩</span>
-                      <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: '#991b1b' }}>{m.label}</span>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#dc2626' }}>
+                      <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: 'var(--red-500)' }}>{m.label}</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--red-400)' }}>
                         {daysUntil(m.date) === 0 ? 'Hoje!' : `${daysUntil(m.date)}d`}
                       </span>
                     </div>
@@ -528,6 +663,45 @@ export default function Dashboard({ onNavigate, settings }) {
         </div>
       </div>
 
+      {/* Achievements */}
+      {(() => {
+        const earned = ACHIEVEMENTS.filter(a => achievements[a.id]?.earned)
+        const locked = ACHIEVEMENTS.filter(a => !achievements[a.id]?.earned)
+        if (earned.length === 0) return null
+        return (
+          <div className="card dashboard-full" style={{ marginTop: 14 }}>
+            <div className="card-header">
+              <span className="card-title">🏅 Conquistas — {earned.length}/{ACHIEVEMENTS.length}</span>
+            </div>
+            <div className="card-body" style={{ paddingTop: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {earned.map(a => (
+                  <div key={a.id} title={a.desc} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 12px', borderRadius: 50,
+                    background: 'var(--rose-50)', border: '1.5px solid var(--rose-200)',
+                    fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-700)',
+                  }}>
+                    <span style={{ fontSize: '1rem' }}>{a.emoji}</span> {a.title}
+                  </div>
+                ))}
+                {locked.slice(0, 3).map(a => (
+                  <div key={a.id} title={`Bloqueada: ${a.desc}`} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 12px', borderRadius: 50,
+                    background: 'var(--gray-50)', border: '1.5px solid var(--gray-200)',
+                    fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-400)',
+                    opacity: 0.7, filter: 'grayscale(1)',
+                  }}>
+                    <span style={{ fontSize: '1rem' }}>{a.emoji}</span> {a.title}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Quick actions */}
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
         <button className="btn btn-secondary" onClick={() => onNavigate('hours')} style={{ borderRadius: 50, fontSize: '0.8rem' }}>🍅 Iniciar Pomodoro</button>
@@ -571,6 +745,111 @@ export default function Dashboard({ onNavigate, settings }) {
           <button className="btn btn-primary" onClick={saveQuickSession} style={{ fontSize: '0.83rem' }}>Guardar</button>
         </div>
       )}
+
+      {/* Widgets row: Week heatmap + Tasks today */}
+      {(() => {
+        const monday = getMondayOfWeek(TODAY)
+        const DOW_SHORT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+        const weekDays = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(monday)
+          d.setDate(monday.getDate() + i)
+          return d
+        })
+        const dayHours = weekDays.map(d =>
+          sessions.filter(s => s.date === d.toDateString()).reduce((a, b) => a + (b.hours || 0), 0)
+        )
+        const maxH = Math.max(...dayHours, 0.1)
+        const todayIdx = TODAY.getDay() === 0 ? 6 : TODAY.getDay() - 1
+
+        // Today's extra tasks
+        const allExtra = (() => {
+          try { return JSON.parse(localStorage.getItem('extra-tasks')) || [] } catch { return [] }
+        })()
+        const pendingExtra = allExtra.filter(t => !done[t.id])
+
+        // Days with incomplete schedule tasks in last 7 days
+        let overdueDays = 0
+        for (let i = 1; i <= 7; i++) {
+          const d = new Date(TODAY); d.setDate(TODAY.getDate() - i)
+          try {
+            const sched = getTasksForDay(d.getDay())
+            const hasTasks = sched.some(g => g.tasks.length > 0)
+            if (!hasTasks) continue
+            const doneMap = JSON.parse(localStorage.getItem(`tasks-${d.toDateString()}`)) || {}
+            const allIds = sched.flatMap(g => g.tasks.map(t => t.id))
+            const notDone = allIds.filter(id => !doneMap[id])
+            if (notDone.length > 0) overdueDays++
+          } catch {}
+        }
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14, marginBottom: 0 }}>
+            {/* Week hours bar */}
+            {sessions.length > 0 && (
+              <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius)', padding: '12px 14px', boxShadow: 'var(--shadow-xs)', cursor: 'pointer' }} onClick={() => onNavigate('stats')}>
+                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>Horas — esta semana</p>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 52 }}>
+                  {weekDays.map((d, i) => {
+                    const h = dayHours[i]
+                    const isToday = i === todayIdx
+                    const isFuture = d > TODAY
+                    return (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                        <div style={{
+                          width: '100%', borderRadius: 3,
+                          background: isFuture ? 'var(--gray-100)' : h > 0 ? (isToday ? 'var(--rose-400)' : 'var(--rose-300)') : 'var(--gray-100)',
+                          height: Math.max(3, h / maxH * 40),
+                          outline: isToday ? '2px solid var(--rose-400)' : 'none',
+                          outlineOffset: 1,
+                        }} title={`${DOW_SHORT[i]}: ${h.toFixed(1)}h`} />
+                        <span style={{ fontSize: '0.58rem', fontWeight: isToday ? 800 : 500, color: isToday ? 'var(--rose-400)' : 'var(--gray-400)' }}>{DOW_SHORT[i]}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p style={{ fontSize: '0.68rem', color: 'var(--gray-500)', fontWeight: 700, marginTop: 6 }}>{weekHrs.toFixed(1)}h esta semana</p>
+              </div>
+            )}
+
+            {/* Tasks today + overdue */}
+            <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius)', padding: '12px 14px', boxShadow: 'var(--shadow-xs)', cursor: 'pointer' }} onClick={() => onNavigate('today')}>
+              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Tarefas</p>
+              {todayTasks.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-700)' }}>Hoje</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: todayPct === 100 ? 'var(--green-500)' : 'var(--gray-500)' }}>
+                      {todayDone}/{todayTasks.length} {todayPct === 100 ? '🎉' : ''}
+                    </span>
+                  </div>
+                  <div style={{ height: 5, background: 'var(--gray-100)', borderRadius: 50, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${todayPct}%`, background: todayPct === 100 ? 'var(--green-400)' : 'var(--rose-300)', borderRadius: 50 }} />
+                  </div>
+                </div>
+              )}
+              {pendingExtra.length > 0 && (
+                <div style={{ marginBottom: 6 }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 4 }}>Extra pendentes ({pendingExtra.length})</p>
+                  {pendingExtra.slice(0, 2).map(t => (
+                    <p key={t.id} style={{ fontSize: '0.72rem', color: 'var(--gray-600)', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      · {t.label}
+                    </p>
+                  ))}
+                  {pendingExtra.length > 2 && <p style={{ fontSize: '0.68rem', color: 'var(--gray-400)' }}>+{pendingExtra.length - 2} mais</p>}
+                </div>
+              )}
+              {overdueDays > 0 && (
+                <div style={{ padding: '5px 8px', background: 'var(--red-50)', borderRadius: 6, border: '1px solid var(--red-100)' }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--red-400)' }}>⚠️ {overdueDays} dia{overdueDays !== 1 ? 's' : ''} com tarefas incompletas</p>
+                </div>
+              )}
+              {todayTasks.length === 0 && pendingExtra.length === 0 && overdueDays === 0 && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>Nenhuma tarefa pendente 🎉</p>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Quick notes */}
       <div style={{ marginTop: 24 }}>

@@ -134,13 +134,14 @@ function Timeline({ milestones }) {
 }
 
 // ── ProjectCard ───────────────────────────────────────────────────────────────
-function ProjectCard({ project, onClick, onDelete, allSubjects = [] }) {
+function ProjectCard({ project, onClick, onDelete, allSubjects = [], sessions = [] }) {
   const progress   = calcProgress(project)
   const status     = STATUSES.find(s => s.id === project.status) || STATUSES[0]
   const days       = daysUntil(project.deadline)
   const color      = project.color || '#6366f1'
   const ms         = project.milestones || []
   const nextAction = getNextAction(project)
+  const studyHrs   = sessions.filter(s => s.projectId === project.id).reduce((a, b) => a + (b.hours || 0), 0)
 
   return (
     <div
@@ -197,6 +198,9 @@ function ProjectCard({ project, onClick, onDelete, allSubjects = [] }) {
         {(project.subjects || []).length > 0 && (
           <span>{project.subjects.map(sk => allSubjects.find(s => s.key === sk)?.emoji).join(' ')}</span>
         )}
+        {studyHrs > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3, color }}>⏱️ {studyHrs.toFixed(1)}h</span>
+        )}
         {project.type && <span style={{ marginLeft: 'auto' }}>{project.type}</span>}
       </div>
     </div>
@@ -237,9 +241,11 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
   const nextAction = getNextAction(project)
 
   const totalEstimated = tasks.reduce((a, t) => a + (parseFloat(t.estimatedHours) || 0), 0)
-  const realHours = subjects.length > 0
-    ? sessions.filter(s => subjects.includes(s.subject)).reduce((a, s) => a + s.hours, 0)
-    : null
+  const projectSessions = sessions.filter(s => s.projectId === project.id)
+  const subjectSessions = subjects.length > 0 ? sessions.filter(s => subjects.includes(s.subject) && !s.projectId) : []
+  const realHours = projectSessions.reduce((a, s) => a + (s.hours || 0), 0) +
+    (subjects.length > 0 ? subjectSessions.reduce((a, s) => a + (s.hours || 0), 0) : 0)
+  const hasHours = projectSessions.length > 0 || subjectSessions.length > 0
 
   const inputStyle = { fontFamily: 'inherit', fontSize: '0.85rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', padding: '7px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', width: '100%' }
 
@@ -461,7 +467,7 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         </div>
 
         {/* Progress */}
-        <div style={{ marginBottom: totalEstimated > 0 || realHours !== null ? 14 : 0 }}>
+        <div style={{ marginBottom: totalEstimated > 0 || hasHours ? 14 : 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-500)' }}>
               Progresso {ms.length > 0 ? `— ${ms.filter(m=>m.done).length}/${ms.length} milestones` : `— ${tasks.filter(t=>t.done).length}/${tasks.length} tarefas`}
@@ -474,7 +480,7 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         </div>
 
         {/* Hours */}
-        {(totalEstimated > 0 || realHours !== null) && (
+        {(totalEstimated > 0 || hasHours) && (
           <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
             {totalEstimated > 0 && (
               <div>
@@ -482,10 +488,16 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                 <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Estimado</p>
               </div>
             )}
-            {realHours !== null && (
+            {hasHours && (
               <div>
                 <p style={{ fontSize: '1.1rem', fontWeight: 800, color, letterSpacing: -0.5, margin: 0 }}>{realHours.toFixed(1)}h</p>
                 <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Registadas</p>
+              </div>
+            )}
+            {projectSessions.length > 0 && (
+              <div>
+                <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--gray-500)', letterSpacing: -0.5, margin: 0 }}>{projectSessions.length}</p>
+                <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Sessões</p>
               </div>
             )}
           </div>
@@ -779,11 +791,13 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                 </div>
               </div>
             )}
-            {realHours !== null && (
+            {hasHours && (
               <div style={{ padding: '12px 14px', background: `${color}10`, borderRadius: 10, border: `1px solid ${color}20` }}>
                 <p style={{ fontSize: '0.65rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>⏱️ Horas de estudo registadas</p>
                 <p style={{ fontSize: '1.6rem', fontWeight: 800, color, margin: 0 }}>{realHours.toFixed(1)}h</p>
-                <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', margin: 0 }}>nas disciplinas associadas</p>
+                <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', margin: 0 }}>
+                  {projectSessions.length > 0 ? `${projectSessions.length} sess. ligadas · ` : ''}{subjects.length > 0 ? 'nas disciplinas associadas' : ''}
+                </p>
               </div>
             )}
           </div>
@@ -817,6 +831,7 @@ export default function ProjectsPage({ settings }) {
   const allSubjects = settings?.subjects || []
   const [projects, setProjects]           = useState(loadProjects)
   const [selected, setSelected]           = useState(null)
+  const allSessions = loadSessions()
   const [showForm, setShowForm]           = useState(false)
   const [filterTag, setFilterTag]         = useState(null)
   const [collapsedGroups, setCollapsedGroups] = useState({ paused: true, completed: true })
@@ -897,7 +912,12 @@ export default function ProjectsPage({ settings }) {
       )}
 
       {projects.length === 0 && (
-        <div className="card"><div className="empty-state"><div className="e-emoji">🗂</div><p>Nenhum projeto ainda.</p></div></div>
+        <div className="card"><div className="empty-state">
+          <div className="e-emoji">🗂</div>
+          <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Ainda sem projetos</p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginBottom: 12 }}>Cria um projeto para acompanhar trabalhos, dissertações ou qualquer projeto académico</p>
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}><Plus size={14} /> Criar primeiro projeto</button>
+        </div></div>
       )}
 
       {(['active', 'paused', 'completed']).map(groupId => {
@@ -913,7 +933,7 @@ export default function ProjectsPage({ settings }) {
             </button>
             {!collapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {group.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelected(p.id)} onDelete={deleteProject} allSubjects={allSubjects} />)}
+                {group.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelected(p.id)} onDelete={deleteProject} allSubjects={allSubjects} sessions={allSessions} />)}
               </div>
             )}
           </div>

@@ -801,12 +801,6 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     return ()=>window.removeEventListener('keydown',handler)
   },[dateStr])
 
-  useEffect(()=>{
-    window.addEventListener('mousemove',handleMouseMove)
-    window.addEventListener('mouseup',handleMouseUp)
-    return ()=>{ window.removeEventListener('mousemove',handleMouseMove); window.removeEventListener('mouseup',handleMouseUp) }
-  },[handleMouseMove,handleMouseUp])
-
   const conflictIds  = useMemo(()=>detectConflicts(allBlocks),[allBlocks])
   const scheduledMins= useMemo(()=>allBlocks.filter(b=>b.startMins!=null).reduce((s,b)=>s+(b.endMins-b.startMins),0),[allBlocks])
   const freeMins     = Math.max(0,(sleepMin-wakeMin)-scheduledMins)
@@ -1014,6 +1008,12 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     const{blockId}=dragState.current; dragState.current=null; setDraggingId(null)
     if(dragBlocks){ const m=dragBlocks.find(b=>b.id===blockId); if(m)setBlocks(blocks.map(b=>b.id===blockId?{...b,startMins:m.startMins,endMins:m.endMins,startTime:m.startTime,endTime:m.endTime}:b)); setDragBlocks(null) }
   },[dragBlocks,blocks,setBlocks])
+
+  useEffect(()=>{
+    window.addEventListener('mousemove',handleMouseMove)
+    window.addEventListener('mouseup',handleMouseUp)
+    return ()=>{ window.removeEventListener('mousemove',handleMouseMove); window.removeEventListener('mouseup',handleMouseUp) }
+  },[handleMouseMove,handleMouseUp])
 
   const handleTimelineClick = e=>{
     if(dragState.current||draggingId)return
