@@ -690,12 +690,10 @@ export default function App() {
     }
 
     processQueue()
-    window.electronAPI.onDoneQueueChanged(processQueue)
     exportWidget()
-    const interval = setInterval(exportWidget, 10000)
+    window.electronAPI.onDoneQueueChanged(processQueue)
     return () => {
       window.electronAPI.offDoneQueueChanged(processQueue)
-      clearInterval(interval)
     }
   }, [])
 
