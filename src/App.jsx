@@ -20,6 +20,7 @@ class ErrorBoundary extends Component {
 }
 import { supabase } from "./lib/supabase"
 import { useUserSettings } from "./hooks/useUserSettings"
+import { getTasksForDay, getSubjectsMap } from "./data/schedule"
 
 import LoginPage from "./components/LoginPage"
 import Onboarding from "./components/Onboarding"
@@ -248,10 +249,8 @@ export default function App() {
   const [tab, setTab] = useState("dashboard")
   const [session, setSession] = useState(undefined)
   const [dragging, setDragging] = useState(false)
-  const [focusMode, setFocusMode] = useState(false)
   const [pomodoroTick, setPomodoroTick] = useState(null)
   const [todayHours, setTodayHours] = useState(0)
-  const [deepWork, setDeepWork] = useState(() => localStorage.getItem('deep-work-mode') === '1')
   const [quickLog, setQuickLog] = useState(false)
 
   const dragOrigin = useRef(null)
@@ -380,8 +379,10 @@ export default function App() {
         const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
         return { wakeHour: parseInt((s.wakeTime || '08:00').split(':')[0], 10),
                  sleepHour: parseInt((s.sleepTime || '23:00').split(':')[0], 10),
-                 n: { studyProgress: true, streakRisk: true, weeklyReview: true, longBreak: true, examDay: true, ...s.notifications } }
-      } catch { return { wakeHour: 8, sleepHour: 23, n: { studyProgress:true,streakRisk:true,weeklyReview:true,longBreak:true,examDay:true } } }
+                 n: { studyProgress: true, streakRisk: true, weeklyReview: true, longBreak: true, examDay: true,
+                      morningReminder: true, dailyGoal: true, neglectedSubject: true, midWeekGoal: true,
+                      ...s.notifications } }
+      } catch { return { wakeHour: 8, sleepHour: 23, n: { studyProgress:true,streakRisk:true,weeklyReview:true,longBreak:true,examDay:true,morningReminder:true,dailyGoal:true,neglectedSubject:true,midWeekGoal:true } } }
     }
 
     function getTodayStats() {
@@ -508,6 +509,82 @@ export default function App() {
       } catch {}
     }
 
+    // ── Morning reminder (at wake hour) ─────────────────────────────────────
+    function checkMorningReminder(h, todayStr) {
+      const { wakeHour } = getNotifSettings()
+      if (h !== wakeHour) return
+      const key = `morning-reminder-${todayStr}`
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+      try {
+        const exams = JSON.parse(localStorage.getItem('exams') || '[]')
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const soon = exams
+          .filter(e => { if (!e.date) return false; const d = new Date(e.date + 'T12:00:00'); const days = Math.round((d - today) / 86400000); return days >= 0 && days <= 3 })
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+        if (soon.length > 0) {
+          const next = soon[0]
+          const days = Math.round((new Date(next.date + 'T12:00:00') - today) / 86400000)
+          notify('🌅 Bom dia!', days === 0 ? `Hoje é dia de ${next.type} de ${next.subject}! Vai confiante!` : `${next.type} de ${next.subject} amanhã — foca-te hoje!`)
+        } else {
+          const msgs = ['Começa com calma — um Pomodoro de cada vez.', 'Mantém o ritmo! Cada sessão conta.', 'Novo dia, nova oportunidade de aprender.']
+          notify('🌅 Bom dia!', msgs[new Date().getDay() % msgs.length])
+        }
+      } catch {}
+    }
+
+    // ── Daily goal reached ──────────────────────────────────────────────────
+    function checkDailyGoalReached(todayStr, { hours }) {
+      const key = `daily-goal-reached-${todayStr}`
+      if (localStorage.getItem(key)) return
+      try {
+        const targets = JSON.parse(localStorage.getItem('daily-study-targets') || '{}')
+        const total = Object.values(targets).reduce((a, b) => a + Number(b || 0), 0)
+        if (total <= 0 || hours < total) return
+        localStorage.setItem(key, '1')
+        notify('🎯 Meta do dia atingida!', `Estudaste ${hours.toFixed(1)}h hoje — objetivo cumprido! Mereces descansar.`)
+      } catch {}
+    }
+
+    // ── Neglected subject (once per day, 9–12h) ─────────────────────────────
+    function checkNeglectedSubject(h, todayStr) {
+      if (h < 9 || h > 12) return
+      const key = `neglected-subject-${todayStr}`
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+      try {
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const neglected = (s.subjects || []).find(sub => {
+          const last = sessions.filter(ses => ses.subject === sub.name || ses.subject === sub.key).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+          if (!last) return false
+          return Math.round((today - new Date(last.date)) / 86400000) >= 5
+        })
+        if (neglected) notify(`📚 Já não estudas ${neglected.name}`, `Há 5+ dias sem sessões de ${neglected.name}. Que tal dar-lhe atenção hoje?`)
+      } catch {}
+    }
+
+    // ── Mid-week goal check (Wednesday noon) ────────────────────────────────
+    function checkMidWeekGoal(h, todayStr) {
+      if (new Date().getDay() !== 3 || h !== 12) return
+      const key = `midweek-check-${todayStr}`
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, '1')
+      try {
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const targets = JSON.parse(localStorage.getItem('daily-study-targets') || '{}')
+        const totalDaily = Object.values(targets).reduce((a, b) => a + Number(b || 0), 0)
+        if (totalDaily <= 0) return
+        const weeklyTarget = totalDaily * 5
+        const monday = new Date(); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - monday.getDay() + 1)
+        const weekHours = sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
+        const pct = Math.round((weekHours / weeklyTarget) * 100)
+        if (pct < 40) notify('📊 Meio da semana', `Só ${weekHours.toFixed(1)}h das ${weeklyTarget.toFixed(0)}h previstas (${pct}%). Ainda dá para recuperar!`)
+        else if (pct >= 60) notify('📊 Meio da semana', `${weekHours.toFixed(1)}h estudadas — ${pct}% da meta semanal. Continua assim!`)
+      } catch {}
+    }
+
     // ── Main check loop ──────────────────────────────────────────────────────
     function checkAll() {
       const now = new Date()
@@ -520,17 +597,16 @@ export default function App() {
 
       if (h < wakeHour || h >= sleepHour) return
 
-      // Deep work mode: skip study/break notifications while pomodoro running
-      const pomRunning = (() => { try { return JSON.parse(localStorage.getItem('pomodoro-timer-state'))?.running } catch { return false } })()
-      const deepWorkOn = localStorage.getItem('deep-work-mode') === '1'
-      if (deepWorkOn && pomRunning) return
-
       const stats = getTodayStats()
-      if (n.studyProgress)  checkStudyProgress(h, todayStr, stats)
-      if (n.streakRisk)     checkStreakRisk(h, todayStr, stats)
-      if (n.weeklyReview)   checkWeeklyReview(h, todayStr)
-      if (n.longBreak)      checkLongBreak(todayStr)
-      if (n.longBreak)      checkLongSession(todayStr)
+      if (n.studyProgress)    checkStudyProgress(h, todayStr, stats)
+      if (n.streakRisk)       checkStreakRisk(h, todayStr, stats)
+      if (n.weeklyReview)     checkWeeklyReview(h, todayStr)
+      if (n.longBreak)        checkLongBreak(todayStr)
+      if (n.longBreak)        checkLongSession(todayStr)
+      if (n.morningReminder)  checkMorningReminder(h, todayStr)
+      if (n.dailyGoal)        checkDailyGoalReached(todayStr, stats)
+      if (n.neglectedSubject) checkNeglectedSubject(h, todayStr)
+      if (n.midWeekGoal)      checkMidWeekGoal(h, todayStr)
     }
 
     let interval
@@ -546,6 +622,81 @@ export default function App() {
     }
 
     return () => clearInterval(interval)
+  }, [])
+
+  // ───────── Widget ↔ task list sync (always active, regardless of page)
+  useEffect(() => {
+    if (!window.electronAPI) return
+
+    function buildWidgetData() {
+      try {
+        const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const todayStr = today.toDateString()
+        const todayISO = today.toISOString().split('T')[0]
+        const todayDone = JSON.parse(localStorage.getItem(`tasks-${todayStr}`) || '{}')
+        const extraTasks = JSON.parse(localStorage.getItem('extra-tasks') || '[]')
+        const subjectsMap = getSubjectsMap()
+        const taskGroups = getTasksForDay(today.getDay())
+        const todayDow = today.getDay()
+        const allTasks = [
+          ...taskGroups.flatMap(g => g.tasks.map(t => ({
+            id: t.id, label: t.label, subjectKey: g.subjectKey,
+            subjectName: subjectsMap[g.subjectKey]?.name || g.subjectKey,
+            subjectColor: subjectsMap[g.subjectKey]?.color || '#e5e7eb',
+            subjectEmoji: subjectsMap[g.subjectKey]?.emoji || '📚',
+            done: !!todayDone[t.id], isExtra: false,
+          }))),
+          ...extraTasks
+            .filter(t => !t.recurrence || t.recurrence === 'daily' || (t.recurrence === 'weekly' && t.createdDow === todayDow))
+            .map(t => ({ id: t.id, label: t.label, subjectKey: null, subjectName: 'Extra', subjectColor: '#e5e7eb', subjectEmoji: '📌', done: !!todayDone[t.id], isExtra: true })),
+        ]
+        const rawExams = JSON.parse(localStorage.getItem('exams') || '[]')
+        const subsByName = Object.fromEntries((s.subjects || []).map(sub => [sub.name, sub]))
+        const upcomingExams = rawExams
+          .filter(e => e.date >= todayISO && e.actualGrade == null)
+          .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
+          .map(e => { const sub = subsByName[e.subject] || {}; const days = Math.round((new Date(e.date + 'T12:00:00') - today) / 86400000); return { subject: e.subject, type: e.type || 'Exame', date: e.date, days, color: sub.color || '#e5e7eb', emoji: sub.emoji || '📝' } })
+        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const todayHours = parseFloat(sessions.filter(s => s.date === todayStr).reduce((sum, s) => sum + (parseFloat(s.hours) || 0), 0).toFixed(1))
+        return { date: todayStr, tasks: allTasks, doneCount: allTasks.filter(t => t.done).length, totalCount: allTasks.length, upcomingExams, todayHours }
+      } catch { return null }
+    }
+
+    // Widget → app: process done-queue, write to localStorage, notify DailyView
+    const processQueue = async () => {
+      const queue = await window.electronAPI.readDoneQueue().catch(() => [])
+      if (!queue?.length) return
+      const today = new Date().toDateString()
+      const ids = queue.filter(e => e.date === today).map(e => e.id)
+      if (!ids.length) return
+      const key = `tasks-${today}`
+      try {
+        const existing = JSON.parse(localStorage.getItem(key) || '{}')
+        ids.forEach(id => { existing[id] = true })
+        localStorage.setItem(key, JSON.stringify(existing))
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(existing) }))
+      } catch {}
+      await window.electronAPI.clearDoneQueue().catch(() => {})
+      // Export updated data to widget immediately
+      const data = buildWidgetData()
+      if (data) window.electronAPI.exportWidgetData(data).catch(() => {})
+    }
+
+    // App → widget: export periodically (catches changes on any page)
+    const exportWidget = () => {
+      const data = buildWidgetData()
+      if (data) window.electronAPI.exportWidgetData(data).catch(() => {})
+    }
+
+    processQueue()
+    window.electronAPI.onDoneQueueChanged(processQueue)
+    exportWidget()
+    const interval = setInterval(exportWidget, 10000)
+    return () => {
+      window.electronAPI.offDoneQueueChanged(processQueue)
+      clearInterval(interval)
+    }
   }, [])
 
   // ───────── Logout
@@ -604,24 +755,10 @@ export default function App() {
       {quickLog && (
         <QuickLogModal onClose={() => setQuickLog(false)} settings={settings} />
       )}
-      {focusMode && (
-        <button
-          onClick={() => setFocusMode(false)}
-          style={{
-            position: 'fixed', top: 16, right: 16, zIndex: 1000,
-            background: 'var(--white)', border: '1px solid var(--gray-200)',
-            borderRadius: 50, padding: '6px 14px', fontFamily: 'inherit',
-            fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-500)',
-            cursor: 'pointer', boxShadow: 'var(--shadow-sm)',
-          }}
-        >
-          ✕ Sair do foco
-        </button>
-      )}
       <aside
         className="sidebar"
         onMouseDown={onSidebarMouseDown}
-        style={{ cursor: dragging ? "grabbing" : "grab", display: focusMode ? 'none' : undefined, width: settings?.sidebarCompact ? 64 : undefined }}
+        style={{ cursor: dragging ? "grabbing" : "grab", width: settings?.sidebarCompact ? 64 : undefined }}
       >
         <div className="drag-region" />
 
@@ -754,26 +891,6 @@ export default function App() {
             {settings?.name || session?.user?.email || ''}
           </p>
 
-          <button
-            className="nav-btn"
-            onClick={() => setFocusMode(true)}
-            style={{ color: "var(--gray-400)", fontSize: "0.78rem" }}
-            title="Modo foco"
-          >
-            <span className="nav-icon">🎯</span> {!settings?.sidebarCompact && 'Modo foco'}
-          </button>
-          <button
-            className="nav-btn"
-            onClick={() => {
-              const next = !deepWork
-              setDeepWork(next)
-              localStorage.setItem('deep-work-mode', next ? '1' : '0')
-            }}
-            style={{ color: deepWork ? 'var(--purple-dark)' : 'var(--gray-400)', fontSize: "0.78rem", fontWeight: deepWork ? 800 : undefined }}
-            title="Deep work (sem notificações durante Pomodoro)"
-          >
-            <span className="nav-icon">🧠</span> {!settings?.sidebarCompact && (deepWork ? 'Deep work ON' : 'Deep work')}
-          </button>
           <button
             className="nav-btn"
             onClick={() => setSettings(s => ({ ...s, sidebarCompact: !s.sidebarCompact }))}

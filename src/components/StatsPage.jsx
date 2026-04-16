@@ -255,26 +255,28 @@ export default function StatsPage({ settings }) {
     return { bestSession: parseFloat(bestSession.toFixed(1)), bestDay: parseFloat(bestDay.toFixed(1)), bestWeek: parseFloat(bestWeek.toFixed(1)), maxStreak }
   }, [sessions])
 
-  // ── Goal projection ───────────────────────────────────────────────────
+  // ── Goal projection (per subject) ────────────────────────────────────
   const goalProjection = useMemo(() => {
-    const periodStart  = settings?.periodStart ? new Date(settings.periodStart + 'T00:00:00') : null
-    const periodEnd    = settings?.periodEnd   ? new Date(settings.periodEnd   + 'T23:59:59') : null
-    const totalTarget  = settings?.hoursGoal || 0
-    if (!periodStart || !periodEnd || !totalTarget) return null
+    const periodStart = settings?.periodStart ? new Date(settings.periodStart + 'T00:00:00') : null
+    const periodEnd   = settings?.periodEnd   ? new Date(settings.periodEnd   + 'T23:59:59') : null
+    if (!periodStart || !periodEnd) return null
+    let targets = {}
+    try { targets = JSON.parse(localStorage.getItem('daily-study-targets')) || {} } catch {}
     const now = new Date()
     const daysSinceStart = Math.max(1, (now - periodStart) / 86400000)
-    const daysTotal      = Math.max(1, (periodEnd - periodStart) / 86400000)
     const daysRemaining  = Math.max(0, (periodEnd - now) / 86400000)
-    const dailyPace      = totalHours / daysSinceStart
-    const projectedTotal = totalHours + dailyPace * daysRemaining
-    const pct            = Math.min(100, Math.round(totalHours / totalTarget * 100))
-    let finishDate = null
-    if (dailyPace > 0 && totalHours < totalTarget) {
-      const daysNeeded = (totalTarget - totalHours) / dailyPace
-      finishDate = new Date(now.getTime() + daysNeeded * 86400000)
-    }
-    return { pct, projectedTotal: parseFloat(projectedTotal.toFixed(0)), totalTarget, finishDate, daysRemaining: Math.round(daysRemaining), onTrack: projectedTotal >= totalTarget }
-  }, [sessions, settings, totalHours])
+    const subjectData = subjects.map(s => {
+      const target = parseFloat(targets[s.key] || 0)
+      if (!target) return null
+      const done = parseFloat(sessions.filter(x => x.subject === s.key).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
+      const dailyPace = done / daysSinceStart
+      const projected = parseFloat((done + dailyPace * daysRemaining).toFixed(0))
+      const pct = Math.min(100, Math.round(done / target * 100))
+      return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, target, done, pct, projected, onTrack: projected >= target }
+    }).filter(Boolean)
+    if (subjectData.length === 0) return null
+    return { subjectData, daysRemaining: Math.round(daysRemaining) }
+  }, [sessions, settings, subjects])
 
   // ── Radar chart data (balance across subjects) ────────────────────────
   const radarData = useMemo(() => {
@@ -303,24 +305,28 @@ export default function StatsPage({ settings }) {
 
   // ── Weekly goals history (last 8 weeks) ──────────────────────────────
   const weeklyGoalHistory = useMemo(() => {
-    const weeklyTarget = (settings?.hoursGoal || 0) / Math.max(1, settings?.subjects?.length || 1)
-    const totalWeeklyTarget = settings?.subjects?.length
-      ? (settings?.hoursGoal || 0) / (Math.max(1, (new Date(settings?.periodEnd || Date.now()) - new Date(settings?.periodStart || Date.now())) / 86400000) / 7)
-      : 0
-    if (totalWeeklyTarget <= 0) return null
+    const periodStart = settings?.periodStart ? new Date(settings.periodStart + 'T00:00:00') : null
+    const periodEnd   = settings?.periodEnd   ? new Date(settings.periodEnd   + 'T23:59:59') : null
+    if (!periodStart || !periodEnd) return null
+    // Sum per-subject targets to get total semester goal
+    let targets = {}
+    try { targets = JSON.parse(localStorage.getItem('daily-study-targets')) || {} } catch {}
+    const totalTarget = Object.values(targets).reduce((a, b) => a + parseFloat(b || 0), 0)
+    if (totalTarget <= 0) return null
+    const totalWeeks = Math.max(1, (periodEnd - periodStart) / (7 * 86400000))
+    const weeklyTarget = parseFloat((totalTarget / totalWeeks).toFixed(1))
     const result = []
     const now = getMondayOfWeek(new Date())
     for (let i = 7; i >= 0; i--) {
       const monday = new Date(now); monday.setDate(now.getDate() - i * 7)
       const sunday = new Date(monday); sunday.setDate(monday.getDate() + 7)
-      const h = sessions.filter(s => { const d = new Date(s.date); return d >= monday && d < sunday }).reduce((a, b) => a + (b.hours || 0), 0)
-      const isCurrentWeek = i === 0
+      const h = parseFloat(sessions.filter(s => { const d = new Date(s.date); return d >= monday && d < sunday }).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
       result.push({
         label: monday.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }),
-        hours: parseFloat(h.toFixed(1)),
-        target: parseFloat(totalWeeklyTarget.toFixed(1)),
-        hit: h >= totalWeeklyTarget,
-        current: isCurrentWeek,
+        hours: h,
+        target: weeklyTarget,
+        hit: h >= weeklyTarget,
+        current: i === 0,
       })
     }
     return result
@@ -603,31 +609,35 @@ export default function StatsPage({ settings }) {
         </div>
       )}
 
-      {/* Goal projection */}
+      {/* Goal projection — per subject */}
       {goalProjection && (
         <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header"><span className="card-title">🎯 Projeção da meta</span></div>
-          <div className="card-body">
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: '0.83rem', fontWeight: 700, color: 'var(--gray-700)' }}>
-                  {goalProjection.pct}% da meta — {totalHours.toFixed(0)}h de {goalProjection.totalTarget}h
-                </span>
-                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: goalProjection.onTrack ? '#16a34a' : '#dc2626' }}>
-                  {goalProjection.onTrack ? '✅ No bom caminho' : '⚠️ Ritmo insuficiente'}
-                </span>
+          <div className="card-header">
+            <span className="card-title">🎯 Projeção da meta</span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 500 }}>⏳ {goalProjection.daysRemaining} dias restantes</span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {goalProjection.subjectData.map(s => (
+              <div key={s.key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: '0.83rem', fontWeight: 700, color: 'var(--gray-800)' }}>{s.emoji} {s.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{s.done}h <span style={{ color: 'var(--gray-300)' }}>/</span> {s.target}h</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: s.onTrack ? '#16a34a' : '#dc2626' }}>
+                      {s.pct}% {s.onTrack ? '✅' : '⚠️'}
+                    </span>
+                  </div>
+                </div>
+                <div className="progress-wrap" style={{ height: 8 }}>
+                  <div className="progress-fill" style={{ width: `${s.pct}%`, height: '100%', background: s.onTrack ? '#16a34a' : (s.color || 'var(--rose-400)') }} />
+                </div>
+                <p style={{ fontSize: '0.68rem', color: 'var(--gray-400)', marginTop: 4 }}>
+                  {s.onTrack
+                    ? `Projeção: ${s.projected}h — no bom caminho`
+                    : `Projeção: ${s.projected}h — faltam ainda ${(s.target - s.done).toFixed(1)}h para atingir a meta`}
+                </p>
               </div>
-              <div className="progress-wrap" style={{ height: 10 }}>
-                <div className="progress-fill" style={{ width: `${goalProjection.pct}%`, height: '100%', background: goalProjection.onTrack ? '#16a34a' : 'var(--rose-400)' }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--gray-600)' }}>
-              <span>📈 Projeção: <strong>{goalProjection.projectedTotal}h</strong> até ao fim do período</span>
-              <span>⏳ Faltam <strong>{goalProjection.daysRemaining} dias</strong></span>
-              {goalProjection.finishDate && goalProjection.daysRemaining > 0 && (
-                <span>🏁 Meta atingida a: <strong>{goalProjection.finishDate.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}</strong></span>
-              )}
-            </div>
+            ))}
           </div>
         </div>
       )}

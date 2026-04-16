@@ -171,17 +171,6 @@ function computeAchievements(sessions, exams, diary, streak, subjects) {
   return now
 }
 
-function loadWater() {
-  try {
-    const d = localStorage.getItem('water-date')
-    if (d !== new Date().toDateString()) return 0
-    return parseInt(localStorage.getItem('water-glasses') || '0', 10)
-  } catch { return 0 }
-}
-function saveWater(n) {
-  localStorage.setItem('water-date', new Date().toDateString())
-  localStorage.setItem('water-glasses', String(n))
-}
 
 export default function Dashboard({ onNavigate, settings }) {
   const subjects        = settings?.subjects || []
@@ -195,11 +184,7 @@ export default function Dashboard({ onNavigate, settings }) {
   const [editingLinks, setEditingLinks] = useState(false)
   const [links, setLinks] = useState(loadLinks)
   const [newLink, setNewLink] = useState({ label: '', url: '', emoji: '🔗' })
-  const [water, setWater] = useState(loadWater)
   const [showSundayPlanning, setShowSundayPlanning] = useState(false)
-
-  const addWater = () => { const n = water + 1; setWater(n); saveWater(n) }
-  const removeWater = () => { const n = Math.max(0, water - 1); setWater(n); saveWater(n) }
 
   const isSunday = TODAY.getDay() === 0
 
@@ -298,7 +283,6 @@ export default function Dashboard({ onNavigate, settings }) {
         </h1>
         <p style={{ fontSize: '0.88rem', color: 'var(--gray-400)', fontWeight: 500 }}>
           {TODAY.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
-          {todayTasks.length > 0 && ` · ${todayDone} de ${todayTasks.length} tarefas hoje`}
         </p>
       </div>
 
@@ -376,12 +360,12 @@ export default function Dashboard({ onNavigate, settings }) {
       )}
 
       {/* Top stats */}
-      <div className="dashboard-grid-3" style={{ marginBottom: 14 }}>
+      <div className="dashboard-grid" style={{ marginBottom: 14 }}>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('hours')}>
-          <div className="stat-label"><Clock size={12} /> Total de horas</div>
-          <div className="stat-value">{totalHrs.toFixed(0)}<span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gray-400)' }}>h</span></div>
+          <div className="stat-label"><Clock size={12} /> Esta semana</div>
+          <div className="stat-value">{weekHrs.toFixed(1)}<span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gray-400)' }}>h</span></div>
           <div className="stat-sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {weekHrs.toFixed(1)}h esta semana
+            {totalHrs.toFixed(0)}h no total
             {trendPct !== null && (
               <span style={{
                 fontSize: '0.68rem', fontWeight: 700, padding: '1px 5px', borderRadius: 50,
@@ -393,14 +377,6 @@ export default function Dashboard({ onNavigate, settings }) {
             )}
           </div>
         </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('today')}>
-          <div className="stat-label"><CheckCircle size={12} /> Hoje</div>
-          <div className="stat-value">{todayPct}<span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gray-400)' }}>%</span></div>
-          <div className="stat-sub">{todayDone} de {todayTasks.length} tarefas</div>
-          <div className="progress-wrap" style={{ marginTop: 10 }}>
-            <div className="progress-fill" style={{ width: `${todayPct}%`, background: todayPct === 100 ? 'var(--green-500)' : 'var(--rose-300)' }} />
-          </div>
-        </div>
         <div className="stat-card">
           <div className="stat-label"><Flame size={12} /> Streak</div>
           <div className="stat-value">{streak}<span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gray-400)' }}>d</span></div>
@@ -408,36 +384,6 @@ export default function Dashboard({ onNavigate, settings }) {
         </div>
       </div>
 
-      {/* Water counter */}
-      <div style={{
-        background: 'var(--white)', border: '1px solid var(--gray-100)',
-        borderRadius: 'var(--radius)', padding: '12px 16px', marginBottom: 14,
-        display: 'flex', alignItems: 'center', gap: 12,
-        boxShadow: 'var(--shadow-xs)',
-      }}>
-        <span style={{ fontSize: '1.2rem' }}>💧</span>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', margin: 0 }}>Água hoje</p>
-          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} style={{
-                width: 18, height: 18, borderRadius: 4,
-                background: i < water ? '#60a5fa' : 'var(--gray-100)',
-                border: `1.5px solid ${i < water ? '#3b82f6' : 'var(--gray-200)'}`,
-                transition: 'all 0.15s',
-              }} />
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={removeWater} disabled={water === 0} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid var(--gray-200)', background: 'var(--white)', cursor: water === 0 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '1rem', color: 'var(--gray-400)', opacity: water === 0 ? 0.4 : 1 }}>−</button>
-          <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#3b82f6', minWidth: 20, textAlign: 'center' }}>{water}</span>
-          <button onClick={addWater} disabled={water >= 8} style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid var(--gray-200)', background: 'var(--white)', cursor: water >= 8 ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '1rem', color: '#3b82f6', opacity: water >= 8 ? 0.4 : 1 }}>+</button>
-        </div>
-        <p style={{ fontSize: '0.7rem', color: 'var(--gray-400)', margin: 0, minWidth: 40, textAlign: 'right' }}>
-          {water >= 8 ? '🎉 Meta!' : `${8 - water} em falta`}
-        </p>
-      </div>
 
       {/* Sunday planning banner */}
       {isSunday ? (
@@ -766,6 +712,10 @@ export default function Dashboard({ onNavigate, settings }) {
           try { return JSON.parse(localStorage.getItem('extra-tasks')) || [] } catch { return [] }
         })()
         const pendingExtra = allExtra.filter(t => !done[t.id])
+        const extraDone = allExtra.length - pendingExtra.length
+        const allTodayTasks = todayTasks.length + allExtra.length
+        const allTodayDone  = todayDone + extraDone
+        const allTodayPct   = allTodayTasks === 0 ? 100 : Math.round(allTodayDone / allTodayTasks * 100)
 
         // Days with incomplete schedule tasks in last 7 days
         let overdueDays = 0
@@ -814,22 +764,21 @@ export default function Dashboard({ onNavigate, settings }) {
             {/* Tasks today + overdue */}
             <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius)', padding: '12px 14px', boxShadow: 'var(--shadow-xs)', cursor: 'pointer' }} onClick={() => onNavigate('today')}>
               <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Tarefas</p>
-              {todayTasks.length > 0 && (
+              {allTodayTasks > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-700)' }}>Hoje</span>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: todayPct === 100 ? 'var(--green-500)' : 'var(--gray-500)' }}>
-                      {todayDone}/{todayTasks.length} {todayPct === 100 ? '🎉' : ''}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: allTodayPct === 100 ? 'var(--green-500)' : 'var(--gray-500)' }}>
+                      {allTodayDone}/{allTodayTasks} {allTodayPct === 100 ? '🎉' : ''}
                     </span>
                   </div>
                   <div style={{ height: 5, background: 'var(--gray-100)', borderRadius: 50, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${todayPct}%`, background: todayPct === 100 ? 'var(--green-400)' : 'var(--rose-300)', borderRadius: 50 }} />
+                    <div style={{ height: '100%', width: `${allTodayPct}%`, background: allTodayPct === 100 ? 'var(--green-400)' : 'var(--rose-300)', borderRadius: 50 }} />
                   </div>
                 </div>
               )}
               {pendingExtra.length > 0 && (
                 <div style={{ marginBottom: 6 }}>
-                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 4 }}>Extra pendentes ({pendingExtra.length})</p>
                   {pendingExtra.slice(0, 2).map(t => (
                     <p key={t.id} style={{ fontSize: '0.72rem', color: 'var(--gray-600)', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       · {t.label}
@@ -843,7 +792,7 @@ export default function Dashboard({ onNavigate, settings }) {
                   <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--red-400)' }}>⚠️ {overdueDays} dia{overdueDays !== 1 ? 's' : ''} com tarefas incompletas</p>
                 </div>
               )}
-              {todayTasks.length === 0 && pendingExtra.length === 0 && overdueDays === 0 && (
+              {allTodayTasks === 0 && overdueDays === 0 && (
                 <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>Nenhuma tarefa pendente 🎉</p>
               )}
             </div>

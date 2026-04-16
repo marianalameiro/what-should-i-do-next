@@ -110,6 +110,23 @@ export function PomodoroTimer({ subjects: propSubjects }) {
     saveTimerState({ mode, subject, secondsLeft, secondsElapsed, running, isStopwatch })
   }, [mode, subject, secondsLeft, secondsElapsed, running, isStopwatch])
 
+  // Exporta estado do pomodoro para o widget do desktop (só quando running/mode muda, não a cada segundo)
+  useEffect(() => {
+    if (!window.electronAPI?.exportPomodoroState) return
+    const currentMode = MODES.find(m => m.id === mode)
+    window.electronAPI.exportPomodoroState({
+      running,
+      mode,
+      modeLabel: currentMode?.label || mode,
+      isWork: currentMode?.isWork ?? true,
+      isStopwatch,
+      secondsLeft,
+      secondsElapsed,
+      totalSeconds: isStopwatch ? null : (currentMode?.minutes || 25) * 60,
+      savedAt: Date.now(),
+    }).catch(() => {})
+  }, [running, mode])
+
   useEffect(() => {
     if (!didMount.current) { didMount.current = true; return }
     clearInterval(intervalRef.current)

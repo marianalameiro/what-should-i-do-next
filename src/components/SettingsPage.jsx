@@ -54,9 +54,33 @@ export default function SettingsPage({ settings, setSettings }) {
     setShowSubjectForm(false)
   }
 
-  const updateSubjectMethods = (key, methodsText) => {
-    const methods = methodsText.split('\n').map(m => m.trim()).filter(Boolean)
-    update('subjects', settings.subjects.map(s => s.key === key ? { ...s, methods } : s))
+  // Normalize methods to always be { label, duration? } objects
+  const normalizeMethods = (methods) =>
+    (methods || []).map(m => typeof m === 'string' ? { label: m, duration: '' } : { label: m.label || '', duration: m.duration || '' })
+
+  const updateMethod = (subjectKey, idx, field, value) => {
+    update('subjects', settings.subjects.map(s => {
+      if (s.key !== subjectKey) return s
+      const methods = normalizeMethods(s.methods)
+      methods[idx] = { ...methods[idx], [field]: value }
+      return { ...s, methods: methods.map(m => ({ label: m.label, ...(m.duration ? { duration: Number(m.duration) } : {}) })) }
+    }))
+  }
+
+  const addMethod = (subjectKey) => {
+    update('subjects', settings.subjects.map(s => {
+      if (s.key !== subjectKey) return s
+      const methods = normalizeMethods(s.methods)
+      return { ...s, methods: [...methods.map(m => ({ label: m.label, ...(m.duration ? { duration: Number(m.duration) } : {}) })), { label: '' }] }
+    }))
+  }
+
+  const removeMethod = (subjectKey, idx) => {
+    update('subjects', settings.subjects.map(s => {
+      if (s.key !== subjectKey) return s
+      const methods = normalizeMethods(s.methods).filter((_, i) => i !== idx)
+      return { ...s, methods: methods.map(m => ({ label: m.label, ...(m.duration ? { duration: Number(m.duration) } : {}) })) }
+    }))
   }
 
   const updateSubjectNotes = (key, notes) => {
@@ -315,14 +339,35 @@ export default function SettingsPage({ settings, setSettings }) {
               {editingSubject === s.key && (
                 <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)', display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
-                    <label style={labelStyle}>Métodos de estudo (um por linha)</label>
-                    <textarea
-                      rows={4}
-                      style={{ ...inputStyle, resize: 'vertical' }}
-                      value={(s.methods || []).join('\n')}
-                      onChange={e => updateSubjectMethods(s.key, e.target.value)}
-                      placeholder={'Ex:\nLer o capítulo\nFazer resumo\nPraticar exercícios'}
-                    />
+                    <label style={labelStyle}>Métodos de estudo</label>
+                    {normalizeMethods(s.methods).map((m, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                        <input
+                          value={m.label}
+                          onChange={e => updateMethod(s.key, i, 'label', e.target.value)}
+                          placeholder="Ex: Fazer resumo"
+                          style={{ ...inputStyle, flex: 1, fontSize: '0.8rem' }}
+                        />
+                        <input
+                          type="number"
+                          value={m.duration}
+                          onChange={e => updateMethod(s.key, i, 'duration', e.target.value)}
+                          placeholder="min"
+                          min="5"
+                          max="240"
+                          title="Duração em minutos"
+                          style={{ ...inputStyle, width: 62, fontSize: '0.8rem', textAlign: 'center' }}
+                        />
+                        <button
+                          onClick={() => removeMethod(s.key, i)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: '1rem', padding: '0 4px', lineHeight: 1 }}>×</button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => addMethod(s.key)}
+                      style={{ fontSize: '0.75rem', color: 'var(--gray-500)', background: 'none', border: '1px dashed var(--gray-200)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', marginTop: 2 }}>
+                      + Método
+                    </button>
                   </div>
                   <div>
                     <label style={labelStyle}>Notas rápidas</label>
@@ -620,11 +665,15 @@ export default function SettingsPage({ settings, setSettings }) {
               Ativa ou desativa cada tipo de notificação. As notificações requerem permissão do sistema.
             </p>
             {[
-              { key: 'studyProgress', label: 'Progresso de estudo (cada hora)', desc: 'Avisa quantas horas estudaste durante o dia' },
-              { key: 'streakRisk',    label: 'Streak em risco',                 desc: 'Alerta às 21h se ainda não estudaste e tens streak ativo' },
-              { key: 'weeklyReview',  label: 'Lembrete de review semanal',      desc: 'Avisa ao domingo à noite se não fizeste a review da semana' },
-              { key: 'longBreak',     label: 'Pausa longa após 4 Pomodoros',    desc: 'Sugere uma pausa mais longa depois de 4 sessões seguidas' },
-              { key: 'examDay',       label: 'Notificação no dia do exame',     desc: 'Lembra-te de exames/testes no próprio dia' },
+              { key: 'studyProgress',   label: 'Progresso de estudo (cada hora)',  desc: 'Avisa quantas horas estudaste durante o dia' },
+              { key: 'streakRisk',      label: 'Streak em risco',                  desc: 'Alerta às 21h se ainda não estudaste e tens streak ativo' },
+              { key: 'weeklyReview',    label: 'Lembrete de review semanal',       desc: 'Avisa ao domingo à noite se não fizeste a review da semana' },
+              { key: 'longBreak',       label: 'Pausa longa após 4 Pomodoros',     desc: 'Sugere uma pausa mais longa depois de 4 sessões seguidas' },
+              { key: 'examDay',         label: 'Notificação no dia do exame',      desc: 'Lembra-te de exames/testes no próprio dia' },
+              { key: 'morningReminder', label: 'Lembrete matinal',                 desc: 'Mensagem motivacional ao acordar, com destaque para exames próximos' },
+              { key: 'dailyGoal',       label: 'Meta do dia atingida',             desc: 'Avisa quando atinges o total de horas diárias definidas nas metas' },
+              { key: 'neglectedSubject',label: 'Cadeira sem atenção',              desc: 'Alerta se não estudas uma cadeira há 5 ou mais dias' },
+              { key: 'midWeekGoal',     label: 'Balanço a meio da semana',         desc: 'Resumo do progresso semanal às quartas-feiras ao meio-dia' },
             ].map(({ key, label, desc }) => {
               const val = settings.notifications?.[key] !== false
               return (
@@ -649,6 +698,17 @@ export default function SettingsPage({ settings, setSettings }) {
                 </div>
               )
             })}
+            <div style={{ marginTop: 8, paddingTop: 18, borderTop: '1px solid var(--gray-100)' }}>
+              <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Email para a weekly review</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', marginBottom: 8 }}>Usado no botão "Enviar por email" na página de weekly review</p>
+              <input
+                type="email"
+                placeholder="o-teu@email.com"
+                value={settings.reviewEmail || ''}
+                onChange={e => update('reviewEmail', e.target.value)}
+                style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.88rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box' }}
+              />
+            </div>
           </div>
         </div>
       )}

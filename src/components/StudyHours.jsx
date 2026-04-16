@@ -336,12 +336,11 @@ export default function StudyHours({ settings }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}>
+            <Plus size={14} /> {showForm ? 'Cancelar' : 'Registar sessão'}
+          </button>
           <button className={showPomodoro ? 'btn btn-primary' : 'btn btn-secondary'} onClick={() => setShowPomodoro(v => !v)}>
             🍅 Pomodoro
-          </button>
-          <button className="btn btn-secondary" onClick={() => setShowTargets(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <SlidersHorizontal size={14} />
-            {showTargets ? 'Fechar' : 'Definir metas'}
           </button>
         </div>
       </div>
@@ -484,26 +483,33 @@ export default function StudyHours({ settings }) {
 
       {/* Weekday breakdown */}
       {sessions.length >= 5 && (
-        <div className="stat-card" style={{ marginBottom: 14 }}>
-          <div className="stat-label">Média de horas por dia da semana</div>
+        <div className="card" style={{ marginBottom: 14, padding: '16px 20px' }}>
+          <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+            Média de horas por dia da semana
+          </p>
           {(() => {
             const maxAvg = Math.max(...dowBreakdown.map(d => d.avg), 0.1)
             const best = dowBreakdown.reduce((b, d) => d.avg > b.avg ? d : b, dowBreakdown[0])
+            const todayDow = TODAY.getDay()
             return (
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                {dowBreakdown.map(d => (
-                  <div key={d.dow} style={{
-                    padding: '4px 10px', borderRadius: 20,
-                    background: d.dow === best.dow ? 'var(--green-50)' : 'var(--gray-50)',
-                    border: `1.5px solid ${d.dow === best.dow ? 'var(--green-200)' : 'var(--gray-200)'}`,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-                  }}>
-                    <span style={{ fontSize: '0.62rem', fontWeight: 700, color: d.dow === best.dow ? 'var(--green-600)' : 'var(--gray-500)' }}>{d.label}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: d.avg > 0 ? (d.dow === best.dow ? 'var(--green-700)' : 'var(--gray-700)') : 'var(--gray-300)' }}>
-                      {d.avg > 0 ? `${d.avg.toFixed(1)}h` : '—'}
-                    </span>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
+                {dowBreakdown.map(d => {
+                  const pct = d.avg > 0 ? d.avg / maxAvg : 0
+                  const isToday = d.dow === todayDow
+                  const isBest = d.dow === best.dow
+                  const color = isBest ? '#16a34a' : isToday ? 'var(--rose-400)' : 'var(--gray-300)'
+                  return (
+                    <div key={d.dow} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
+                      {d.avg > 0 && (
+                        <span style={{ fontSize: '0.6rem', fontWeight: 700, color, lineHeight: 1 }}>
+                          {d.avg.toFixed(1)}h
+                        </span>
+                      )}
+                      <div style={{ width: '100%', height: `${Math.max(pct * 52, d.avg > 0 ? 4 : 2)}px`, background: color, borderRadius: '4px 4px 0 0', transition: 'height 0.3s', opacity: d.avg > 0 ? 1 : 0.25 }} />
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isToday ? 'var(--rose-400)' : 'var(--gray-400)', lineHeight: 1 }}>{d.label}</span>
+                    </div>
+                  )
+                })}
               </div>
             )
           })()}
@@ -599,21 +605,6 @@ export default function StudyHours({ settings }) {
                         <p style={{ fontSize: '0.8rem', color: '#78350f', lineHeight: 1.55, margin: 0 }}>{sg.text}</p>
                       </div>
                     ))}
-                    <button
-                      onClick={() => {
-                        setForm(p => ({ ...p, subject: s.key, hours: Math.ceil(deficit * 2) / 2 || 1 }))
-                        setShowForm(true)
-                        setExpandedSuggestions(prev => ({ ...prev, [s.key]: false }))
-                      }}
-                      style={{
-                        marginTop: 6, padding: '5px 12px',
-                        background: '#d97706', color: 'white', border: 'none',
-                        borderRadius: 8, fontSize: '0.75rem', fontWeight: 700,
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}
-                    >
-                      + Registar sessão agora
-                    </button>
                   </div>
                 )}
               </div>
@@ -621,11 +612,6 @@ export default function StudyHours({ settings }) {
           })}
         </div>}
       </div>
-
-      {/* Add session */}
-      <button className="btn btn-primary" onClick={() => setShowForm(v => !v)} style={{ marginBottom: 14 }}>
-        <Plus size={14} /> {showForm ? 'Cancelar' : 'Registar sessao'}
-      </button>
 
       {showForm && (
         <div className="card" style={{ marginBottom: 14 }}>

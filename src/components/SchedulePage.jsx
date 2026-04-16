@@ -238,7 +238,7 @@ function autoScheduleDay(dateStr, settings, household, dailyTargets={}) {
     group.tasks.filter(t=>!done[t.id]&&!elsewhere.has(t.label)).forEach(task=>{
       const q=promoteQ(group.subjectKey, matOvr[task.id]||autoClassify(task.id,task.label))
       byQ[q].push({label:task.label,emoji:subj?.emoji||'📚',color:subj?.color||STYLES.study.color,
-        bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border,type:'study',duration:estimateDuration(task.label,q),subjectKey:group.subjectKey})
+        bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border,type:'study',duration:task.duration||estimateDuration(task.label,q),subjectKey:group.subjectKey})
     })
   })
   loadExtra().filter(t=>!done[t.id]&&!elsewhere.has(t.label)).forEach(t=>{
@@ -709,6 +709,9 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
   const [canRedo, setCanRedo]             = useState(false)
   const [dragOverMins, setDragOverMins]   = useState(null)
   const [sidebarDragTask, setSidebarDragTask] = useState(null)
+  const [weekPanelDragTask, setWeekPanelDragTask] = useState(null)
+  const [dragOverWeekDay, setDragOverWeekDay]     = useState(null)
+  const [weekBlockRev, setWeekBlockRev]           = useState(0)
   const history    = useRef([])
   const redoStack  = useRef([])
   const dragState  = useRef(null)
@@ -837,7 +840,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       const fg=gc.filter(g=>!cr.some(r=>g.startMins<r.end&&g.endMins>r.start))
       return [ds,[...cb,...fg,...sb].sort((a,b)=>(a.startMins||0)-(b.startMins||0))]
     }))
-  },[weekView,weekDays,settings])
+  },[weekView,weekDays,settings,weekBlockRev])
 
   // Unscheduled tasks for sidebar drag
   const unscheduledTasks = useMemo(()=>{
@@ -850,7 +853,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       const subj=settings?.subjects?.find(s=>s.key===group.subjectKey)
       group.tasks.filter(t=>!done[t.id]&&!scheduledTitles.has(t.label)).forEach(task=>{
         const q=promoteQ(group.subjectKey,matOvr[task.id]||autoClassify(task.id,task.label))
-        tasks.push({id:task.id,label:task.label,quadrant:q,emoji:subj?.emoji||'📚',color:subj?.color||STYLES.study.color,bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border,type:'study',duration:estimateDuration(task.label,q),subjectKey:group.subjectKey})
+        tasks.push({id:task.id,label:task.label,quadrant:q,emoji:subj?.emoji||'📚',color:subj?.color||STYLES.study.color,bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border,type:'study',duration:task.duration||estimateDuration(task.label,q),subjectKey:group.subjectKey})
       })
     })
     loadExtra().filter(t=>!done[t.id]&&!scheduledTitles.has(t.label)).forEach(t=>{
@@ -976,18 +979,23 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     dragState.current={blockId:block.id,startY:e.clientY,origStartMins:block.startMins,origEndMins:block.endMins}
     setDraggingId(block.id); setDragBlocks(blocks.map(b=>({...b})))
   }
-  const handleResizeDown = (e,block)=>{
+  const handleResizeDown = (e,block,edge='bottom')=>{
     if(block.locked)return; e.preventDefault(); e.stopPropagation()
-    resizeState.current={blockId:block.id,startY:e.clientY,origEndMins:block.endMins}
+    resizeState.current={blockId:block.id,startY:e.clientY,origEndMins:block.endMins,origStartMins:block.startMins,edge}
     setResizingId(block.id); setDragBlocks(blocks.map(b=>({...b})))
   }
   const handleMouseMove = useCallback(e=>{
     if(resizeState.current){
-      const{blockId,startY,origEndMins}=resizeState.current
+      const{blockId,startY,origEndMins,origStartMins,edge}=resizeState.current
       const delta=Math.round(((e.clientY-startY)/HOUR_H)*60/15)*15
       const block=blocks.find(b=>b.id===blockId); if(!block)return
-      const newEnd=Math.max(block.startMins+MIN_BLOCK,Math.min(sleepMin,origEndMins+delta))
-      setDragBlocks(prev=>(prev||blocks).map(b=>b.id===blockId?{...b,endMins:newEnd,endTime:toTime(newEnd)}:b))
+      if(edge==='top'){
+        const newStart=Math.max(wakeMin,Math.min(block.endMins-MIN_BLOCK,origStartMins+delta))
+        setDragBlocks(prev=>(prev||blocks).map(b=>b.id===blockId?{...b,startMins:newStart,startTime:toTime(newStart)}:b))
+      } else {
+        const newEnd=Math.max(block.startMins+MIN_BLOCK,Math.min(sleepMin,origEndMins+delta))
+        setDragBlocks(prev=>(prev||blocks).map(b=>b.id===blockId?{...b,endMins:newEnd,endTime:toTime(newEnd)}:b))
+      }
       return
     }
     if(!dragState.current)return
@@ -1000,8 +1008,16 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
   },[blocks,wakeMin,sleepMin])
   const handleMouseUp = useCallback(()=>{
     if(resizeState.current){
-      const{blockId}=resizeState.current; resizeState.current=null; setResizingId(null)
-      if(dragBlocks){ const r=dragBlocks.find(b=>b.id===blockId); if(r)setBlocks(blocks.map(b=>b.id===blockId?{...b,endMins:r.endMins,endTime:r.endTime}:b)); setDragBlocks(null) }
+      const{blockId,edge}=resizeState.current; resizeState.current=null; setResizingId(null)
+      if(dragBlocks){
+        const r=dragBlocks.find(b=>b.id===blockId)
+        if(r) setBlocks(blocks.map(b=>b.id===blockId
+          ? edge==='top'
+            ? {...b,startMins:r.startMins,startTime:r.startTime}
+            : {...b,endMins:r.endMins,endTime:r.endTime}
+          : b))
+        setDragBlocks(null)
+      }
       return
     }
     if(!dragState.current)return
@@ -1054,6 +1070,31 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     setSidebarDragTask(null); setDragOverMins(null)
   }
 
+  // Drop a task from the weekly panel onto a specific day column
+  const handleWeekColDrop = useCallback((ds, task) => {
+    const cb = getClassBlocks(ds, settings)
+    const gc = getTimedGCal(ds, settings)
+    const existing = loadBlocks(ds)
+    const allFixed = [...cb, ...gc, ...existing].filter(b => b.startMins != null).sort((a,b) => a.startMins - b.startMins)
+    const free = calcFreeSlots(allFixed, wakeMin, sleepMin)
+    const dur = task.duration || 45
+    const slot = free.find(s => s.end - s.start >= dur)
+    const start = slot ? slot.start : wakeMin
+    const end = Math.min(sleepMin, start + dur)
+    const newBlock = {
+      id: uid(), type: task.type || 'study',
+      startMins: start, endMins: end,
+      startTime: toTime(start), endTime: toTime(end),
+      title: task.label, emoji: task.emoji,
+      color: task.color, bg: task.bg, border: task.border,
+      subjectKey: task.subjectKey, locked: false,
+    }
+    const updated = [...existing, newBlock]
+    saveBlocks(ds, updated)
+    if (ds === dateStr) setBlocks(updated)
+    setWeekBlockRev(r => r + 1)
+  }, [settings, wakeMin, sleepMin, dateStr, setBlocks])
+
   // Household due today
   const houseDueToday = household.filter(h=>{
     if(h.preferredDay!==undefined&&h.preferredDay!==dow)return false
@@ -1098,13 +1139,10 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         <div style={{marginLeft:'auto',display:'flex',gap:7,flexWrap:'wrap',alignItems:'center'}}>
           {canUndo&&<Btn onClick={()=>{const p=history.current.pop();if(!p)return;setBlocksRaw(cur=>{redoStack.current.push(cur);setCanRedo(true);return cur});setBlocksRaw(p);saveBlocks(dateStr,p);setCanUndo(history.current.length>0)}} bg="#f5f5f5" color="#666" title="Desfazer (Ctrl+Z)">↩ Desfazer</Btn>}
           {canRedo&&<Btn onClick={()=>{const n=redoStack.current.pop();if(!n)return;history.current.push(n);setBlocksRaw(n);saveBlocks(dateStr,n);setCanUndo(true);setCanRedo(redoStack.current.length>0)}} bg="#f5f5f5" color="#666" title="Refazer (Ctrl+Y)">↪ Refazer</Btn>}
-          <Btn onClick={exportICS} bg="#ecfeff" color="#0891b2" title="Exportar para calendário">📤 Exportar</Btn>
+
           <Btn onClick={()=>setShowClassEditor(true)} bg="#f5f3ff" color="#7c3aed"><Settings2 size={13}/> Aulas</Btn>
           <Btn onClick={()=>setShowHouseModal(true)} bg="#fffbeb" color="#d97706">🏠 Domésticas</Btn>
           <Btn onClick={()=>{setEditingBlock(null);setPrefilledTime(null);setShowBlockModal(true)}} bg="#f0fdf4" color="#16a34a"><Plus size={13}/> Bloco</Btn>
-          {blocks.length>0&&<Btn onClick={()=>handleAutoSchedule(true)} disabled={aiLoading} bg="#fdf2f7" color="#db2777" title="Mantém blocos existentes e preenche só os slots livres">
-            <Zap size={13}/> Preencher livres
-          </Btn>}
           <Btn onClick={()=>handleAutoSchedule(false)} disabled={aiLoading} solid color="#db2777" bg="#fdf2f7">
             <Zap size={13}/> {aiLoading?'A pensar...':(localStorage.getItem('groq-key')?'Auto-agendar ✨':'Auto-agendar')}
           </Btn>
@@ -1173,6 +1211,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
 
       {/* ─── Week View ─── */}
       {weekView?(
+        <>
         <div style={{background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',overflow:'hidden',overflowX:'auto'}}>
           <div style={{display:'grid',gridTemplateColumns:`48px repeat(7,1fr)`,minWidth:700}}>
             <div style={{borderBottom:'1px solid #ececec'}}/>
@@ -1198,9 +1237,13 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
               ))}
             </div>
             {weekDays.map((d,i)=>{
-              const ds=toDateStr(d),dayBs=weekDayBlocks[ds]||[],isSel=ds===dateStr
+              const ds=toDateStr(d),dayBs=weekDayBlocks[ds]||[],isSel=ds===dateStr,isDragOver=dragOverWeekDay===ds
               return (
-                <div key={ds} style={{position:'relative',borderLeft:'1px solid #ececec',background:isSel?'#fafafa':'transparent'}}>
+                <div key={ds}
+                  onDragOver={weekPanelDragTask?e=>{e.preventDefault();setDragOverWeekDay(ds)}:undefined}
+                  onDragLeave={weekPanelDragTask?()=>setDragOverWeekDay(null):undefined}
+                  onDrop={weekPanelDragTask?e=>{e.preventDefault();handleWeekColDrop(ds,weekPanelDragTask);setWeekPanelDragTask(null);setDragOverWeekDay(null)}:undefined}
+                  style={{position:'relative',borderLeft:'1px solid #ececec',background:isDragOver?'#fdf2f7':isSel?'#fafafa':'transparent',transition:'background 0.15s'}}>
                   {hours.map(m=><div key={m} style={{height:HOUR_H,borderTop:'1px solid #f0f0f0'}}/>)}
                   {dayBs.filter(b=>b.startMins!=null).map(block=>{
                     const top=toPx(block.startMins-wakeMin),h=Math.max(toPx(block.endMins-block.startMins),12)
@@ -1218,6 +1261,77 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
             })}
           </div>
         </div>
+
+        {/* ─── Weekly task compilation ─── */}
+        <div style={{marginTop:14,background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',padding:'16px 20px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+            <p style={{fontSize:'0.65rem',fontWeight:700,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em'}}>
+              Tarefas da semana
+            </p>
+            <p style={{fontSize:'0.62rem',color:'var(--gray-300)',marginLeft:'auto'}}>arrasta para o dia ↑</p>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:14}}>
+            {weekDays.map(d=>{
+              const ds=toDateStr(d)
+              const scheduledTitles=new Set((weekDayBlocks[ds]||[]).map(b=>b.title))
+              const done=loadDone(ds)
+              const groups=getTasksForDay(d.getDay(),settings)
+              const matOvr=loadMatrixOvr()
+              const tasks=groups.flatMap(g=>{
+                const subj=subjects.find(s=>s.key===g.subjectKey)
+                return g.tasks.map(t=>{
+                  const q=matOvr[t.id]||autoClassify(t.id,t.label)
+                  return {
+                    id:t.id, label:t.label,
+                    emoji:subj?.emoji||'📚',
+                    color:subj?.color||STYLES.study.color,
+                    bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,
+                    border:subj?.color?`${subj.color}66`:STYLES.study.border,
+                    type:'study', subjectKey:g.subjectKey,
+                    duration:t.duration||estimateDuration(t.label,q),
+                    isDone:!!done[t.id],
+                    isScheduled:scheduledTitles.has(t.label),
+                  }
+                })
+              })
+              if(tasks.length===0)return null
+              const isT=ds===toDateStr(today)
+              return (
+                <div key={ds}>
+                  <p style={{fontSize:'0.72rem',fontWeight:700,color:isT?'var(--rose-400)':'var(--gray-600)',marginBottom:6,borderBottom:'1px solid var(--gray-100)',paddingBottom:4}}>
+                    {DAY_FULL[d.getDay()]} <span style={{fontWeight:500,color:'var(--gray-400)'}}>{d.getDate()}</span>
+                  </p>
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {tasks.map(t=>(
+                      <div key={t.id}
+                        draggable={!t.isDone&&!t.isScheduled}
+                        onDragStart={!t.isDone&&!t.isScheduled?()=>setWeekPanelDragTask(t):undefined}
+                        onDragEnd={()=>{setWeekPanelDragTask(null);setDragOverWeekDay(null)}}
+                        style={{
+                          display:'flex',alignItems:'center',gap:6,
+                          padding:'4px 8px',borderRadius:7,
+                          background:t.isDone?'var(--gray-50)':t.isScheduled?'#f0fdf4':'var(--white)',
+                          border:`1px solid ${t.isDone?'var(--gray-100)':t.isScheduled?'#86efac':'var(--gray-200)'}`,
+                          opacity:weekPanelDragTask?.id===t.id?0.4:t.isDone?0.5:1,
+                          cursor:t.isDone||t.isScheduled?'default':'grab',
+                          transition:'opacity 0.15s',
+                        }}>
+                        <span style={{fontSize:'0.8rem',flexShrink:0}}>{t.emoji}</span>
+                        <span style={{flex:1,fontSize:'0.75rem',fontWeight:500,color:t.isDone?'var(--gray-400)':'var(--gray-700)',textDecoration:t.isDone?'line-through':'none',lineHeight:1.3}}>
+                          {t.label}
+                        </span>
+                        {!t.isDone&&!t.isScheduled&&<span style={{fontSize:'0.58rem',color:'var(--gray-400)',flexShrink:0,background:'var(--gray-50)',borderRadius:4,padding:'1px 4px',border:'1px solid var(--gray-200)'}}>{fmtDur(t.duration)}</span>}
+                        {t.isScheduled&&!t.isDone&&<span style={{fontSize:'0.58rem',fontWeight:700,color:'#16a34a',flexShrink:0}}>✓</span>}
+                        {t.isDone&&<span style={{fontSize:'0.58rem',color:'var(--gray-300)',flexShrink:0}}>✓</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        </>
       ):(
         /* ─── Day view ─── */
         <div style={{display:'grid',gridTemplateColumns:'1fr 272px',gap:18,alignItems:'start'}}>
@@ -1297,7 +1411,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                         boxShadow:isDrag?'0 4px 20px rgba(0,0,0,0.14)':'none',
                         transition:isDrag?'none':'opacity 0.2s',
                         animationDelay:`${idx*0.04}s`}}>
-                      {hasConf&&<span style={{position:'absolute',top:2,right:2,fontSize:'0.6rem',zIndex:3}}>⚠️</span>}
+                      {hasConf&&<span style={{position:'absolute',top:3,left:6,fontSize:'0.6rem',zIndex:3}}>⚠️</span>}
                       <div style={{display:'flex',alignItems:'center',gap:5,minWidth:0,flex:1}}>
                         {block.emoji&&<span style={{fontSize:small?'0.72rem':'0.82rem',flexShrink:0}}>{block.emoji}</span>}
                         <span style={{fontSize:small?'0.7rem':'0.76rem',fontWeight:500,color:block.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:isDone?'line-through':'none'}}>
@@ -1312,7 +1426,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                           onClick={e=>e.stopPropagation()}
                           style={small
                             ? {position:'absolute',right:0,top:0,bottom:0,display:'flex',alignItems:'center',gap:1,paddingRight:2,paddingLeft:6,zIndex:5,background:`linear-gradient(to right, transparent, ${block.bg||'#f5f3ff'} 30%)`}
-                            : {marginLeft:'auto',display:'flex',gap:2,flexShrink:0}
+                            : {position:'absolute',top:3,right:4,display:'flex',gap:1,zIndex:5,background:`linear-gradient(to right, transparent, ${block.bg||'#f5f3ff'} 25%)`,paddingLeft:10}
                           }>
                           {canPom&&!small&&(
                             <button className="sched-icon-btn" title="Iniciar Pomodoro"
@@ -1343,10 +1457,12 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                       {block.locked&&block.subtitle&&!small&&(
                         <span style={{fontSize:'0.62rem',color:(block.color||'#666')+'88'}}>{block.subtitle}</span>
                       )}
-                      {!block.locked&&(
-                        <div onMouseDown={e=>handleResizeDown(e,block)}
+                      {!block.locked&&<>
+                        <div onMouseDown={e=>handleResizeDown(e,block,'top')}
+                          style={{position:'absolute',top:0,left:0,right:0,height:6,cursor:'ns-resize',background:'transparent',zIndex:11}}/>
+                        <div onMouseDown={e=>handleResizeDown(e,block,'bottom')}
                           style={{position:'absolute',bottom:0,left:0,right:0,height:8,cursor:'ns-resize',background:'transparent',zIndex:10}}/>
-                      )}
+                      </>}
                     </div>
                   )
                 })}
@@ -1425,15 +1541,6 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
               </div>
             )}
 
-            {/* Templates */}
-            <div className="sched-card">
-              <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>💾 Template</p>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                <Btn onClick={saveTemplate} bg="#f0fdf4" color="#16a34a">💾 Guardar</Btn>
-                {templateBlocks.length>0&&<Btn onClick={applyTemplate} bg="#ecfeff" color="#0891b2">📋 Aplicar ({templateBlocks.length})</Btn>}
-              </div>
-            </div>
-
             {/* Week chart */}
             <div className="sched-card">
               <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>📊 Semana</p>
@@ -1452,12 +1559,6 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
               </div>
             </div>
 
-            {/* Tip */}
-            <div className="sched-card" style={{background:'var(--gray-50)',border:'1px solid #e8e8e8'}}>
-              <p style={{fontSize:'0.68rem',color:'var(--gray-400)',lineHeight:1.6}}>
-                💡 Clica na linha do tempo para adicionar um bloco à hora escolhida. Arrasta para mover, puxa a borda inferior para redimensionar.
-              </p>
-            </div>
           </div>
         </div>
       )}

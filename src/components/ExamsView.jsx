@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { Plus, X, ChevronDown, ChevronUp, Trash2, GripVertical } from "lucide-react"
+import { Plus, X, ChevronDown, ChevronUp, Trash2, GripVertical, Pencil } from "lucide-react"
 import { CalendarEmoji } from './CalendarEmoji'
 import { CONFIDENCE, EVENT_TYPES } from '../constants'
 import { daysUntil } from '../utils/dates'
@@ -36,11 +36,13 @@ export default function ExamsView({ settings }) {
 
   const [selectedSubject, setSelectedSubject] = useState(firstSubjectName)
   const [showForm, setShowForm]               = useState(false)
+  const [editingExamId, setEditingExamId]     = useState(null)
   const [expanded, setExpanded]               = useState(null)
   // dragging: { topic, fromDate } — fromDate is null when dragging from topic list
   const [dragging, setDragging]               = useState(null)
   const [dragOver, setDragOver]               = useState(null)
   const [newTopic, setNewTopic]               = useState("")
+  const [newDoubt, setNewDoubt]               = useState({}) // { [topicId]: string }
   const { toasts, toast, dismiss }            = useToast()
 
   const [form, setForm] = useState({
@@ -57,11 +59,29 @@ export default function ExamsView({ settings }) {
   useEffect(() => save("topics", topics),           [topics])
   useEffect(() => save("exam-schedule", schedule),  [schedule])
 
-  function addExam() {
-    if (!form.date) return
-    setExams(prev => [...prev, { id: Date.now(), ...form, ects: form.ects ? parseFloat(form.ects) : null, sheets: [] }])
+  const emptyForm = { subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, ects: "", notes: "" }
+
+  function openEditForm(exam) {
+    setForm({ subject: exam.subject, type: exam.type, date: exam.date, minGrade: exam.minGrade, ects: exam.ects ?? "", notes: exam.notes || "" })
+    setEditingExamId(exam.id)
+    setShowForm(true)
+  }
+
+  function closeForm() {
     setShowForm(false)
-    setForm({ subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, ects: "", notes: "" })
+    setEditingExamId(null)
+    setForm(emptyForm)
+  }
+
+  function saveExam() {
+    if (!form.date) return
+    const payload = { ...form, ects: form.ects ? parseFloat(form.ects) : null }
+    if (editingExamId) {
+      setExams(prev => prev.map(e => e.id === editingExamId ? { ...e, ...payload } : e))
+    } else {
+      setExams(prev => [...prev, { id: Date.now(), ...payload, sheets: [] }])
+    }
+    closeForm()
   }
 
   function updateActualGrade(id, grade) {
@@ -95,12 +115,34 @@ export default function ExamsView({ settings }) {
 
   function addTopic() {
     if (!newTopic.trim()) return
-    setTopics({ ...topics, [selectedSubject]: [...(topics[selectedSubject] || []), { id: Date.now(), name: newTopic, confidence: "unknown", doubts: "" }] })
+    setTopics({ ...topics, [selectedSubject]: [...(topics[selectedSubject] || []), { id: Date.now(), name: newTopic, confidence: "unknown", doubts: [] }] })
     setNewTopic("")
   }
 
   function updateTopic(id, field, value) {
     setTopics({ ...topics, [selectedSubject]: subjectTopics.map(t => t.id === id ? { ...t, [field]: value } : t) })
+  }
+
+  // Normalize doubts: handle legacy string format and missing field
+  function getDoubts(topic) {
+    if (!topic.doubts) return []
+    if (typeof topic.doubts === "string") return topic.doubts.trim() ? [{ id: 0, text: topic.doubts }] : []
+    return topic.doubts
+  }
+
+  function addDoubt(topicId) {
+    const text = (newDoubt[topicId] || "").trim()
+    if (!text) return
+    setTopics({ ...topics, [selectedSubject]: subjectTopics.map(t =>
+      t.id === topicId ? { ...t, doubts: [...getDoubts(t), { id: Date.now(), text }] } : t
+    )})
+    setNewDoubt(d => ({ ...d, [topicId]: "" }))
+  }
+
+  function removeDoubt(topicId, doubtId) {
+    setTopics({ ...topics, [selectedSubject]: subjectTopics.map(t =>
+      t.id === topicId ? { ...t, doubts: getDoubts(t).filter(d => d.id !== doubtId) } : t
+    )})
   }
 
   function removeTopic(id) {
@@ -265,7 +307,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           <h1>🎯 Exames & Estudo</h1>
           <p className="subtitle">{exams.length === 0 ? "Nenhum evento registado" : `${exams.length} evento${exams.length !== 1 ? "s" : ""} registado${exams.length !== 1 ? "s" : ""}`}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}>
+        <button className="btn btn-primary" onClick={() => { setEditingExamId(null); setForm(emptyForm); setShowForm(v => !v) }}>
           <Plus size={14} /> Novo evento
         </button>
       </div>
@@ -274,8 +316,8 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
       {showForm && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-header">
-            <span className="card-title">Novo evento de avaliação</span>
-            <button className="btn-ghost btn" onClick={() => setShowForm(false)}><X size={14} /></button>
+            <span className="card-title">{editingExamId ? "Editar evento" : "Novo evento de avaliação"}</span>
+            <button className="btn-ghost btn" onClick={closeForm}><X size={14} /></button>
           </div>
           <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -309,8 +351,10 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
               <input className="form-input" value={form.notes} placeholder="Notas sobre o evento…" onChange={e => setForm({ ...form, notes: e.target.value })} />
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={addExam} disabled={!form.date}><Plus size={14} /> Guardar</button>
+              <button className="btn btn-secondary" onClick={closeForm}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveExam} disabled={!form.date}>
+                {editingExamId ? "Guardar alterações" : <><Plus size={14} /> Guardar</>}
+              </button>
             </div>
           </div>
         </div>
@@ -396,10 +440,13 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                     <div style={{ fontSize: "0.78rem", color: "var(--gray-400)", fontWeight: 500 }}>
                       {exam.type} · {new Date(exam.date).toLocaleDateString("pt-PT", { day: "numeric", month: "long" })} · Meta: {exam.minGrade}/20{exam.ects ? ` · ${exam.ects} ECTS` : ''}
                     </div>
-                    {studyH > 0 && <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", marginTop: 2 }}>⏱️ {studyH}h de estudo registadas nesta cadeira</div>}
+                    {studyH > 0 && ['Exame','Teste','Mini-teste'].includes(exam.type) && <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", marginTop: 2 }}>⏱️ {studyH}h de estudo registadas nesta cadeira</div>}
                     {exam.notes && <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 3 }}>{exam.notes}</div>}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                    <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); openEditForm(exam) }} style={{ padding: "5px 8px" }} title="Editar">
+                      <Pencil size={14} />
+                    </button>
                     <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); removeExam(exam.id) }} style={{ padding: "5px 8px" }}>
                       <Trash2 size={14} />
                     </button>
@@ -468,31 +515,62 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
               {subjectTopics.map(topic => {
                 const conf = CONFIDENCE.find(c => c.id === topic.confidence)
+                const doubts = getDoubts(topic)
                 return (
                   <div key={topic.id} style={{
-                    display: "flex", alignItems: "center", gap: 10,
                     background: "var(--gray-50)", borderRadius: "var(--radius-sm)",
-                    padding: "8px 12px", border: "1px solid var(--gray-100)",
+                    border: "1px solid var(--gray-100)", overflow: "hidden",
                   }}>
-                    <span style={{ flex: 1, fontSize: "0.85rem", fontWeight: 500, color: "var(--gray-700)" }}>{topic.name}</span>
-                    <select
-                      className="form-input"
-                      value={topic.confidence}
-                      onChange={e => updateTopic(topic.id, "confidence", e.target.value)}
-                      style={{ width: "auto", fontSize: "0.78rem", padding: "4px 8px", background: conf?.bg, color: conf?.color, fontWeight: 600, border: "none" }}
-                    >
-                      {CONFIDENCE.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
-                    <input
-                      className="form-input"
-                      value={topic.doubts}
-                      placeholder="Dúvidas…"
-                      onChange={e => updateTopic(topic.id, "doubts", e.target.value)}
-                      style={{ width: 180, fontSize: "0.78rem", padding: "4px 8px" }}
-                    />
-                    <button className="btn btn-ghost" onClick={() => removeTopic(topic.id)} style={{ padding: "4px 6px" }}>
-                      <X size={13} />
-                    </button>
+                    {/* Topic header */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px" }}>
+                      <span style={{ flex: 1, fontSize: "0.85rem", fontWeight: 500, color: "var(--gray-700)" }}>{topic.name}</span>
+                      <select
+                        className="form-input"
+                        value={topic.confidence}
+                        onChange={e => updateTopic(topic.id, "confidence", e.target.value)}
+                        style={{ width: "auto", fontSize: "0.78rem", padding: "4px 8px", background: conf?.bg, color: conf?.color, fontWeight: 600, border: "none" }}
+                      >
+                        {CONFIDENCE.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                      </select>
+                      <button className="btn btn-ghost" onClick={() => removeTopic(topic.id)} style={{ padding: "4px 6px" }}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {/* Doubts section */}
+                    <div style={{ padding: "0 12px 10px", borderTop: "1px solid var(--gray-100)" }}>
+                      <p style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.06em", margin: "8px 0 6px" }}>
+                        Dúvidas {doubts.length > 0 && <span style={{ background: "var(--rose-100)", color: "var(--rose-500)", borderRadius: 8, padding: "0 5px", fontWeight: 700 }}>{doubts.length}</span>}
+                      </p>
+                      {doubts.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+                          {doubts.map(d => (
+                            <div key={d.id} style={{ display: "flex", alignItems: "flex-start", gap: 6, background: "var(--white)", border: "1px solid var(--gray-200)", borderRadius: 6, padding: "5px 8px" }}>
+                              <span style={{ flex: 1, fontSize: "0.8rem", color: "var(--gray-700)", lineHeight: 1.4 }}>❓ {d.text}</span>
+                              <button
+                                onClick={() => removeDoubt(topic.id, d.id)}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--gray-300)", fontSize: "0.85rem", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          className="form-input"
+                          value={newDoubt[topic.id] || ""}
+                          onChange={e => setNewDoubt(d => ({ ...d, [topic.id]: e.target.value }))}
+                          onKeyDown={e => e.key === "Enter" && addDoubt(topic.id)}
+                          placeholder="Adicionar dúvida…"
+                          style={{ flex: 1, fontSize: "0.78rem", padding: "5px 8px" }}
+                        />
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => addDoubt(topic.id)}
+                          disabled={!(newDoubt[topic.id] || "").trim()}
+                          style={{ padding: "4px 10px", fontSize: "0.78rem" }}>
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )
               })}

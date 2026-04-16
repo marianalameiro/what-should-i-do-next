@@ -12,7 +12,11 @@ export function getTasksForDay(dayOfWeek, settingsOverride) {
     if (!subject) return null
     const tasks = isWeekend
       ? [{ id: `${key}-sheet-weekend`, label: 'Ficha semanal da matéria', highlight: true }]
-      : (subject.methods || []).map((method, i) => ({ id: `${key}-method-${i}`, label: method }))
+      : (subject.methods || []).map((method, i) => {
+          const label = typeof method === 'string' ? method : (method?.label || '')
+          const duration = typeof method === 'object' && method?.duration ? Number(method.duration) : undefined
+          return { id: `${key}-method-${i}`, label, ...(duration ? { duration } : {}) }
+        })
     return { subjectKey: key, tasks }
   }).filter(Boolean)
 }

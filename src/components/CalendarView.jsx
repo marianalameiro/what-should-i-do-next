@@ -628,7 +628,7 @@ export function CalendarView() {
       {/* View switcher + navigation */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {['month','week','list'].map(v => (
+          {['month','week'].map(v => (
             <button key={v} onClick={() => setView(v)} style={{
               padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
               border: `2px solid ${view === v ? 'var(--rose-400)' : 'var(--gray-200)'}`,
@@ -636,7 +636,7 @@ export function CalendarView() {
               color: view === v ? 'var(--rose-400)' : 'var(--gray-500)',
               display: 'inline-flex', alignItems: 'center', gap: 5,
             }}>
-              {v === 'month' ? <><CalendarEmoji /> Mensal</> : v === 'week' ? '📋 Semanal' : '📃 Lista'}
+              {v === 'month' ? <><CalendarEmoji /> Mensal</> : '📋 Semanal'}
             </button>
           ))}
         </div>
@@ -665,7 +665,7 @@ export function CalendarView() {
             ✕ Limpar filtros
           </button>
         )}
-        {Object.entries(EVENT_TYPES).filter(([k]) => k !== 'study').map(([k, t]) => {
+        {Object.entries(EVENT_TYPES).filter(([k]) => k !== 'study' && k !== 'google').map(([k, t]) => {
           const active = activeFilters.has(k)
           return (
             <button
@@ -690,7 +690,6 @@ export function CalendarView() {
       {/* View content */}
       {view === 'month' && renderMonth()}
       {view === 'week'  && renderWeek()}
-      {view === 'list'  && renderList()}
 
     </div>
   )

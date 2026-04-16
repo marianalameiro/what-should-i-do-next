@@ -8,6 +8,10 @@ function getSettingsPath() {
   return path.join(app.getPath('userData'), 'user-settings.json')
 }
 
+function getWidgetDataPath() {
+  return path.join(app.getPath('home'), '.wsidnext-widget.json')
+}
+
 function createWindow() {
   const isDev = process.env.ELECTRON_DEV === '1'
 
@@ -103,6 +107,34 @@ app.whenReady().then(() => {
   const swPath = path.join(app.getPath('userData'), 'Service Worker')
   try { if (fs.existsSync(swPath)) fs.rmSync(swPath, { recursive: true, force: true }) } catch {}
 
+  // Observa o ficheiro da fila da widget e notifica o renderer imediatamente
+  const queuePath = path.join(app.getPath('home'), '.wsidnext-done-queue.json')
+  let queueWatcher = null
+  let watchDebounce = null
+  function startQueueWatcher() {
+    try {
+      queueWatcher = fs.watch(queuePath, () => {
+        clearTimeout(watchDebounce)
+        watchDebounce = setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('done-queue-changed')
+          }
+        }, 100)
+      })
+    } catch {}
+  }
+  // Começa a observar se o ficheiro já existe, caso contrário espera pela sua criação
+  if (fs.existsSync(queuePath)) {
+    startQueueWatcher()
+  } else {
+    const dirWatcher = fs.watch(app.getPath('home'), (event, filename) => {
+      if (filename === '.wsidnext-done-queue.json' && fs.existsSync(queuePath)) {
+        dirWatcher.close()
+        startQueueWatcher()
+      }
+    })
+  }
+
   ipcMain.on('move-window', (event, { dx, dy }) => {
     if (!mainWindow) return
     const [x, y] = mainWindow.getPosition()
@@ -122,6 +154,44 @@ app.whenReady().then(() => {
   ipcMain.handle('save-settings', (event, data) => {
     try {
       fs.writeFileSync(getSettingsPath(), JSON.stringify(data), 'utf8')
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle('export-widget-data', (event, data) => {
+    try {
+      fs.writeFileSync(getWidgetDataPath(), JSON.stringify(data, null, 2), 'utf8')
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle('read-done-queue', () => {
+    try {
+      const qf = path.join(app.getPath('home'), '.wsidnext-done-queue.json')
+      if (!fs.existsSync(qf)) return []
+      return JSON.parse(fs.readFileSync(qf, 'utf8'))
+    } catch { return [] }
+  })
+
+  ipcMain.handle('clear-done-queue', () => {
+    try {
+      const qf = path.join(app.getPath('home'), '.wsidnext-done-queue.json')
+      fs.writeFileSync(qf, '[]', 'utf8')
+      return true
+    } catch { return false }
+  })
+
+  ipcMain.handle('export-pomodoro-state', (event, data) => {
+    try {
+      const widgetPath = getWidgetDataPath()
+      let existing = {}
+      try { existing = JSON.parse(fs.readFileSync(widgetPath, 'utf8')) } catch {}
+      existing.pomodoro = data
+      fs.writeFileSync(widgetPath, JSON.stringify(existing, null, 2), 'utf8')
       return true
     } catch {
       return false

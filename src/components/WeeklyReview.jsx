@@ -261,6 +261,18 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
               </p>
               <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{todayReview.date} · {todayReview.hoursThisWeek}h estudadas</p>
             </div>
+            <button
+              className="btn btn-secondary"
+              style={{ flexShrink: 0, fontSize: '0.78rem' }}
+              onClick={() => {
+                const reviewEmail = (() => { try { return JSON.parse(localStorage.getItem('user-settings') || '{}').reviewEmail || '' } catch { return '' } })()
+                const subject = encodeURIComponent(`Weekly Review — Semana ${todayReview.week}`)
+                const body = encodeURIComponent(`Weekly Review — Semana ${todayReview.week}\n${todayReview.date} · ${todayReview.hoursThisWeek}h estudadas\n\n${todayReview.feedback}`)
+                window.location.href = `mailto:${reviewEmail}?subject=${subject}&body=${body}`
+              }}
+            >
+              📧 Enviar por email
+            </button>
           </div>
           {renderFeedback(todayReview.feedback)}
         </div>

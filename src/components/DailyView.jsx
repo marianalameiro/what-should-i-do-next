@@ -90,6 +90,7 @@ export default function DailyView() {
   const [done, setDone]                 = useState(() => loadDone(today))
   const [extraTasks, setExtraTasks]     = useState(loadExtra)
   const [newTask, setNewTask]           = useState('')
+  const [newTaskEmoji, setNewTaskEmoji] = useState('')
   const [newTaskQuadrant, setNewTaskQuadrant] = useState('Q1')
   const [newTaskMins, setNewTaskMins]   = useState('')
   const [newTaskRecurrence, setNewTaskRecurrence] = useState('none')
@@ -121,11 +122,83 @@ export default function DailyView() {
   const currentEnergy = ENERGY_LEVELS.find(e => e.id === energyLevels[energyKey]) || null
 
   useEffect(() => { setDone(loadDone(selectedDate)) }, [dateStr])
+
+  // Aplica tarefas marcadas como feitas na widget — reage ao evento de storage disparado pelo App.jsx
+  useEffect(() => {
+    const todayStr = new Date().toDateString()
+    const handler = (e) => {
+      if (e.key !== `tasks-${todayStr}`) return
+      if (dateStr !== todayStr) return // a utilizadora está a ver outro dia
+      try { setDone(JSON.parse(e.newValue || '{}')) } catch {}
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [dateStr])
   useEffect(() => { localStorage.setItem(`tasks-${dateStr}`, JSON.stringify(done)) }, [done, dateStr])
   useEffect(() => { saveExtra(extraTasks) }, [extraTasks])
   useEffect(() => { saveMatrix(matrixOverrides) }, [matrixOverrides])
   useEffect(() => { saveEnergy(energyLevels) }, [energyLevels])
   useEffect(() => { localStorage.setItem('show-matrix', JSON.stringify(showMatrix)) }, [showMatrix])
+
+  // Exporta as tarefas de hoje + próximo exame para o widget do desktop (Übersicht)
+  useEffect(() => {
+    if (!window.electronAPI?.exportWidgetData) return
+    const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
+    const todayDone = loadDone(todayDate)
+    const subjectsMap = getSubjectsMap()
+    const taskGroups = getTasksForDay(todayDate.getDay())
+    const todayDow = todayDate.getDay()
+    const allTasks = [
+      ...taskGroups.flatMap(g => g.tasks.map(t => ({
+        id: t.id, label: t.label, subjectKey: g.subjectKey,
+        subjectName: subjectsMap[g.subjectKey]?.name || g.subjectKey,
+        subjectColor: subjectsMap[g.subjectKey]?.color || '#e5e7eb',
+        subjectEmoji: subjectsMap[g.subjectKey]?.emoji || '📚',
+        done: !!todayDone[t.id], isExtra: false,
+      }))),
+      ...extraTasks
+        .filter(t => !t.recurrence || t.recurrence === 'daily' || (t.recurrence === 'weekly' && t.createdDow === todayDow))
+        .map(t => ({
+          id: t.id, label: t.label, subjectKey: null,
+          subjectName: 'Extra', subjectColor: '#e5e7eb', subjectEmoji: '📌',
+          done: !!todayDone[t.id], isExtra: true,
+        })),
+    ]
+    // Próximos exames (sem nota final, ordenados por data)
+    const todayISO = todayDate.toISOString().split('T')[0]
+    const rawExams = (() => { try { return JSON.parse(localStorage.getItem('exams')) || [] } catch { return [] } })()
+    const settings = (() => { try { return JSON.parse(localStorage.getItem('user-settings')) || {} } catch { return {} } })()
+    const subjectsByName = Object.fromEntries((settings.subjects || []).map(s => [s.name, s]))
+    const upcomingExams = rawExams
+      .filter(e => e.date >= todayISO && e.actualGrade == null)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 3)
+      .map(e => {
+        const sub = subjectsByName[e.subject] || {}
+        const days = Math.round((new Date(e.date + 'T12:00:00') - todayDate) / 86400000)
+        return {
+          subject: e.subject,
+          type: e.type || 'Exame',
+          date: e.date,
+          days,
+          color: sub.color || '#e5e7eb',
+          emoji: sub.emoji || '📝',
+        }
+      })
+    const sessions = (() => { try { return JSON.parse(localStorage.getItem('study-sessions')) || [] } catch { return [] } })()
+    const todayHours = parseFloat(sessions
+      .filter(s => s.date === todayDate.toDateString())
+      .reduce((sum, s) => sum + (parseFloat(s.hours) || 0), 0)
+      .toFixed(1))
+    window.electronAPI.exportWidgetData({
+      date: todayDate.toDateString(),
+      tasks: allTasks,
+      doneCount: allTasks.filter(t => t.done).length,
+      totalCount: allTasks.length,
+      upcomingExams,
+      todayHours,
+    }).catch(() => {})
+  }, [done, extraTasks])
 
   // Regular tasks: mark as done for this day only
   const check = (id) => setDone(prev => ({ ...prev, [id]: true }))
@@ -161,6 +234,7 @@ export default function DailyView() {
     const id = `extra-${Date.now()}`
     const task = {
       id, label, isExtra: true,
+      emoji: newTaskEmoji.trim() || null,
       mins: newTaskMins ? parseInt(newTaskMins, 10) : null,
       recurrence: newTaskRecurrence !== 'none' ? newTaskRecurrence : null,
       createdDow: newTaskRecurrence !== 'none' ? new Date().getDay() : null,
@@ -170,6 +244,7 @@ export default function DailyView() {
     saveExtra(updated)
     setOverrides(prev => ({ ...prev, [id]: newTaskQuadrant }))
     setNewTask('')
+    setNewTaskEmoji('')
     setNewTaskMins('')
     setNewTaskRecurrence('none')
     setAddedTask(label)
@@ -179,28 +254,35 @@ export default function DailyView() {
   // Carry-forward: import incomplete extra tasks from a past day into today
   const carryForwardPastExtras = (pastDate) => {
     const pastDoneMap = loadDone(pastDate)
-    const incomplete = extraTasks.filter(t => !pastDoneMap[t.id] && !done[t.id])
-    if (incomplete.length === 0) return
-    // They're already global extra tasks — just mark them undone for today (no action needed since done is per-day)
-    // But also copy any schedule tasks that were not done
     const pastSchedule = getTasksForDay(pastDate.getDay())
-    const incompleteSched = pastSchedule.flatMap(g => g.tasks).filter(t => !pastDoneMap[t.id])
-    if (incompleteSched.length === 0 && incomplete.length === 0) return
-    // Add schedule tasks as extra tasks in today
+    const incompleteSched = pastSchedule.flatMap(g =>
+      g.tasks.filter(t => !pastDoneMap[t.id]).map(t => ({ ...t, subjectKey: g.subjectKey }))
+    )
+    if (incompleteSched.length === 0) return
     incompleteSched.forEach(t => {
       const alreadyAdded = extraTasks.some(e => e.label === t.label)
       if (!alreadyAdded) {
         const id = `extra-${Date.now()}-${t.id}`
-        const newT = { id, label: `${t.label} (de ${pastDate.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })})`, isExtra: true, carriedFrom: pastDate.toDateString() }
+        const emoji = SUBJECTS[t.subjectKey]?.emoji || null
+        const newT = { id, label: t.label, emoji, isExtra: true, carriedFrom: pastDate.toDateString() }
         setExtraTasks(prev => { const u = [...prev, newT]; saveExtra(u); return u })
         setOverrides(prev => ({ ...prev, [id]: autoClassify(id, t.label) }))
       }
     })
   }
 
-  const snoozeExtra = (taskId) => {
-    // Mark done for today — task re-appears tomorrow since done is per-day
-    setDone(prev => ({ ...prev, [taskId]: true }))
+  const snoozeTask = (task) => {
+    if (task.isExtra) {
+      // Extra tasks: mark done today → reappears tomorrow (done is per-day)
+      setDone(prev => ({ ...prev, [task.id]: true }))
+    } else {
+      // Scheduled tasks: mark done today + add as extra so it shows tomorrow
+      check(task.id)
+      const id = `extra-${Date.now()}-snoozed`
+      const emoji = task.subjectKey ? SUBJECTS[task.subjectKey]?.emoji || null : null
+      const newT = { id, label: task.label, emoji, isExtra: true }
+      setExtraTasks(prev => { const u = [...prev, newT]; saveExtra(u); return u })
+    }
   }
 
   const dragThrottleRef = useRef(0)
@@ -318,7 +400,7 @@ export default function DailyView() {
             width: 16, height: 16, borderRadius: '50%',
             border: `1.5px solid ${q.border}`, flexShrink: 0,
           }} />
-          {subject && <span style={{ fontSize: '0.8rem' }}>{subject.emoji}</span>}
+          {(subject?.emoji || task.emoji) && <span style={{ fontSize: '0.8rem' }}>{subject?.emoji || task.emoji}</span>}
           <span style={{ fontSize: '0.78rem', fontWeight: 500, color: q.text, flex: 1, lineHeight: 1.3 }}>
             {task.label}
             {task.recurrence && <span style={{ fontSize: '0.62rem', marginLeft: 4, opacity: 0.6 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
@@ -337,6 +419,11 @@ export default function DailyView() {
               <X size={11} />
             </button>
           )}
+          <button
+            onClick={e => { e.stopPropagation(); snoozeTask(task) }}
+            title="Adiar para amanhã"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: q.text, opacity: 0.5, padding: '0 2px', lineHeight: 1 }}
+          >↪</button>
           <button
             onClick={e => { e.stopPropagation(); setEditingId(editingId === task.id ? null : task.id) }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.7rem', color: q.text, opacity: 0.5, padding: '0 2px' }}
@@ -589,6 +676,11 @@ export default function DailyView() {
                     <div className="task-checkbox"><Check size={13} color="transparent" strokeWidth={3} /></div>
                     <span className="task-label">{task.label}</span>
                     {task.highlight && <span className="task-highlight">{isWeekend ? 'fim de semana' : 'última aula'}</span>}
+                    <button
+                      onClick={e => { e.stopPropagation(); snoozeTask({ ...task, subjectKey, isExtra: false }) }}
+                      title="Adiar para amanhã"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: '0.85rem', lineHeight: 1, flexShrink: 0 }}
+                    >↪</button>
                   </div>
                 ))}
               </div>
@@ -603,54 +695,15 @@ export default function DailyView() {
         </div>
       )}
 
-      {/* Filter bar */}
-      {pendingTasks.length > 0 && (
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-          <button onClick={() => setTaskFilter('all')} style={{ padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', border: `2px solid ${taskFilter === 'all' ? 'var(--gray-400)' : 'var(--gray-200)'}`, background: taskFilter === 'all' ? 'var(--gray-100)' : 'var(--white)', color: 'var(--gray-600)' }}>Todas</button>
-          {Object.entries(QUADRANTS).map(([qKey, q]) => (
-            byQuadrant[qKey]?.length > 0 || taskFilter === qKey ? (
-              <button key={qKey} onClick={() => setTaskFilter(taskFilter === qKey ? 'all' : qKey)} style={{ padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', border: `2px solid ${taskFilter === qKey ? q.border : 'var(--gray-200)'}`, background: taskFilter === qKey ? q.color : 'var(--white)', color: taskFilter === qKey ? q.text : 'var(--gray-400)' }}>{q.emoji} {q.label}</button>
-            ) : null
-          ))}
-        </div>
-      )}
 
-      {/* Add extra task */}
-      <div className="extra-section">
-        <p className="extra-title"><Plus size={15} /> Tarefas extra</p>
-        <div className="extra-input-row" style={{ marginBottom: 8 }}>
-          <input
-            type="text"
-            placeholder="Adicionar tarefa extra..."
-            value={newTask}
-            onChange={e => setNewTask(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addExtra()}
-          />
-          <button className="btn btn-primary" onClick={addExtra}><Plus size={15} /> Adicionar</button>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-          <input
-            type="number" min={5} max={480} placeholder="⏱ min (opcional)"
-            value={newTaskMins} onChange={e => setNewTaskMins(e.target.value)}
-            style={{ width: 130, fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 10px', background: 'var(--white)', color: 'var(--gray-900)' }}
-          />
-          <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)}
-            style={{ fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 10px', background: 'var(--white)', color: 'var(--gray-900)', cursor: 'pointer' }}>
-            <option value="none">Sem recorrência</option>
-            <option value="daily">🔁 Diária</option>
-            <option value="weekly">📅 Semanal</option>
-          </select>
-        </div>
-
-        {addedTask && (
-          <p style={{ fontSize: '0.78rem', color: 'var(--green-500)', fontWeight: 700, marginBottom: 6 }}>
-            ✓ "{addedTask}" adicionada!
-          </p>
-        )}
+      {/* Extra tasks */}
+      <div style={{ marginTop: 20, borderTop: '1px solid var(--gray-100)', paddingTop: 20 }}>
+        <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+          Tarefas extra
+        </p>
 
         {!showMatrix && extraTasks.filter(t => !done[t.id]).length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+          <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
             {extraTasks.filter(t => !done[t.id]).map((task, i) => (
               <div
                 key={task.id}
@@ -658,49 +711,66 @@ export default function DailyView() {
                 onDragStart={() => onExtraDragStart(i)}
                 onDragOver={(e) => onExtraDragOver(e, i)}
                 onDragEnd={onExtraDragEnd}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 10px', background: 'var(--white)',
-                  border: '1.5px solid var(--gray-200)', borderRadius: 8,
-                  cursor: 'grab', opacity: dragIdx === i ? 0.4 : 1,
-                  transition: 'opacity 0.15s',
-                }}
+                className="task-item"
+                style={{ cursor: 'grab', opacity: dragIdx === i ? 0.4 : 1 }}
               >
-                <span style={{ color: 'var(--gray-300)', fontSize: '1rem', lineHeight: 1 }}>⠿</span>
-                <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500, color: 'var(--gray-700)' }}>
-                  {task.label}
-                  {task.recurrence && <span style={{ marginLeft: 5, fontSize: '0.65rem', opacity: 0.6 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
-                </span>
-                {task.mins && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)' }}>{task.mins}min</span>}
-                <button
-                  onClick={() => snoozeExtra(task.id)}
-                  title="Adiar para amanhã"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 2px', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center' }}
-                >↪</button>
-                <button
-                  onClick={() => removeExtra(task.id)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: 0, display: 'flex', alignItems: 'center' }}
-                >
-                  <X size={13} />
+                <div className="task-checkbox" style={{ border: '1.5px solid var(--gray-300)' }}>
+                  <Check size={13} color="transparent" strokeWidth={3} />
+                </div>
+                {task.emoji
+                  ? <span style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1 }}>{task.emoji}</span>
+                  : null
+                }
+                <span className="task-label" style={{ color: 'var(--gray-700)' }}>{task.label}</span>
+                {task.mins && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)', flexShrink: 0, marginLeft: 'auto' }}>{task.mins}min</span>}
+                {task.recurrence && <span style={{ fontSize: '0.72rem', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
+                <button onClick={() => snoozeTask(task)} title="Adiar para amanhã"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 3px', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0 }}>↪</button>
+                <button onClick={() => removeExtra(task.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                  <X size={12} />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {Object.entries(QUADRANTS).map(([qKey, q]) => (
-            <button key={qKey} onClick={() => setNewTaskQuadrant(qKey)} style={{
-              padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
-              border: `2px solid ${newTaskQuadrant === qKey ? q.border : 'var(--gray-200)'}`,
-              background: newTaskQuadrant === qKey ? q.color : 'var(--white)',
-              color: newTaskQuadrant === qKey ? q.text : 'var(--gray-400)',
-            }}>{q.emoji} {q.label}</button>
-          ))}
+        {/* Add form */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input
+            type="text"
+            placeholder="😊"
+            value={newTaskEmoji}
+            onChange={e => setNewTaskEmoji(e.target.value)}
+            maxLength={2}
+            style={{ width: 38, textAlign: 'center', fontSize: '1rem', flexShrink: 0, fontFamily: 'inherit', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '7px 4px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
+          />
+          <input
+            type="text"
+            placeholder="Nova tarefa extra..."
+            value={newTask}
+            onChange={e => setNewTask(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addExtra()}
+            style={{ flex: 1, fontFamily: 'inherit', fontSize: '0.85rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '7px 12px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
+          />
+          <button className="btn btn-primary" onClick={addExtra} style={{ flexShrink: 0, padding: '7px 14px' }}>
+            <Plus size={14} />
+          </button>
         </div>
-        <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', fontWeight: 500, marginTop: 8 }}>
-          Clica numa tarefa extra para a concluir · o ✕ apaga-a permanentemente · ↪ adia para amanhã
-        </p>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            type="number" min={5} max={480} placeholder="⏱ min"
+            value={newTaskMins} onChange={e => setNewTaskMins(e.target.value)}
+            style={{ width: 80, fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 8px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
+          />
+          <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)}
+            style={{ fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 8px', background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer', outline: 'none' }}>
+            <option value="none">Sem recorrência</option>
+            <option value="daily">🔁 Diária</option>
+            <option value="weekly">📅 Semanal</option>
+          </select>
+          {addedTask && <span style={{ fontSize: '0.75rem', color: 'var(--green-500)', fontWeight: 700 }}>✓ adicionada!</span>}
+        </div>
       </div>
 
       <div style={{ marginTop: 32, borderTop: '1px solid var(--gray-100)', paddingTop: 32 }}>
