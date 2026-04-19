@@ -3,12 +3,12 @@ import { ChevronLeft, ChevronRight, Plus, Trash2, RefreshCw, Pencil } from 'luci
 import { CalendarEmoji, smartEmoji } from './CalendarEmoji'
 
 const EVENT_TYPES = {
-  exam:         { label: 'Exame/Teste',    color: '#dc2626', bg: '#fef2f2', emoji: '📝' },
-  presentation: { label: 'Apresentação',   color: '#16a34a', bg: '#f0fdf4', emoji: '🎤' },
-  milestone:    { label: 'Deadline',       color: '#2563eb', bg: '#dbeafe', emoji: '🚩' },
-  meeting:      { label: 'Reunião',        color: '#7c3aed', bg: '#f5f3ff', emoji: '🤝' },
-  deadline:     { label: 'Deadline avulsa',color: '#ea580c', bg: '#fff7ed', emoji: '⚡' },
-  class:        { label: 'Aula',           color: '#0891b2', bg: '#ecfeff', emoji: '📖' },
+  exam:         { label: 'Exame/Teste',    color: '#dc2626', bg: 'var(--red-50)',    emoji: '📝' },
+  presentation: { label: 'Apresentação',   color: '#16a34a', bg: 'var(--green-50)', emoji: '🎤' },
+  milestone:    { label: 'Deadline',       color: '#2563eb', bg: 'var(--blue-100)', emoji: '🚩' },
+  meeting:      { label: 'Reunião',        color: '#7c3aed', bg: 'var(--purple-50)',emoji: '🤝' },
+  deadline:     { label: 'Deadline avulsa',color: '#ea580c', bg: 'var(--orange-50)',emoji: '⚡' },
+  class:        { label: 'Aula',           color: '#0891b2', bg: 'var(--cyan-50)',  emoji: '📖' },
   other:        { label: 'Outro',          color: '#71717a', bg: '#fafafa', emoji: '📌' },
   study:        { label: 'Estudo',         color: '#d4688a', bg: '#fff5f7', emoji: '⏱️' },
   google:       { label: 'Google Cal',     color: '#1a73e8', bg: '#e8f0fe', emoji: '📆' },
@@ -293,7 +293,7 @@ export function CalendarView() {
       <div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, marginBottom: 2 }}>
           {DAY_NAMES.map(d => (
-            <div key={d} style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--gray-400)', padding: '6px 0', textTransform: 'uppercase', letterSpacing: 0.5 }}>{d}</div>
+            <div key={d} style={{ textAlign: 'center', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', padding: '6px 0', letterSpacing: 0.5 }}>{d}</div>
           ))}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
@@ -312,7 +312,7 @@ export function CalendarView() {
                   minHeight: 70,
                   background: isSelected ? 'var(--rose-50)' : 'var(--white)',
                   border: `1.5px solid ${isToday ? 'var(--rose-400)' : isSelected ? 'var(--rose-200)' : 'var(--gray-100)'}`,
-                  borderRadius: 8,
+                  borderRadius: 'var(--r)',
                   padding: '5px 6px',
                   cursor: 'pointer',
                   transition: 'all 0.1s',
@@ -320,7 +320,7 @@ export function CalendarView() {
                 }}
               >
                 <div style={{
-                  fontSize: '0.8rem', fontWeight: isToday ? 800 : 600,
+                  fontSize: 'var(--t-body)', fontWeight: isToday ? 800 : 600,
                   marginBottom: 3,
                   width: 22, height: 22,
                   background: isToday ? 'var(--rose-400)' : 'transparent',
@@ -335,7 +335,7 @@ export function CalendarView() {
                     const t = EVENT_TYPES[ev.type] || EVENT_TYPES.other
                     return (
                       <div key={ev.id} style={{
-                        fontSize: '0.62rem', fontWeight: 600,
+                        fontSize: 'var(--t-caption)', fontWeight: 600,
                         background: t.bg, color: t.color,
                         borderRadius: 3, padding: '1px 4px',
                         display: 'flex', alignItems: 'center', gap: 2,
@@ -347,7 +347,7 @@ export function CalendarView() {
                     )
                   })}
                   {dayEvents.length > 3 && (
-                    <div style={{ fontSize: '0.6rem', color: 'var(--gray-400)', fontWeight: 600 }}>+{dayEvents.length - 3}</div>
+                    <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>+{dayEvents.length - 3}</div>
                   )}
                 </div>
               </div>
@@ -357,8 +357,8 @@ export function CalendarView() {
 
         {/* Selected day detail */}
         {selectedDay && getEventsForDate(selectedDay).length > 0 && (
-          <div style={{ marginTop: 14, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
-            <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-700)', marginBottom: 10 }}>
+          <div style={{ marginTop: 14, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '14px 16px' }}>
+            <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', marginBottom: 10 }}>
               {new Date(selectedDay + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -368,14 +368,14 @@ export function CalendarView() {
                   <div key={ev.id} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 12px', background: t.bg,
-                    borderRadius: 8, border: `1px solid ${t.color}20`,
+                    borderRadius: 'var(--r)', border: `1px solid ${t.color}20`,
                   }}>
                     <span style={{ fontSize: '1rem' }}>{smartEmoji(t.emoji)}</span>
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 700, fontSize: '0.83rem', color: t.color }}>{ev.title}</p>
-                      {ev.subtitle && <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>{ev.subtitle}</p>}
-                      {ev.time && <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>🕐 {ev.time}</p>}
-                      {ev.notes && <p style={{ fontSize: '0.72rem', color: 'var(--gray-500)', marginTop: 2 }}>{ev.notes}</p>}
+                      <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: t.color }}>{ev.title}</p>
+                      {ev.subtitle && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{ev.subtitle}</p>}
+                      {ev.time && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>🕐 {ev.time}</p>}
+                      {ev.notes && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)', marginTop: 2 }}>{ev.notes}</p>}
                     </div>
                     {(ev.source === 'manual' || ev.source === 'manual-recurring') && (
                       <div style={{ display: 'flex', gap: 4 }}>
@@ -413,14 +413,14 @@ export function CalendarView() {
           const dayEvents = getEventsForDate(dateStr)
           const isToday = dateStr === todayStr
           return (
-            <div key={dateStr} style={{ background: isToday ? 'var(--rose-50)' : 'var(--white)', border: `1.5px solid ${isToday ? 'var(--rose-300)' : 'var(--gray-100)'}`, borderRadius: 10, padding: '10px 8px', minHeight: 100, overflow: 'hidden' }}>
-              <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', marginBottom: 2 }}>{DAY_NAMES[d.getDay()]}</p>
+            <div key={dateStr} style={{ background: isToday ? 'var(--rose-50)' : 'var(--white)', border: `1.5px solid ${isToday ? 'var(--rose-300)' : 'var(--gray-100)'}`, borderRadius: 'var(--r)', padding: '10px 8px', minHeight: 100, overflow: 'hidden' }}>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 2 }}>{DAY_NAMES[d.getDay()]}</p>
               <p style={{ fontSize: '1rem', fontWeight: 800, color: isToday ? 'var(--rose-400)' : 'var(--gray-800)', marginBottom: 8 }}>{d.getDate()}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {dayEvents.slice(0, 3).map(ev => {
                   const t = EVENT_TYPES[ev.type] || EVENT_TYPES.other
                   return (
-                    <div key={ev.id} style={{ fontSize: '0.65rem', fontWeight: 600, background: t.bg, color: t.color, borderRadius: 4, padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                    <div key={ev.id} style={{ fontSize: 'var(--t-caption)', fontWeight: 600, background: t.bg, color: t.color, borderRadius: 4, padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
                       <span style={{ flexShrink: 0, lineHeight: 1 }}>{smartEmoji(t.emoji)}</span>
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</span>
                       {(ev.source === 'manual' || ev.source === 'manual-recurring') && (
@@ -433,7 +433,7 @@ export function CalendarView() {
                   )
                 })}
                 {dayEvents.length > 3 && (
-                  <div style={{ fontSize: '0.6rem', color: 'var(--gray-400)', fontWeight: 600 }}>+{dayEvents.length - 3} mais</div>
+                  <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>+{dayEvents.length - 3} mais</div>
                 )}
               </div>
             </div>
@@ -466,21 +466,21 @@ export function CalendarView() {
             <div key={ev.id}>
               {isNewDate && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '14px 0 6px' }}>
-                  <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)' }}>
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-600)' }}>
                     {d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </p>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--gray-400)', fontWeight: 600 }}>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>
                     {daysLeft === 0 ? 'hoje' : daysLeft === 1 ? 'amanhã' : `em ${daysLeft} dias`}
                   </span>
                 </div>
               )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: t.bg, borderRadius: 8, marginBottom: 4, border: `1px solid ${t.color}20` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: t.bg, borderRadius: 'var(--r)', marginBottom: 4, border: `1px solid ${t.color}20` }}>
                 <span style={{ fontSize: '1rem' }}>{smartEmoji(t.emoji)}</span>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontWeight: 700, fontSize: '0.83rem', color: t.color }}>{ev.title}</p>
-                  {ev.subtitle && <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>{ev.subtitle}</p>}
+                  <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: t.color }}>{ev.title}</p>
+                  {ev.subtitle && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{ev.subtitle}</p>}
                 </div>
-                {ev.time && <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 600 }}>{ev.time}</span>}
+                {ev.time && <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>{ev.time}</span>}
                 {(ev.source === 'manual' || ev.source === 'manual-recurring') && (
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button className="btn btn-ghost" onClick={() => startEdit(ev)}><Pencil size={13} /></button>
@@ -529,7 +529,7 @@ export function CalendarView() {
               className="btn btn-secondary"
               onClick={syncGoogle}
               disabled={syncing || !gcalConfig.urls.length}
-              style={{ fontSize: '0.78rem', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ fontSize: 'var(--t-caption)', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 5 }}
             >
               <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
               {syncing ? 'A sincronizar...' : 'Sincronizar'}
@@ -538,15 +538,15 @@ export function CalendarView() {
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
             {/* Instruction */}
-            <div style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: '0.78rem', color: 'var(--gray-500)', lineHeight: 1.6 }}>
+            <div style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '10px 14px', fontSize: 'var(--t-caption)', color: 'var(--gray-500)', lineHeight: 1.6 }}>
               <strong style={{ color: 'var(--gray-700)' }}>Como obter o URL:</strong> Google Calendar → ⚙️ Definições → clica no teu calendário → "Endereço secreto no formato iCal" → copia o URL
             </div>
 
             {/* Existing calendars */}
             {gcalConfig.urls.map((cal, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#e8f0fe', border: '1px solid #c5d8fb', borderRadius: 'var(--radius-sm)' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1a73e8', display: 'flex', alignItems: 'center', gap: 4 }}><CalendarEmoji /> {cal.label}</span>
-                <span style={{ fontSize: '0.72rem', color: '#4285f4', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cal.url}</span>
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#e8f0fe', border: '1px solid #c5d8fb', borderRadius: 'var(--r)' }}>
+                <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: '#1a73e8', display: 'flex', alignItems: 'center', gap: 4 }}><CalendarEmoji /> {cal.label}</span>
+                <span style={{ fontSize: 'var(--t-caption)', color: '#4285f4', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cal.url}</span>
                 <button className="btn btn-ghost" onClick={() => removeCalendar(idx)} style={{ padding: '3px 6px' }}><Trash2 size={12} /></button>
               </div>
             ))}
@@ -573,9 +573,9 @@ export function CalendarView() {
                   <Plus size={14} /> Adicionar
                 </button>
               </div>
-              {syncError && <p style={{ fontSize: '0.78rem', color: '#dc2626', fontWeight: 600 }}>⚠️ {syncError}</p>}
+              {syncError && <p style={{ fontSize: 'var(--t-caption)', color: '#dc2626', fontWeight: 600 }}>⚠️ {syncError}</p>}
               {gcalEvents.length > 0 && !syncing && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', fontWeight: 500 }}>
+                <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>
                   ✓ {gcalEvents.length} eventos importados
                 </p>
               )}
@@ -586,8 +586,8 @@ export function CalendarView() {
 
       {/* Add event form */}
       {showForm && (
-        <div style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: 20, boxShadow: 'var(--shadow-xs)' }}>
-          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--gray-700)', marginBottom: 14 }}>{editingEvent ? 'Editar evento' : 'Novo evento'}</p>
+        <div style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '20px', marginBottom: 20, boxShadow: 'var(--shadow)' }}>
+          <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', marginBottom: 14 }}>{editingEvent ? 'Editar evento' : 'Novo evento'}</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={labelStyle}>Título</label>
@@ -630,7 +630,7 @@ export function CalendarView() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {['month','week'].map(v => (
             <button key={v} onClick={() => setView(v)} style={{
-              padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+              padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer',
               border: `2px solid ${view === v ? 'var(--rose-400)' : 'var(--gray-200)'}`,
               background: view === v ? 'var(--rose-50)' : 'var(--white)',
               color: view === v ? 'var(--rose-400)' : 'var(--gray-500)',
@@ -644,9 +644,9 @@ export function CalendarView() {
         {view !== 'list' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ padding: '6px 10px' }}><ChevronLeft size={16} /></button>
-            <p style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--gray-700)', minWidth: 130, textAlign: 'center' }}>{monthLabel}</p>
+            <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', minWidth: 130, textAlign: 'center' }}>{monthLabel}</p>
             <button className="btn btn-secondary" onClick={() => navigate(1)} style={{ padding: '6px 10px' }}><ChevronRight size={16} /></button>
-            <button className="btn btn-secondary" onClick={() => setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1))} style={{ fontSize: '0.75rem' }}>Hoje</button>
+            <button className="btn btn-secondary" onClick={() => setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1))} style={{ fontSize: 'var(--t-caption)' }}>Hoje</button>
           </div>
         )}
       </div>
@@ -657,7 +657,7 @@ export function CalendarView() {
           <button
             onClick={() => setActiveFilters(new Set())}
             style={{
-              fontSize: '0.68rem', fontWeight: 700, padding: '3px 10px', borderRadius: 50,
+              fontSize: 'var(--t-caption)', fontWeight: 700, padding: '3px 10px', borderRadius: 50,
               background: 'var(--gray-100)', color: 'var(--gray-500)',
               border: '1.5px solid var(--gray-300)', cursor: 'pointer', fontFamily: 'inherit',
             }}
@@ -672,7 +672,7 @@ export function CalendarView() {
               key={k}
               onClick={() => toggleFilter(k)}
               style={{
-                fontSize: '0.68rem', fontWeight: 700, padding: '3px 10px', borderRadius: 50,
+                fontSize: 'var(--t-caption)', fontWeight: 700, padding: '3px 10px', borderRadius: 50,
                 background: active ? t.color : t.bg,
                 color: active ? 'white' : t.color,
                 border: `1.5px solid ${active ? t.color : t.color + '44'}`,
@@ -695,5 +695,5 @@ export function CalendarView() {
   )
 }
 
-const labelStyle = { display: 'block', fontSize: '0.73rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }
-const inputStyle = { width: '100%', fontFamily: 'inherit', fontSize: '0.88rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', boxSizing: 'border-box' }
+const labelStyle = { display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 4, letterSpacing: 0.4 }
+const inputStyle = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', boxSizing: 'border-box' }

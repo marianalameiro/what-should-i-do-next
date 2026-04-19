@@ -62,17 +62,17 @@ export default function LoginPage({ onLogin, onSkip }) {
       <div style={{
         background: 'var(--white)',
         border: '1px solid var(--gray-200)',
-        borderRadius: 'var(--radius)',
+        borderRadius: 'var(--r)',
         padding: '36px 32px',
         width: '100%',
         maxWidth: 380,
-        boxShadow: 'var(--shadow-xs)',
+        boxShadow: 'var(--shadow)',
       }}>
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: -0.5, color: 'var(--gray-900)', marginBottom: 4 }}>
             what should I do next?
           </h1>
-          <p style={{ fontSize: '0.82rem', color: 'var(--gray-400)', fontWeight: 500 }}>
+          <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', fontWeight: 500 }}>
             {mode === 'login' ? 'Bem-vinda de volta 👋' : 'Cria a tua conta'}
           </p>
         </div>
@@ -83,12 +83,12 @@ export default function LoginPage({ onLogin, onSkip }) {
           style={{
             width: '100%',
             padding: '10px 16px',
-            borderRadius: 8,
+            borderRadius: 'var(--r)',
             border: '1.5px solid var(--gray-200)',
             background: 'var(--white)',
             fontFamily: 'inherit',
             fontWeight: 600,
-            fontSize: '0.88rem',
+            fontSize: 'var(--t-body)',
             color: 'var(--gray-700)',
             cursor: 'pointer',
             display: 'flex',
@@ -110,7 +110,7 @@ export default function LoginPage({ onLogin, onSkip }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
           <div style={{ flex: 1, height: 1, background: 'var(--gray-100)' }} />
-          <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 600 }}>ou</span>
+          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>ou</span>
           <div style={{ flex: 1, height: 1, background: 'var(--gray-100)' }} />
         </div>
 
@@ -140,11 +140,11 @@ export default function LoginPage({ onLogin, onSkip }) {
 
         {error && (
           <div style={{
-            background: '#fef2f2',
+            background: 'var(--red-50)',
             border: '1px solid #fecaca',
-            borderRadius: 8,
+            borderRadius: 'var(--r)',
             padding: '8px 12px',
-            fontSize: '0.8rem',
+            fontSize: 'var(--t-body)',
             color: '#dc2626',
             marginBottom: 14,
           }}>
@@ -161,11 +161,11 @@ export default function LoginPage({ onLogin, onSkip }) {
           {loading ? 'A entrar...' : mode === 'login' ? 'Entrar' : 'Criar conta'}
         </button>
 
-        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--gray-400)' }}>
+        <p style={{ textAlign: 'center', fontSize: 'var(--t-body)', color: 'var(--gray-400)' }}>
           {mode === 'login' ? 'Ainda não tens conta? ' : 'Já tens conta? '}
           <button
             onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}
-            style={{ background: 'none', border: 'none', color: 'var(--rose-400)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}
+            style={{ background: 'none', border: 'none', color: 'var(--rose-400)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--t-body)' }}
           >
             {mode === 'login' ? 'Criar conta' : 'Entrar'}
           </button>
@@ -174,7 +174,7 @@ export default function LoginPage({ onLogin, onSkip }) {
         {onSkip && (
           <button
             onClick={onSkip}
-            style={{ background: 'none', border: 'none', color: 'var(--gray-400)', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', display: 'block', margin: '12px auto 0', textDecoration: 'underline' }}
+            style={{ background: 'none', border: 'none', color: 'var(--gray-400)', fontSize: 'var(--t-caption)', cursor: 'pointer', fontFamily: 'inherit', display: 'block', margin: '12px auto 0', textDecoration: 'underline' }}
           >
             Continuar sem conta
           </button>
@@ -186,20 +186,20 @@ export default function LoginPage({ onLogin, onSkip }) {
 
 const labelStyle = {
   display: 'block',
-  fontSize: '0.73rem',
+  fontSize: 'var(--t-caption)',
   fontWeight: 700,
   color: 'var(--gray-500)',
   marginBottom: 5,
-  textTransform: 'uppercase',
+  
   letterSpacing: 0.4,
 }
 
 const inputStyle = {
   width: '100%',
   fontFamily: 'inherit',
-  fontSize: '0.88rem',
+  fontSize: 'var(--t-body)',
   border: '1.5px solid var(--gray-200)',
-  borderRadius: 8,
+  borderRadius: 'var(--r)',
   padding: '9px 12px',
   outline: 'none',
   background: 'var(--white)',

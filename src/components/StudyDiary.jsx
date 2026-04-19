@@ -66,7 +66,7 @@ export default function StudyDiary() {
       const doc = new jsPDF()
       doc.setFont('helvetica')
       doc.setFontSize(18)
-      doc.text('Diário de Estudo', 14, 20)
+      doc.text('Reflexões', 14, 20)
       doc.setFontSize(10)
       doc.setTextColor(120)
       doc.text(`Exportado a ${new Date().toLocaleDateString('pt-PT')} · ${entries.length} entradas`, 14, 28)
@@ -206,7 +206,7 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <h1>📓 Diário de Estudo</h1>
+          <h1>📓 Reflexões</h1>
           <p className="subtitle">
             Escreve como correu o estudo — a IA orienta-te com base no que escreveste
             {diaryStreak > 0 && <span style={{ marginLeft: 8, fontWeight: 700, color: '#ea580c' }}>🔥 {diaryStreak} dia{diaryStreak !== 1 ? 's' : ''} seguidos</span>}
@@ -214,7 +214,7 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {entries.length > 0 && (
-            <button className="btn btn-secondary" onClick={exportToPDF} style={{ fontSize: '0.78rem' }}>
+            <button className="btn btn-secondary" onClick={exportToPDF} style={{ fontSize: 'var(--t-caption)' }}>
               <Download size={13} /> Exportar PDF
             </button>
           )}
@@ -233,8 +233,8 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
       {/* Entry form */}
       <div style={{
         background: 'var(--white)', border: '1px solid var(--gray-200)',
-        borderRadius: 'var(--radius)', padding: '20px',
-        marginBottom: 24, boxShadow: 'var(--shadow-xs)',
+        borderRadius: 'var(--r)', padding: '20px',
+        marginBottom: 24, boxShadow: 'var(--shadow)',
       }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           {SUBJECTS.map(s => (
@@ -247,7 +247,7 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
                 background: subject === s.key ? '#fff0f3' : 'var(--white)',
                 color: subject === s.key ? '#c0455a' : 'var(--gray-500)',
                 fontFamily: 'inherit', fontWeight: 700,
-                fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s',
+                fontSize: 'var(--t-body)', cursor: 'pointer', transition: 'all 0.15s',
               }}
             >
               {s.emoji} {s.name}
@@ -261,8 +261,8 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
           value={text}
           onChange={e => setText(e.target.value)}
           style={{
-            width: '100%', fontFamily: 'inherit', fontSize: '0.9rem',
-            border: '1px solid var(--gray-200)', borderRadius: 10,
+            width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)',
+            border: '1px solid var(--gray-200)', borderRadius: 'var(--r)',
             padding: '12px 14px', outline: 'none',
             background: 'var(--gray-50)', color: 'var(--gray-900)',
             resize: 'vertical', lineHeight: 1.6,
@@ -275,10 +275,10 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
 
         {/* Mood selector */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Humor:</span>
+          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.4 }}>Humor:</span>
           {DIARY_MOODS.map(m => (
             <button key={m.id} onClick={() => setEntryMood(entryMood === m.id ? '' : m.id)} style={{
-              padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+              padding: '3px 10px', borderRadius: 50, fontFamily: 'inherit', fontSize: 'var(--t-caption)', fontWeight: 700, cursor: 'pointer',
               border: `2px solid ${entryMood === m.id ? '#c0455a' : 'var(--gray-200)'}`,
               background: entryMood === m.id ? '#fff0f3' : 'var(--white)',
               color: entryMood === m.id ? '#c0455a' : 'var(--gray-500)',
@@ -291,7 +291,7 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
             {COMMON_TAGS.map(tag => (
               <button key={tag} onClick={() => setEntryTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} style={{
-                padding: '2px 8px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer',
+                padding: '2px 8px', borderRadius: 50, fontFamily: 'inherit', fontSize: 'var(--t-caption)', fontWeight: 600, cursor: 'pointer',
                 border: `1.5px solid ${entryTags.includes(tag) ? '#c0455a' : 'var(--gray-200)'}`,
                 background: entryTags.includes(tag) ? '#fff0f3' : 'var(--white)', color: entryTags.includes(tag) ? '#c0455a' : 'var(--gray-400)',
               }}>{tag}</button>
@@ -300,15 +300,15 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
               value={newTag} onChange={e => setNewTag(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && newTag.trim()) { setEntryTags(p => [...p, newTag.trim()]); setNewTag('') } }}
               placeholder="+ tag personalizada"
-              style={{ fontSize: '0.7rem', border: '1.5px solid var(--gray-200)', borderRadius: 50, padding: '2px 10px', fontFamily: 'inherit', background: 'var(--white)', color: 'var(--gray-700)', outline: 'none', width: 130 }}
+              style={{ fontSize: 'var(--t-caption)', border: '1.5px solid var(--gray-200)', borderRadius: 50, padding: '2px 10px', fontFamily: 'inherit', background: 'var(--white)', color: 'var(--gray-700)', outline: 'none', width: 130 }}
             />
           </div>
           {entryTags.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {entryTags.map(tag => (
-                <span key={tag} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 50, background: '#fff0f3', border: '1px solid #fda4af', fontSize: '0.7rem', fontWeight: 700, color: '#c0455a' }}>
+                <span key={tag} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 50, background: '#fff0f3', border: '1px solid #fda4af', fontSize: 'var(--t-caption)', fontWeight: 700, color: '#c0455a' }}>
                   #{tag}
-                  <button onClick={() => setEntryTags(p => p.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0455a', padding: 0, lineHeight: 1, fontSize: '0.8rem' }}>×</button>
+                  <button onClick={() => setEntryTags(p => p.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0455a', padding: 0, lineHeight: 1, fontSize: 'var(--t-body)' }}>×</button>
                 </span>
               ))}
             </div>
@@ -334,7 +334,7 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
           <select
             value={filterSubject}
             onChange={e => { setFilterSubject(e.target.value); setPage(0) }}
-            style={{ fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer' }}
+            style={{ fontFamily: 'inherit', fontSize: 'var(--t-body)', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer' }}
           >
             <option value="">Todas as cadeiras</option>
             {SUBJECTS.map(s => <option key={s.key} value={s.key}>{s.emoji} {s.name}</option>)}
@@ -344,14 +344,14 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
             value={filterText}
             onChange={e => { setFilterText(e.target.value); setPage(0) }}
             placeholder="Pesquisar entradas…"
-            style={{ flex: 1, minWidth: 140, fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)' }}
+            style={{ flex: 1, minWidth: 140, fontFamily: 'inherit', fontSize: 'var(--t-body)', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', background: 'var(--white)', color: 'var(--gray-700)' }}
           />
           {(() => {
             const allTags = [...new Set(entries.flatMap(e => e.tags || []))]
             if (allTags.length === 0) return null
             return (
               <select value={filterTag} onChange={e => { setFilterTag(e.target.value); setPage(0) }}
-                style={{ fontFamily: 'inherit', fontSize: '0.82rem', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 8, background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer' }}>
+                style={{ fontFamily: 'inherit', fontSize: 'var(--t-body)', padding: '6px 10px', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer' }}>
                 <option value="">Todas as tags</option>
                 {allTags.map(t => <option key={t} value={t}>#{t}</option>)}
               </select>
@@ -362,10 +362,41 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
 
       {/* Entries list */}
       {entries.length === 0 ? (
-        <div className="empty-state">
-          <div className="e-emoji">📓</div>
-          <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>O teu diário está vazio</p>
-          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>Escreve a tua primeira reflexão sobre o estudo de hoje — a IA ajuda-te a melhorar!</p>
+        <div style={{
+          background: 'var(--white)', border: '1px solid var(--gray-100)',
+          borderRadius: 'var(--r)', padding: '28px 24px', marginBottom: 16,
+        }}>
+          <p style={{ fontWeight: 800, color: 'var(--gray-800)', marginBottom: 6, fontSize: 'var(--t-body)' }}>
+            Como foi o dia de estudo?
+          </p>
+          <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', marginBottom: 18, lineHeight: 1.55 }}>
+            Escreve a primeira reflexão — a IA dá-te orientação com base no que escreveres.
+            Clica num prompt para começar:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              'Hoje estudei durante __h. Senti-me __ porque…',
+              'O que correu bem foi… O que foi difícil foi…',
+              'Fiquei presa em… Preciso de rever…',
+              'Estou a sentir-me __ em relação ao exame de… porque…',
+            ].map(prompt => (
+              <button
+                key={prompt}
+                onClick={() => { setText(prompt); document.querySelector('textarea')?.focus() }}
+                style={{
+                  textAlign: 'left', padding: '10px 14px', borderRadius: 8,
+                  background: 'var(--gray-50)', border: '1px solid var(--gray-200)',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--t-body)',
+                  color: 'var(--gray-600)', fontWeight: 500, lineHeight: 1.4,
+                  transition: 'background 0.12s, border-color 0.12s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#fff0f3'; e.currentTarget.style.borderColor = '#fda4af' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--gray-50)'; e.currentTarget.style.borderColor = 'var(--gray-200)' }}
+              >
+                "{prompt}"
+              </button>
+            ))}
+          </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="empty-state">
@@ -381,8 +412,8 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
             return (
               <div key={entry.id} style={{
                 background: 'var(--white)', border: '1px solid var(--gray-200)',
-                borderRadius: 'var(--radius)', marginBottom: 12,
-                boxShadow: 'var(--shadow-xs)', overflow: 'hidden',
+                borderRadius: 'var(--r)', marginBottom: 12,
+                boxShadow: 'var(--shadow)', overflow: 'hidden',
               }}>
                 {/* Header */}
                 <div
@@ -392,18 +423,18 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
                   <span style={{ fontSize: '1.1rem' }}>{subj?.emoji}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--gray-800)' }}>{subj?.name}</span>
-                      {entry.mood && <span style={{ fontSize: '0.9rem' }}>{DIARY_MOODS.find(m => m.id === entry.mood)?.emoji}</span>}
+                      <span style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-800)' }}>{subj?.name}</span>
+                      {entry.mood && <span style={{ fontSize: 'var(--t-body)' }}>{DIARY_MOODS.find(m => m.id === entry.mood)?.emoji}</span>}
                       {(entry.tags || []).map(tag => (
-                        <span key={tag} style={{ padding: '1px 7px', borderRadius: 50, background: '#fff0f3', border: '1px solid #fda4af', fontSize: '0.65rem', fontWeight: 700, color: '#c0455a' }}>#{tag}</span>
+                        <span key={tag} style={{ padding: '1px 7px', borderRadius: 50, background: '#fff0f3', border: '1px solid #fda4af', fontSize: 'var(--t-caption)', fontWeight: 700, color: '#c0455a' }}>#{tag}</span>
                       ))}
                     </div>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', margin: 0 }}>
+                    <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>
                       {entry.date} às {entry.time}
                     </p>
                   </div>
                   <p style={{
-                    fontSize: '0.82rem', color: 'var(--gray-500)',
+                    fontSize: 'var(--t-body)', color: 'var(--gray-500)',
                     flex: 2, margin: 0, overflow: 'hidden',
                     textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
@@ -419,9 +450,9 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
                 {isOpen && (
                   <div style={{ borderTop: '1px solid var(--gray-100)', padding: '16px' }}>
                     <div style={{
-                      background: 'var(--gray-50)', borderRadius: 8,
+                      background: 'var(--gray-50)', borderRadius: 'var(--r)',
                       padding: '12px 14px', marginBottom: 14,
-                      fontSize: '0.88rem', lineHeight: 1.6, color: 'var(--gray-700)',
+                      fontSize: 'var(--t-body)', lineHeight: 1.6, color: 'var(--gray-700)',
                       whiteSpace: 'pre-wrap',
                     }}>
                       {entry.text}
@@ -429,17 +460,17 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
 
                     <div style={{
                       background: '#f5f3ff', border: '1px solid #ddd6fe',
-                      borderRadius: 10, padding: '14px 16px',
-                      fontSize: '0.88rem', lineHeight: 1.65,
+                      borderRadius: 'var(--r)', padding: '14px 16px',
+                      fontSize: 'var(--t-body)', lineHeight: 1.65,
                       color: 'var(--gray-700)', whiteSpace: 'pre-wrap',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <p style={{ fontWeight: 700, fontSize: '0.78rem', color: '#7c3aed', margin: 0, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        <p style={{ fontWeight: 700, fontSize: 'var(--t-caption)', color: '#7c3aed', margin: 0, letterSpacing: 0.4 }}>
                           ✨ Orientação da IA
                         </p>
                         <button
                           className="btn btn-ghost"
-                          style={{ fontSize: '0.72rem', padding: '3px 8px', color: '#7c3aed' }}
+                          style={{ fontSize: 'var(--t-caption)', padding: '3px 8px', color: '#7c3aed' }}
                           onClick={() => reanalyseEntry(entry)}
                           disabled={isReanalysing}
                         >
@@ -462,18 +493,18 @@ Sê direta, prática e calorosa. Máximo 5-6 frases. Usa 1-2 emojis. Responde em
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 }}>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+                style={{ padding: '5px 12px', fontSize: 'var(--t-body)' }}
                 onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={page === 0}
               >
                 ‹ Anterior
               </button>
-              <span style={{ fontSize: '0.78rem', color: 'var(--gray-500)' }}>
+              <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)' }}>
                 {page + 1} / {totalPages}
               </span>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '5px 12px', fontSize: '0.8rem' }}
+                style={{ padding: '5px 12px', fontSize: 'var(--t-body)' }}
                 onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
               >

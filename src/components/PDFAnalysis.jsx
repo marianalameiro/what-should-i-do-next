@@ -159,8 +159,8 @@ Format your response clearly with these sections. Be specific and reference actu
       {/* Form */}
       <div style={{
         background: 'var(--white)', border: '1px solid var(--gray-200)',
-        borderRadius: 'var(--radius)', padding: '20px',
-        marginBottom: 24, boxShadow: 'var(--shadow-xs)',
+        borderRadius: 'var(--r)', padding: '20px',
+        marginBottom: 24, boxShadow: 'var(--shadow)',
       }}>
         {/* Subject */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -174,7 +174,7 @@ Format your response clearly with these sections. Be specific and reference actu
                 background: subject === s.key ? '#fff0f3' : 'var(--white)',
                 color: subject === s.key ? '#c0455a' : 'var(--gray-500)',
                 fontFamily: 'inherit', fontWeight: 700,
-                fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s',
+                fontSize: 'var(--t-body)', cursor: 'pointer', transition: 'all 0.15s',
               }}
             >
               {s.emoji} {s.name}
@@ -184,7 +184,7 @@ Format your response clearly with these sections. Be specific and reference actu
 
         {/* Week */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 5 }}>
+          <label style={{ display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 5 }}>
             Semana nº
           </label>
           <input
@@ -193,8 +193,8 @@ Format your response clearly with these sections. Be specific and reference actu
             value={week}
             onChange={e => setWeek(e.target.value)}
             style={{
-              width: 120, fontFamily: 'inherit', fontSize: '0.88rem',
-              border: '1px solid var(--gray-200)', borderRadius: 8,
+              width: 120, fontFamily: 'inherit', fontSize: 'var(--t-body)',
+              border: '1px solid var(--gray-200)', borderRadius: 'var(--r)',
               padding: '7px 10px', outline: 'none',
               background: 'var(--white)', color: 'var(--gray-900)',
             }}
@@ -209,14 +209,14 @@ Format your response clearly with these sections. Be specific and reference actu
           onClick={() => document.getElementById('pdf-input').click()}
           style={{
             border: `2px dashed ${dragOver ? '#c0455a' : 'var(--gray-200)'}`,
-            borderRadius: 12, padding: '24px',
+            borderRadius: 'var(--r)', padding: '24px',
             textAlign: 'center', cursor: 'pointer',
             background: dragOver ? '#fff0f3' : 'var(--gray-50)',
             marginBottom: 14, transition: 'all 0.15s',
           }}
         >
           <Upload size={24} color={dragOver ? '#c0455a' : 'var(--gray-300)'} style={{ margin: '0 auto 8px' }} />
-          <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--gray-500)', margin: 0 }}>
+          <p style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-500)', margin: 0 }}>
             {fileName ? `📄 ${fileName}` : 'Arrasta o PDF aqui ou clica para selecionar'}
           </p>
           <input
@@ -230,7 +230,7 @@ Format your response clearly with these sections. Be specific and reference actu
 
         {/* Paste fallback */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 5 }}>
+          <label style={{ display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 5 }}>
             Ou cola o texto da ficha aqui
           </label>
           <textarea
@@ -239,8 +239,8 @@ Format your response clearly with these sections. Be specific and reference actu
             value={pastedText}
             onChange={e => setPastedText(e.target.value)}
             style={{
-              width: '100%', fontFamily: 'inherit', fontSize: '0.85rem',
-              border: '1px solid var(--gray-200)', borderRadius: 10,
+              width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)',
+              border: '1px solid var(--gray-200)', borderRadius: 'var(--r)',
               padding: '10px 12px', outline: 'none',
               background: 'var(--gray-50)', color: 'var(--gray-900)',
               resize: 'vertical', lineHeight: 1.5,
@@ -274,8 +274,8 @@ Format your response clearly with these sections. Be specific and reference actu
           return (
             <div key={a.id} style={{
               background: 'var(--white)', border: '1px solid var(--gray-200)',
-              borderRadius: 'var(--radius)', marginBottom: 12,
-              boxShadow: 'var(--shadow-xs)', overflow: 'hidden',
+              borderRadius: 'var(--r)', marginBottom: 12,
+              boxShadow: 'var(--shadow)', overflow: 'hidden',
             }}>
               <div
                 style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
@@ -283,8 +283,8 @@ Format your response clearly with these sections. Be specific and reference actu
               >
                 <span>{subj?.emoji}</span>
                 <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{subj?.name} — Semana {a.week}</span>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: 0 }}>{a.date} · {a.fileName}</p>
+                  <span style={{ fontWeight: 700, fontSize: 'var(--t-body)' }}>{subj?.name} — Semana {a.week}</span>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>{a.date} · {a.fileName}</p>
                 </div>
                 <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); removeAnalysis(a.id) }}>
                   <Trash2 size={13} />
@@ -296,8 +296,8 @@ Format your response clearly with these sections. Be specific and reference actu
                 <div style={{ borderTop: '1px solid var(--gray-100)', padding: '16px' }}>
                   <div style={{
                     background: '#f5f3ff', border: '1px solid #ddd6fe',
-                    borderRadius: 10, padding: '14px 16px',
-                    fontSize: '0.88rem', lineHeight: 1.7,
+                    borderRadius: 'var(--r)', padding: '14px 16px',
+                    fontSize: 'var(--t-body)', lineHeight: 1.7,
                     color: 'var(--gray-700)', whiteSpace: 'pre-wrap',
                     marginBottom: 10,
                   }}>
@@ -305,7 +305,7 @@ Format your response clearly with these sections. Be specific and reference actu
                   </div>
                   <button
                     className="btn btn-ghost"
-                    style={{ fontSize: '0.8rem', gap: 5 }}
+                    style={{ fontSize: 'var(--t-body)', gap: 5 }}
                     onClick={() => {
                       localStorage.setItem('ai-pdf-context', a.feedback)
                       alert('Contexto carregado no AI Chat! 🌸')

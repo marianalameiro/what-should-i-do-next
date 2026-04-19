@@ -382,16 +382,14 @@ export default function DailyView() {
   function renderTask(task, q, qKey) {
     const subject = task.subjectKey ? SUBJECTS[task.subjectKey] : null
 
-    const handleClick = () => {
-      if (task.isExtra) { removeExtra(task.id) } else { check(task.id) }
-    }
+    const handleClick = () => { check(task.id) }
 
     return (
       <div key={task.id} style={{ marginBottom: 3 }}>
         <div
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.75)', borderRadius: 8,
+            background: 'rgba(255,255,255,0.75)', borderRadius: 'var(--r)',
             padding: '7px 10px', cursor: 'pointer',
           }}
           onClick={handleClick}
@@ -400,14 +398,14 @@ export default function DailyView() {
             width: 16, height: 16, borderRadius: '50%',
             border: `1.5px solid ${q.border}`, flexShrink: 0,
           }} />
-          {(subject?.emoji || task.emoji) && <span style={{ fontSize: '0.8rem' }}>{subject?.emoji || task.emoji}</span>}
-          <span style={{ fontSize: '0.78rem', fontWeight: 500, color: q.text, flex: 1, lineHeight: 1.3 }}>
+          {(subject?.emoji || task.emoji) && <span style={{ fontSize: 'var(--t-body)' }}>{subject?.emoji || task.emoji}</span>}
+          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 500, color: q.text, flex: 1, lineHeight: 1.3 }}>
             {task.label}
-            {task.recurrence && <span style={{ fontSize: '0.62rem', marginLeft: 4, opacity: 0.6 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
+            {task.recurrence && <span style={{ fontSize: 'var(--t-caption)', marginLeft: 4, opacity: 0.6 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
           </span>
-          {task.mins && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: q.text, opacity: 0.6, flexShrink: 0 }}>{task.mins}min</span>}
+          {task.mins && <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: q.text, opacity: 0.6, flexShrink: 0 }}>{task.mins}min</span>}
           {scheduledLabels.has(task.label) && (
-            <span title="Já tem bloco no horário" style={{ fontSize: '0.62rem', fontWeight: 700, color: '#16a34a', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 50, padding: '1px 6px', flexShrink: 0 }}>
+            <span title="Já tem bloco no horário" style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: '#16a34a', background: 'var(--green-50)', border: '1px solid #86efac', borderRadius: 50, padding: '1px 6px', flexShrink: 0 }}>
               📅
             </span>
           )}
@@ -422,11 +420,11 @@ export default function DailyView() {
           <button
             onClick={e => { e.stopPropagation(); snoozeTask(task) }}
             title="Adiar para amanhã"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: q.text, opacity: 0.5, padding: '0 2px', lineHeight: 1 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--t-body)', color: q.text, opacity: 0.5, padding: '0 2px', lineHeight: 1 }}
           >↪</button>
           <button
             onClick={e => { e.stopPropagation(); setEditingId(editingId === task.id ? null : task.id) }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.7rem', color: q.text, opacity: 0.5, padding: '0 2px' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 'var(--t-caption)', color: q.text, opacity: 0.5, padding: '0 2px' }}
             title="Mover para outro quadrante"
           >↕</button>
         </div>
@@ -434,10 +432,10 @@ export default function DailyView() {
         {editingId === task.id && (
           <div style={{
             background: 'var(--white)', border: '1px solid var(--gray-200)',
-            borderRadius: 8, padding: '6px', marginTop: 4,
-            boxShadow: 'var(--shadow-md)', zIndex: 10, position: 'relative',
+            borderRadius: 'var(--r)', padding: '6px', marginTop: 4,
+            boxShadow: 'var(--shadow)', zIndex: 10, position: 'relative',
           }}>
-            <p style={{ fontSize: '0.68rem', color: 'var(--gray-400)', fontWeight: 600, marginBottom: 4, paddingLeft: 4 }}>Mover para:</p>
+            <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600, marginBottom: 4, paddingLeft: 4 }}>Mover para:</p>
             {Object.entries(QUADRANTS).map(([k, qOpt]) => (
               <button
                 key={k}
@@ -447,7 +445,7 @@ export default function DailyView() {
                   width: '100%', padding: '5px 8px', borderRadius: 6,
                   border: 'none', background: k === qKey ? qOpt.color : 'transparent',
                   cursor: 'pointer', fontFamily: 'inherit',
-                  fontSize: '0.75rem', fontWeight: 600, color: qOpt.text, textAlign: 'left',
+                  fontSize: 'var(--t-caption)', fontWeight: 600, color: qOpt.text, textAlign: 'left',
                 }}
               >
                 {qOpt.emoji} {qOpt.label}
@@ -513,21 +511,6 @@ export default function DailyView() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {!isToday && selectedDate < today && (
-            <button
-              onClick={() => carryForwardPastExtras(selectedDate)}
-              title="Passa as tarefas não feitas para hoje"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px', borderRadius: 50,
-                border: '1.5px solid var(--gray-200)',
-                background: 'var(--white)', color: 'var(--gray-500)',
-                fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
-              }}
-            >
-              ↗ Passar para hoje
-            </button>
-          )}
           {allCount > 0 && (
             <button
               onClick={() => setShowMatrix(v => !v)}
@@ -537,7 +520,7 @@ export default function DailyView() {
                 border: '1.5px solid var(--gray-200)',
                 background: showMatrix ? 'var(--rose-50)' : 'var(--white)',
                 color: showMatrix ? 'var(--rose-400)' : 'var(--gray-500)',
-                fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer',
               }}
             >
               <Settings2 size={13} />
@@ -561,10 +544,10 @@ export default function DailyView() {
       {showMatrix && allCount > 0 && (
         <div style={{
           background: 'var(--white)', border: '1px solid var(--gray-100)',
-          borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: 14,
-          boxShadow: 'var(--shadow-xs)',
+          borderRadius: 'var(--r)', padding: '14px 16px', marginBottom: 14,
+          boxShadow: 'var(--shadow)',
         }}>
-          <p style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+          <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 8 }}>
             Como está a tua energia?
           </p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -579,7 +562,7 @@ export default function DailyView() {
                     border: `2px solid ${isActive ? e.color : 'var(--gray-200)'}`,
                     background: isActive ? e.bg : 'var(--white)',
                     color: isActive ? e.color : 'var(--gray-500)',
-                    fontFamily: 'inherit', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                    fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer',
                     transition: 'all 0.15s',
                   }}
                 >
@@ -591,9 +574,9 @@ export default function DailyView() {
 
           {currentEnergy && (
             <p style={{
-              marginTop: 10, fontSize: '0.78rem', color: currentEnergy.color,
+              marginTop: 10, fontSize: 'var(--t-caption)', color: currentEnergy.color,
               fontWeight: 600, background: currentEnergy.bg,
-              padding: '6px 12px', borderRadius: 8, display: 'inline-block',
+              padding: '6px 12px', borderRadius: 'var(--r)', display: 'inline-block',
             }}>
               💡 {currentEnergy.tip}
             </p>
@@ -606,7 +589,7 @@ export default function DailyView() {
         <div style={{ marginBottom: 16 }}>
           {currentEnergy ? (
             <>
-              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.6, marginBottom: 8 }}>
                 Ordem sugerida com energia {currentEnergy.emoji} {currentEnergy.label}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -617,9 +600,9 @@ export default function DailyView() {
                   return (
                     <div key={qKey} style={{
                       background: q.color, border: `1.5px solid ${q.border}`,
-                      borderRadius: 'var(--radius)', padding: '12px 14px',
+                      borderRadius: 'var(--r)', padding: '12px 14px',
                     }}>
-                      <p style={{ fontSize: '0.73rem', fontWeight: 700, color: q.text, marginBottom: 8 }}>
+                      <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: q.text, marginBottom: 8 }}>
                         {q.emoji} {q.label}
                       </p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -632,20 +615,20 @@ export default function DailyView() {
             </>
           ) : (
             <div>
-              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.6, marginBottom: 8 }}>
                 Seleciona a tua energia para ver a ordem sugerida · clica numa tarefa para a mover
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {Object.entries(QUADRANTS).map(([qKey, q]) => (
                   <div key={qKey} style={{
                     background: q.color, border: `1.5px solid ${q.border}`,
-                    borderRadius: 'var(--radius)', padding: '12px 14px', minHeight: 80,
+                    borderRadius: 'var(--r)', padding: '12px 14px', minHeight: 80,
                   }}>
-                    <p style={{ fontSize: '0.73rem', fontWeight: 700, color: q.text, marginBottom: 8 }}>
+                    <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: q.text, marginBottom: 8 }}>
                       {q.emoji} {q.label}
                     </p>
                     {byQuadrant[qKey].length === 0
-                      ? <p style={{ fontSize: '0.72rem', color: q.text, opacity: 0.4, fontStyle: 'italic' }}>Nada aqui</p>
+                      ? <p style={{ fontSize: 'var(--t-caption)', color: q.text, opacity: 0.4, fontStyle: 'italic' }}>Nada aqui</p>
                       : byQuadrant[qKey].map(task => renderTask(task, q, qKey))
                     }
                   </div>
@@ -679,7 +662,7 @@ export default function DailyView() {
                     <button
                       onClick={e => { e.stopPropagation(); snoozeTask({ ...task, subjectKey, isExtra: false }) }}
                       title="Adiar para amanhã"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: '0.85rem', lineHeight: 1, flexShrink: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}
                     >↪</button>
                   </div>
                 ))}
@@ -695,10 +678,54 @@ export default function DailyView() {
         </div>
       )}
 
+      {/* Deficit suggestions — shown only when no schedule tasks for today */}
+      {isToday && allCount === 0 && (() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+          const subjs = s.subjects || []
+          if (subjs.length === 0) return null
+          const sess = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+          const monday = getMondayOfWeek(new Date())
+          const targets = JSON.parse(localStorage.getItem('subject-targets') || '{}')
+          const hoursGoal = s.hoursGoal || 550
+          const daysRem = s.periodEnd ? Math.max(1, Math.round((new Date(s.periodEnd) - new Date()) / 86400000)) : 120
+          const weeksRem = Math.max(1, daysRem / 7)
+          const dow = new Date().getDay() === 0 ? 7 : new Date().getDay()
+          const deficits = subjs.map(sub => {
+            const weeklyT = (parseFloat(targets[sub.key] || hoursGoal / subjs.length) / weeksRem)
+            const targetNow = weeklyT * (dow / 7)
+            const weekDone = sess.filter(x => x.subject === sub.key && new Date(x.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
+            const deficit = Math.max(0, parseFloat((targetNow - weekDone).toFixed(1)))
+            return { ...sub, deficit, weekDone: parseFloat(weekDone.toFixed(1)), weeklyT: parseFloat(weeklyT.toFixed(1)) }
+          }).filter(x => x.deficit > 0).sort((a, b) => b.deficit - a.deficit)
+          if (deficits.length === 0) return null
+          return (
+            <div style={{ marginBottom: 16, padding: '16px 18px', background: 'var(--white)', border: '1.5px dashed var(--gray-200)', borderRadius: 'var(--r)' }}>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 10 }}>
+                💡 SUGESTÕES — ATRASO DESTA SEMANA
+              </p>
+              {deficits.slice(0, 4).map(sub => (
+                <div key={sub.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{sub.emoji}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-800)' }}>{sub.name}</p>
+                    <p style={{ margin: 0, fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
+                      {sub.weekDone}h feitas · meta {sub.weeklyT}h/semana
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '3px 10px', borderRadius: 50, background: (sub.color || '#f9a8d4') + '22', color: sub.textColor || 'var(--gray-600)', flexShrink: 0 }}>
+                    {sub.deficit}h em falta
+                  </span>
+                </div>
+              ))}
+            </div>
+          )
+        } catch { return null }
+      })()}
 
       {/* Extra tasks */}
       <div style={{ marginTop: 20, borderTop: '1px solid var(--gray-100)', paddingTop: 20 }}>
-        <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+        <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 10 }}>
           Tarefas extra
         </p>
 
@@ -713,6 +740,10 @@ export default function DailyView() {
                 onDragEnd={onExtraDragEnd}
                 className="task-item"
                 style={{ cursor: 'grab', opacity: dragIdx === i ? 0.4 : 1 }}
+                onClick={() => task.recurrence
+                  ? setDone(prev => ({ ...prev, [task.id]: true }))
+                  : removeExtra(task.id)
+                }
               >
                 <div className="task-checkbox" style={{ border: '1.5px solid var(--gray-300)' }}>
                   <Check size={13} color="transparent" strokeWidth={3} />
@@ -722,11 +753,11 @@ export default function DailyView() {
                   : null
                 }
                 <span className="task-label" style={{ color: 'var(--gray-700)' }}>{task.label}</span>
-                {task.mins && <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)', flexShrink: 0, marginLeft: 'auto' }}>{task.mins}min</span>}
-                {task.recurrence && <span style={{ fontSize: '0.72rem', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
-                <button onClick={() => snoozeTask(task)} title="Adiar para amanhã"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 3px', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0 }}>↪</button>
-                <button onClick={() => removeExtra(task.id)}
+                {task.mins && <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', flexShrink: 0, marginLeft: 'auto' }}>{task.mins}min</span>}
+                {task.recurrence && <span style={{ fontSize: 'var(--t-caption)', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
+                <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 3px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}>↪</button>
+                <button onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                   <X size={12} />
                 </button>
@@ -739,37 +770,57 @@ export default function DailyView() {
         <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
           <input
             type="text"
-            placeholder="😊"
-            value={newTaskEmoji}
-            onChange={e => setNewTaskEmoji(e.target.value)}
-            maxLength={2}
-            style={{ width: 38, textAlign: 'center', fontSize: '1rem', flexShrink: 0, fontFamily: 'inherit', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '7px 4px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
-          />
-          <input
-            type="text"
             placeholder="Nova tarefa extra..."
             value={newTask}
             onChange={e => setNewTask(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addExtra()}
-            style={{ flex: 1, fontFamily: 'inherit', fontSize: '0.85rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '7px 12px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
+            style={{ flex: 1, fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '7px 12px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
           />
           <button className="btn btn-primary" onClick={addExtra} style={{ flexShrink: 0, padding: '7px 14px' }}>
             <Plus size={14} />
           </button>
         </div>
+
+        {/* Emoji quick picks from subjects */}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.4, flexShrink: 0 }}>emoji</span>
+          {[...new Map(Object.values(SUBJECTS).filter(s => s.emoji).map(s => [s.emoji, s])).values()].map(s => (
+            <button key={s.emoji} onClick={() => setNewTaskEmoji(prev => prev === s.emoji ? '' : s.emoji)} title={s.name}
+              style={{ padding: '3px 7px', border: `1.5px solid ${newTaskEmoji === s.emoji ? '#f43f5e' : 'var(--gray-200)'}`, borderRadius: 6, background: newTaskEmoji === s.emoji ? '#fff1f2' : 'transparent', cursor: 'pointer', fontSize: 'var(--t-body)', lineHeight: 1 }}>
+              {s.emoji}
+            </button>
+          ))}
+          <input
+            type="text" placeholder="✏️" value={newTaskEmoji}
+            onChange={e => setNewTaskEmoji(e.target.value)} maxLength={2}
+            style={{ width: 34, textAlign: 'center', fontSize: 'var(--t-body)', fontFamily: 'inherit', border: '1.5px solid var(--gray-200)', borderRadius: 6, padding: '3px 4px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
+          />
+        </div>
+
+        {/* Urgência */}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.4, flexShrink: 0 }}>urgência</span>
+          {Object.entries(QUADRANTS).map(([id, q]) => (
+            <button key={id} onClick={() => setNewTaskQuadrant(id)}
+              style={{ padding: '3px 10px', border: `1.5px solid ${newTaskQuadrant === id ? q.border : 'var(--gray-200)'}`, borderRadius: 50, background: newTaskQuadrant === id ? q.color : 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 'var(--t-caption)', color: newTaskQuadrant === id ? q.text : 'var(--gray-500)', whiteSpace: 'nowrap' }}>
+              {q.emoji} {q.label}
+            </button>
+          ))}
+        </div>
+
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input
             type="number" min={5} max={480} placeholder="⏱ min"
             value={newTaskMins} onChange={e => setNewTaskMins(e.target.value)}
-            style={{ width: 80, fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 8px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
+            style={{ width: 80, fontFamily: 'inherit', fontSize: 'var(--t-caption)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '5px 8px', background: 'var(--white)', color: 'var(--gray-900)', outline: 'none' }}
           />
           <select value={newTaskRecurrence} onChange={e => setNewTaskRecurrence(e.target.value)}
-            style={{ fontFamily: 'inherit', fontSize: '0.78rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 8px', background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer', outline: 'none' }}>
+            style={{ fontFamily: 'inherit', fontSize: 'var(--t-caption)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '5px 8px', background: 'var(--white)', color: 'var(--gray-700)', cursor: 'pointer', outline: 'none' }}>
             <option value="none">Sem recorrência</option>
             <option value="daily">🔁 Diária</option>
             <option value="weekly">📅 Semanal</option>
           </select>
-          {addedTask && <span style={{ fontSize: '0.75rem', color: 'var(--green-500)', fontWeight: 700 }}>✓ adicionada!</span>}
+          {addedTask && <span style={{ fontSize: 'var(--t-caption)', color: 'var(--green-500)', fontWeight: 700 }}>✓ adicionada!</span>}
         </div>
       </div>
 

@@ -5,6 +5,30 @@ import { CONFIDENCE, EVENT_TYPES } from '../constants'
 import { daysUntil } from '../utils/dates'
 import { useToast, ToastContainer } from './Toast'
 
+function exportICS(exams) {
+  const withDate = exams.filter(e => e.date)
+  if (withDate.length === 0) return
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//WhatShouldIDoNext//PT','CALSCALE:GREGORIAN','METHOD:PUBLISH']
+  withDate.forEach(exam => {
+    const d = exam.date.replace(/-/g, '')
+    const next = new Date(exam.date + 'T12:00:00'); next.setDate(next.getDate() + 1)
+    const dEnd = next.toISOString().split('T')[0].replace(/-/g, '')
+    lines.push('BEGIN:VEVENT')
+    lines.push(`DTSTART;VALUE=DATE:${d}`)
+    lines.push(`DTEND;VALUE=DATE:${dEnd}`)
+    lines.push(`SUMMARY:${(exam.type || 'Exame')} \u2014 ${exam.subject}`)
+    const desc = [`Meta: ${exam.minGrade}/20`, exam.ects ? `${exam.ects} ECTS` : null, exam.notes || null].filter(Boolean).join(' \u00b7 ')
+    if (desc) lines.push(`DESCRIPTION:${desc}`)
+    lines.push(`UID:${exam.id}@wsidnt`)
+    lines.push('END:VEVENT')
+  })
+  lines.push('END:VCALENDAR')
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = 'exames.ics'; a.click()
+  URL.revokeObjectURL(url)
+}
+
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) || fallback }
   catch { return fallback }
@@ -65,6 +89,7 @@ export default function ExamsView({ settings }) {
     setForm({ subject: exam.subject, type: exam.type, date: exam.date, minGrade: exam.minGrade, ects: exam.ects ?? "", notes: exam.notes || "" })
     setEditingExamId(exam.id)
     setShowForm(true)
+    setTimeout(() => document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' }), 20)
   }
 
   function closeForm() {
@@ -307,9 +332,16 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           <h1>🎯 Exames & Estudo</h1>
           <p className="subtitle">{exams.length === 0 ? "Nenhum evento registado" : `${exams.length} evento${exams.length !== 1 ? "s" : ""} registado${exams.length !== 1 ? "s" : ""}`}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditingExamId(null); setForm(emptyForm); setShowForm(v => !v) }}>
-          <Plus size={14} /> Novo evento
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {exams.filter(e => e.date).length > 0 && (
+            <button className="btn btn-secondary" onClick={() => exportICS(exams)} title="Exportar para Google Calendar, Apple Calendar…">
+              📅 Exportar .ics
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => { setEditingExamId(null); setForm(emptyForm); setShowForm(v => !v) }}>
+            <Plus size={14} /> Novo evento
+          </button>
+        </div>
       </div>
 
       {/* ── Add form ── */}
@@ -365,10 +397,10 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #fdf2f4, #fce7f3)' }}>
           <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--rose-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Média ponderada (ECTS)</p>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', letterSpacing: 0.4, margin: 0 }}>Média ponderada (ECTS)</p>
               <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', margin: 0, lineHeight: 1.2 }}>{weightedAverage}<span style={{ fontSize: '1rem', color: 'var(--gray-400)' }}>/20</span></p>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', textAlign: 'right' }}>
+            <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)', textAlign: 'right' }}>
               <p style={{ margin: 0 }}>Baseada em {exams.filter(e => e.actualGrade != null && e.ects > 0).length} avaliações</p>
               <p style={{ margin: '2px 0 0', fontWeight: 600, color: weightedAverage >= 10 ? '#16a34a' : '#dc2626' }}>{weightedAverage >= 18 ? '⭐ Excelente' : weightedAverage >= 14 ? '✅ Bom' : weightedAverage >= 10 ? '👍 Aprovada' : '⚠️ Reprovada'}</p>
             </div>
@@ -381,7 +413,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[['upcoming','📅 A vir'],['past','🗂️ Arquivo']].map(([id, label]) => (
             <button key={id} onClick={() => setExamTab(id)}
-              style={{ padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+              style={{ padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer',
                 border: `2px solid ${examTab === id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
                 background: examTab === id ? 'var(--rose-50)' : 'var(--white)', color: examTab === id ? 'var(--rose-400)' : 'var(--gray-500)' }}>
               {label} ({sortedExams.filter(e => (daysUntil(e.date) >= 0) === (id === 'upcoming')).length})
@@ -391,15 +423,21 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
       )}
 
       {sortedExams.length === 0 ? (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="empty-state">
-            <div className="e-emoji">🎯</div>
-            <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Ainda sem exames registados</p>
-            <p style={{ fontSize: "0.78rem", marginTop: 4, color: 'var(--gray-400)' }}>Adiciona os teus exames para controlar prazos e preparação</p>
-            <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => setShowForm(true)}>
-              <Plus size={14} /> Adicionar exame
-            </button>
-          </div>
+        <div style={{
+          padding: '32px 28px', textAlign: 'center',
+          background: 'var(--white)', borderRadius: 'var(--r)',
+          border: '1.5px dashed var(--gray-200)', marginBottom: 14,
+        }}>
+          <p style={{ fontSize: '2rem', marginBottom: 10 }}>🗓️</p>
+          <p style={{ fontWeight: 800, color: 'var(--gray-800)', marginBottom: 6, fontSize: 'var(--t-body)' }}>
+            Que avaliações tens este semestre?
+          </p>
+          <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', marginBottom: 20, lineHeight: 1.55, maxWidth: 340, margin: '0 auto 20px' }}>
+            Exames, testes, mini-testes, apresentações — regista tudo para saber sempre quanto tempo tens e quanto já estudaste.
+          </p>
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            <Plus size={14} /> Adicionar primeira avaliação
+          </button>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -416,32 +454,32 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   onClick={() => setExpanded(open ? null : exam.id)}
                 >
                   <div style={{
-                    textAlign: "center", background: isPast ? '#f0fdf4' : "var(--gray-50)", border: `1px solid ${isPast ? '#bbf7d0' : 'var(--gray-200)'}`,
-                    borderRadius: "var(--radius)", padding: "8px 14px", minWidth: 64, flexShrink: 0,
+                    textAlign: "center", background: isPast ? 'var(--green-50)' : "var(--gray-50)", border: `1px solid ${isPast ? '#bbf7d0' : 'var(--gray-200)'}`,
+                    borderRadius: "var(--r)", padding: "8px 14px", minWidth: 64, flexShrink: 0,
                   }}>
                     {isPast && exam.actualGrade != null ? (
                       <>
                         <div style={{ fontSize: "1.4rem", fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: exam.actualGrade >= 10 ? '#16a34a' : '#dc2626' }}>{exam.actualGrade}</div>
-                        <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>nota</div>
+                        <div style={{ fontSize: "var(--t-caption)", fontWeight: 700, letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>nota</div>
                       </>
                     ) : (
                       <>
                         <div style={{ fontSize: "1.4rem", fontWeight: 800, letterSpacing: -1, lineHeight: 1, color: days <= 7 ? "var(--red-400)" : days <= 21 ? "var(--amber-400)" : "var(--green-500)" }}>{Math.abs(days)}</div>
-                        <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>{days < 0 ? "atrás" : "dias"}</div>
+                        <div style={{ fontSize: "var(--t-caption)", fontWeight: 700, letterSpacing: 0.5, color: "var(--gray-400)", marginTop: 2 }}>{days < 0 ? "atrás" : "dias"}</div>
                       </>
                     )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                      <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--gray-900)" }}>{exam.subject}</span>
+                      <span style={{ fontWeight: 700, fontSize: "var(--t-body)", color: "var(--gray-900)" }}>{exam.subject}</span>
                       {!isPast && <span className={pill.cls}>{pill.label}</span>}
                       {isPast && exam.actualGrade != null && <span className={exam.actualGrade >= exam.minGrade ? "status-pill status-green" : "status-pill status-red"}>{exam.actualGrade >= exam.minGrade ? "✅ Aprovada" : "❌ Reprovada"}</span>}
                     </div>
-                    <div style={{ fontSize: "0.78rem", color: "var(--gray-400)", fontWeight: 500 }}>
+                    <div style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontWeight: 500 }}>
                       {exam.type} · {new Date(exam.date).toLocaleDateString("pt-PT", { day: "numeric", month: "long" })} · Meta: {exam.minGrade}/20{exam.ects ? ` · ${exam.ects} ECTS` : ''}
                     </div>
-                    {studyH > 0 && ['Exame','Teste','Mini-teste'].includes(exam.type) && <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", marginTop: 2 }}>⏱️ {studyH}h de estudo registadas nesta cadeira</div>}
-                    {exam.notes && <div style={{ fontSize: "0.75rem", color: "var(--gray-500)", marginTop: 3 }}>{exam.notes}</div>}
+                    {studyH > 0 && ['Exame','Teste','Mini-teste'].includes(exam.type) && <div style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", marginTop: 2 }}>⏱️ {studyH}h de estudo registadas nesta cadeira</div>}
+                    {exam.notes && <div style={{ fontSize: "var(--t-caption)", color: "var(--gray-500)", marginTop: 3 }}>{exam.notes}</div>}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
                     <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); openEditForm(exam) }} style={{ padding: "5px 8px" }} title="Editar">
@@ -457,7 +495,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   <div style={{ borderTop: "1px solid var(--gray-100)", padding: "14px 18px" }}>
                     {isPast && (
                       <div style={{ marginBottom: 12 }}>
-                        <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--gray-500)", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                        <label style={{ fontSize: "var(--t-caption)", fontWeight: 700, color: "var(--gray-500)", display: "block", marginBottom: 4, letterSpacing: 0.4 }}>
                           Nota obtida (0–20)
                         </label>
                         <input
@@ -469,13 +507,13 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                           style={{ maxWidth: 160 }}
                         />
                         {exam.actualGrade != null && (
-                          <p style={{ fontSize: "0.75rem", marginTop: 6, color: exam.actualGrade >= exam.minGrade ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
+                          <p style={{ fontSize: "var(--t-caption)", marginTop: 6, color: exam.actualGrade >= exam.minGrade ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
                             {exam.actualGrade >= exam.minGrade ? `✅ Acima da meta (${exam.minGrade}/20)` : `❌ Abaixo da meta (${exam.minGrade}/20)`}
                           </p>
                         )}
                       </div>
                     )}
-                    {!isPast && <p style={{ fontSize: "0.83rem", color: "var(--gray-500)" }}>Ainda não passou a data — o resultado ficará disponível aqui após o exame.</p>}
+                    {!isPast && <p style={{ fontSize: "var(--t-body)", color: "var(--gray-500)" }}>Ainda não passou a data — o resultado ficará disponível aqui após o exame.</p>}
                   </div>
                 )}
               </div>
@@ -483,7 +521,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           })}
           {sortedExams.filter(e => (daysUntil(e.date) >= 0) === (examTab === 'upcoming')).length === 0 && (
             <div className="card"><div className="empty-state" style={{ padding: 24 }}>
-              <p style={{ color: 'var(--gray-400)', fontSize: '0.85rem' }}>{examTab === 'upcoming' ? 'Nenhum exame futuro — boas férias! 🎉' : 'Nenhum exame passado ainda.'}</p>
+              <p style={{ color: 'var(--gray-400)', fontSize: 'var(--t-body)' }}>{examTab === 'upcoming' ? 'Nenhum exame futuro — boas férias! 🎉' : 'Nenhum exame passado ainda.'}</p>
             </div></div>
           )}
         </div>
@@ -500,7 +538,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
               key={s.name}
               onClick={() => setSelectedSubject(s.name)}
               className={selectedSubject === s.name ? "btn btn-primary" : "btn btn-secondary"}
-              style={{ fontSize: "0.78rem", padding: "5px 12px" }}
+              style={{ fontSize: "var(--t-caption)", padding: "5px 12px" }}
             >
               {s.emoji} {s.name}
             </button>
@@ -508,7 +546,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         </div>
         <div className="card-body" style={{ paddingTop: 14 }}>
           {subjectTopics.length === 0 ? (
-            <p style={{ fontSize: "0.83rem", color: "var(--gray-400)", textAlign: "center", padding: "16px 0" }}>
+            <p style={{ fontSize: "var(--t-body)", color: "var(--gray-400)", textAlign: "center", padding: "16px 0" }}>
               Nenhum tópico ainda. Adiciona abaixo!
             </p>
           ) : (
@@ -518,17 +556,17 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                 const doubts = getDoubts(topic)
                 return (
                   <div key={topic.id} style={{
-                    background: "var(--gray-50)", borderRadius: "var(--radius-sm)",
+                    background: "var(--gray-50)", borderRadius: "var(--r)",
                     border: "1px solid var(--gray-100)", overflow: "hidden",
                   }}>
                     {/* Topic header */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px" }}>
-                      <span style={{ flex: 1, fontSize: "0.85rem", fontWeight: 500, color: "var(--gray-700)" }}>{topic.name}</span>
+                      <span style={{ flex: 1, fontSize: "var(--t-body)", fontWeight: 500, color: "var(--gray-700)" }}>{topic.name}</span>
                       <select
                         className="form-input"
                         value={topic.confidence}
                         onChange={e => updateTopic(topic.id, "confidence", e.target.value)}
-                        style={{ width: "auto", fontSize: "0.78rem", padding: "4px 8px", background: conf?.bg, color: conf?.color, fontWeight: 600, border: "none" }}
+                        style={{ width: "auto", fontSize: "var(--t-caption)", padding: "4px 8px", background: conf?.bg, color: conf?.color, fontWeight: 600, border: "none" }}
                       >
                         {CONFIDENCE.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                       </select>
@@ -538,17 +576,17 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                     </div>
                     {/* Doubts section */}
                     <div style={{ padding: "0 12px 10px", borderTop: "1px solid var(--gray-100)" }}>
-                      <p style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: "0.06em", margin: "8px 0 6px" }}>
-                        Dúvidas {doubts.length > 0 && <span style={{ background: "var(--rose-100)", color: "var(--rose-500)", borderRadius: 8, padding: "0 5px", fontWeight: 700 }}>{doubts.length}</span>}
+                      <p style={{ fontSize: "var(--t-caption)", fontWeight: 700, color: "var(--gray-400)", letterSpacing: "0.06em", margin: "8px 0 6px" }}>
+                        Dúvidas {doubts.length > 0 && <span style={{ background: "var(--rose-100)", color: "var(--rose-500)", borderRadius: 'var(--r)', padding: "0 5px", fontWeight: 700 }}>{doubts.length}</span>}
                       </p>
                       {doubts.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
                           {doubts.map(d => (
                             <div key={d.id} style={{ display: "flex", alignItems: "flex-start", gap: 6, background: "var(--white)", border: "1px solid var(--gray-200)", borderRadius: 6, padding: "5px 8px" }}>
-                              <span style={{ flex: 1, fontSize: "0.8rem", color: "var(--gray-700)", lineHeight: 1.4 }}>❓ {d.text}</span>
+                              <span style={{ flex: 1, fontSize: "var(--t-body)", color: "var(--gray-700)", lineHeight: 1.4 }}>❓ {d.text}</span>
                               <button
                                 onClick={() => removeDoubt(topic.id, d.id)}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--gray-300)", fontSize: "0.85rem", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>×</button>
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--gray-300)", fontSize: "var(--t-body)", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>×</button>
                             </div>
                           ))}
                         </div>
@@ -560,13 +598,13 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                           onChange={e => setNewDoubt(d => ({ ...d, [topic.id]: e.target.value }))}
                           onKeyDown={e => e.key === "Enter" && addDoubt(topic.id)}
                           placeholder="Adicionar dúvida…"
-                          style={{ flex: 1, fontSize: "0.78rem", padding: "5px 8px" }}
+                          style={{ flex: 1, fontSize: "var(--t-caption)", padding: "5px 8px" }}
                         />
                         <button
                           className="btn btn-secondary"
                           onClick={() => addDoubt(topic.id)}
                           disabled={!(newDoubt[topic.id] || "").trim()}
-                          style={{ padding: "4px 10px", fontSize: "0.78rem" }}>
+                          style={{ padding: "4px 10px", fontSize: "var(--t-caption)" }}>
                           <Plus size={13} />
                         </button>
                       </div>
@@ -597,7 +635,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           <span className="card-title"><CalendarEmoji /> Calendário de estudo</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button className="btn btn-secondary" style={{ padding: "4px 8px" }} onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>‹</button>
-            <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--gray-700)", minWidth: 120, textAlign: "center" }}>
+            <span style={{ fontSize: "var(--t-body)", fontWeight: 700, color: "var(--gray-700)", minWidth: 120, textAlign: "center" }}>
               {calMonth.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })}
             </span>
             <button className="btn btn-secondary" style={{ padding: "4px 8px" }} onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>›</button>
@@ -608,7 +646,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           {/* Draggable topics from list */}
           {subjectTopics.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-              <span style={{ fontSize: "0.72rem", color: "var(--gray-400)", fontWeight: 600, alignSelf: "center", marginRight: 4 }}>Arrasta para os dias →</span>
+              <span style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontWeight: 600, alignSelf: "center", marginRight: 4 }}>Arrasta para os dias →</span>
               {subjectTopics.map(topic => (
                 <div
                   key={topic.id}
@@ -618,9 +656,9 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 5,
                     background: "var(--white)", border: "1px solid var(--gray-200)",
-                    borderRadius: "var(--radius-sm)", padding: "5px 10px",
-                    fontSize: "0.78rem", fontWeight: 500, color: "var(--gray-700)",
-                    cursor: "grab", boxShadow: "var(--shadow-xs)",
+                    borderRadius: "var(--r)", padding: "5px 10px",
+                    fontSize: "var(--t-caption)", fontWeight: 500, color: "var(--gray-700)",
+                    cursor: "grab", boxShadow: "var(--shadow)",
                     opacity: dragging?.topic?.id === topic.id && dragging?.fromDate === null ? 0.5 : 1,
                   }}
                 >
@@ -653,7 +691,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 3 }}>
                 {["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map(d => (
-                  <div key={d} style={{ textAlign: "center", fontSize: "0.62rem", fontWeight: 700, color: "var(--gray-400)", textTransform: "uppercase", letterSpacing: 0.5, paddingBottom: 5 }}>{d}</div>
+                  <div key={d} style={{ textAlign: "center", fontSize: "var(--t-caption)", fontWeight: 700, color: "var(--gray-400)", letterSpacing: 0.5, paddingBottom: 5 }}>{d}</div>
                 ))}
                 {cells.map((day, i) => {
                   if (!day) return <div key={`e-${i}`} />
@@ -671,7 +709,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                       key={dateStr}
                       style={{
                         border: `1.5px solid ${isDragOver ? "var(--rose-400)" : isExamDay ? "#f97316" : isToday ? "var(--rose-300)" : dayTopics.length > 0 ? "var(--accent-200)" : "var(--gray-200)"}`,
-                        borderRadius: "var(--radius-sm)",
+                        borderRadius: "var(--r)",
                         minHeight: 60,
                         padding: "3px",
                         background: isDragOver ? "var(--rose-50)" : isExamDay ? "#fff7ed" : isToday ? "#fff1f2" : dayTopics.length > 0 ? "var(--accent-50)" : "var(--white)",
@@ -682,7 +720,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null) }}
                       onDrop={() => dropTopic(dateStr)}
                     >
-                      <div style={{ fontSize: "0.68rem", fontWeight: 700, color: isExamDay ? "#c2410c" : isToday ? "var(--rose-400)" : "var(--gray-500)", textAlign: "center", marginBottom: 2 }}>
+                      <div style={{ fontSize: "var(--t-caption)", fontWeight: 700, color: isExamDay ? "#c2410c" : isToday ? "var(--rose-400)" : "var(--gray-500)", textAlign: "center", marginBottom: 2 }}>
                         {day}{isExamDay ? " 🎯" : ""}
                       </div>
                       {visible.map(t => (
@@ -693,7 +731,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                           onDragEnd={() => { setDragging(null); setDragOver(null) }}
                           style={{
                             display: "flex", alignItems: "center", gap: 2,
-                            fontSize: "0.58rem", fontWeight: 600, color: "var(--accent-600)",
+                            fontSize: "var(--t-caption)", fontWeight: 600, color: "var(--accent-600)",
                             background: "var(--accent-100)", borderRadius: 3,
                             padding: "2px 4px", marginBottom: 2,
                             cursor: "grab",
@@ -703,12 +741,12 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                           <span style={{ flex: 1, wordBreak: "break-word", lineHeight: 1.3 }}>{t.name}</span>
                           <button
                             onClick={e => { e.stopPropagation(); removeFromDay(dateStr, t.id) }}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-400)", padding: 0, lineHeight: 1, flexShrink: 0, fontSize: "0.7rem" }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-400)", padding: 0, lineHeight: 1, flexShrink: 0, fontSize: "var(--t-caption)" }}
                           >✕</button>
                         </div>
                       ))}
                       {overflow > 0 && (
-                        <div style={{ fontSize: "0.55rem", fontWeight: 700, color: "var(--gray-400)", textAlign: "center", marginTop: 1 }}>+{overflow}</div>
+                        <div style={{ fontSize: "var(--t-caption)", fontWeight: 700, color: "var(--gray-400)", textAlign: "center", marginTop: 1 }}>+{overflow}</div>
                       )}
                     </div>
                   )
@@ -736,7 +774,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
             )}
             <button
               className="btn btn-primary"
-              style={{ fontSize: "0.78rem", padding: "6px 14px" }}
+              style={{ fontSize: "var(--t-caption)", padding: "6px 14px" }}
               onClick={analyzeWithAI}
               disabled={aiLoading}
             >
@@ -749,24 +787,24 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           <>
             {aiResult ? (
               <div className="card-body">
-                <p style={{ fontSize: "0.83rem", color: "var(--gray-700)", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{aiResult}</p>
+                <p style={{ fontSize: "var(--t-body)", color: "var(--gray-700)", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>{aiResult}</p>
                 {aiPlan && Object.keys(aiPlan).length > 0 && (
                   <div style={{
                     marginTop: 14, padding: "12px 14px",
                     background: "var(--rose-50)", border: "1.5px solid var(--rose-200)",
-                    borderRadius: "var(--radius)", display: "flex", alignItems: "center", gap: 12,
+                    borderRadius: "var(--r)", display: "flex", alignItems: "center", gap: 12,
                   }}>
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: 700, fontSize: "0.83rem", color: "var(--rose-600)", marginBottom: 2 }}>
+                      <p style={{ fontWeight: 700, fontSize: "var(--t-body)", color: "var(--rose-600)", marginBottom: 2 }}>
                         <CalendarEmoji /> Plano de calendário pronto
                       </p>
-                      <p style={{ fontSize: "0.75rem", color: "var(--rose-400)" }}>
+                      <p style={{ fontSize: "var(--t-caption)", color: "var(--rose-400)" }}>
                         {Object.values(aiPlan).reduce((a, v) => a + v.length, 0)} sessões distribuídas por {Object.keys(aiPlan).length} dias
                       </p>
                     </div>
                     <button
                       className="btn btn-primary"
-                      style={{ fontSize: "0.8rem", flexShrink: 0 }}
+                      style={{ fontSize: "var(--t-body)", flexShrink: 0 }}
                       onClick={applyAIPlan}
                     >
                       Aplicar ao calendário
@@ -776,7 +814,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
               </div>
             ) : (
               <div className="card-body">
-                <p style={{ fontSize: "0.78rem", color: "var(--gray-400)", fontStyle: "italic" }}>
+                <p style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontStyle: "italic" }}>
                   Adiciona tópicos com auto-avaliação e clica Analisar — a IA sugere ordem de estudo, prioridades, número de revisões com base nos exames e distribui as revisões por dias específicos no calendário.
                 </p>
               </div>

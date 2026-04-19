@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Play, Pause, RotateCcw, Timer } from 'lucide-react'
+import { CONFIDENCE } from '../constants'
 
 
 const MODES = [
@@ -81,14 +82,25 @@ export function PomodoroTimer({ subjects: propSubjects }) {
   const [secondsElapsed, setElapsed]  = useState(saved?.secondsElapsed || 0)
   const [running, setRunning]         = useState(saved?.running || false)
   const [completed, setCompleted]     = useState(0)
-  const [log, setLog]                 = useState([])
+  const [log, setLog]                 = useState(() => {
+    try {
+      const todayStr = new Date().toDateString()
+      return (JSON.parse(localStorage.getItem('study-sessions')) || [])
+        .filter(s => s.date === todayStr)
+        .map(s => ({
+          id: s.id,
+          subject: s.subject,
+          minutes: Math.round((s.hours || 0) * 60),
+          notes: s.notes || '',
+          time: s.startTime
+            ? new Date(s.startTime).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
+            : '',
+        }))
+    } catch { return [] }
+  })
   const [showNotes, setShowNotes]     = useState(false)
   const [pendingMinutes, setPendingMinutes] = useState(0)
   const [noteText, setNoteText]       = useState('')
-  const [sessionProject, setSessionProject] = useState('')
-
-  const projects = (() => { try { return JSON.parse(localStorage.getItem('projects-v2')) || [] } catch { return [] } })()
-    .filter(p => p.status !== 'completed')
   const didMount        = useRef(false)
   const intervalRef     = useRef(null)
   // Wall-clock based timing — source of truth to avoid setInterval drift
@@ -170,7 +182,6 @@ export function PomodoroTimer({ subjects: propSubjects }) {
               notes: `Pomodoro ${currentMode.minutes}min`,
               date: new Date().toDateString(),
               startTime: wallStartRef.current,
-              projectId: sessionProject || null,
               _pomodoroAutoSaved: true,
             }
             saveSessions([autoSession, ...sessions])
@@ -281,6 +292,19 @@ export function PomodoroTimer({ subjects: propSubjects }) {
     if (Notification.permission !== 'granted') Notification.requestPermission()
   }
 
+  useEffect(() => {
+    const channel = new BroadcastChannel('pomodoro-sync')
+    channel.onmessage = (event) => {
+      if (event.data.type === 'TOGGLE_PLAY') {
+        setRunning(v => {
+          if (!v) requestNotifications()
+          return !v
+        })
+      }
+    }
+    return () => channel.close()
+  }, [])
+
   const displaySeconds = isStopwatch ? secondsElapsed : secondsLeft
   const minutes = Math.floor(displaySeconds / 60).toString().padStart(2, '0')
   const secs    = (displaySeconds % 60).toString().padStart(2, '0')
@@ -305,7 +329,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
             border: `2px solid ${mode === m.id ? m.color : 'var(--gray-200)'}`,
             background: mode === m.id ? m.color : 'var(--white)',
             color: mode === m.id ? 'var(--white)' : 'var(--gray-500)',
-            fontFamily: 'inherit', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
+            fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer',
             transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 5,
           }}>
             {m.id === 'stopwatch' && <Timer size={12} />}
@@ -316,7 +340,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
 
       {/* Subject selector */}
       <div style={{ marginBottom: 28 }}>
-        <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <label style={{ display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, letterSpacing: 0.5 }}>
           A estudar
         </label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -326,7 +350,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
               border: `2px solid ${subject === s.key ? currentMode.color : 'var(--gray-200)'}`,
               background: subject === s.key ? `${currentMode.color}15` : 'var(--white)',
               color: subject === s.key ? currentMode.color : 'var(--gray-500)',
-              fontFamily: 'inherit', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+              fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer',
               transition: 'all 0.15s',
             }}>
               {s.emoji} {s.name}
@@ -350,11 +374,11 @@ export function PomodoroTimer({ subjects: propSubjects }) {
             <div style={{ fontSize: '3rem', fontWeight: 800, letterSpacing: -2, color: 'var(--gray-900)', lineHeight: 1 }}>
               {minutes}:{secs}
             </div>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-400)', marginTop: 4 }}>
+            <div style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-400)', marginTop: 4 }}>
               {isStopwatch ? 'A contar...' : currentMode.label}
             </div>
             {completed > 0 && (
-              <div style={{ fontSize: '0.72rem', color: currentMode.color, fontWeight: 700, marginTop: 4 }}>
+              <div style={{ fontSize: 'var(--t-caption)', color: currentMode.color, fontWeight: 700, marginTop: 4 }}>
                 {'🍅'.repeat(Math.min(completed, 8))}
               </div>
             )}
@@ -374,10 +398,10 @@ export function PomodoroTimer({ subjects: propSubjects }) {
 
           {isStopwatch && running ? (
             <button onClick={stopStopwatch} style={{
-              height: 64, padding: '0 24px', borderRadius: 32, border: 'none',
+              height: 64, padding: '0 24px', borderRadius: 'var(--r-pill)', border: 'none',
               background: currentMode.color, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 8,
-              color: 'white', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.9rem',
+              color: 'white', fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)',
               boxShadow: `0 4px 20px ${currentMode.color}50`,
             }}>
               <Pause size={20} /> Parar e guardar
@@ -396,7 +420,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
         </div>
 
         {isStopwatch && !running && secondsElapsed === 0 && !showNotes && (
-          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginTop: 10, fontWeight: 500 }}>
+          <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 10, fontWeight: 500 }}>
             Liga e estuda. Para quando terminares — as horas são guardadas.
           </p>
         )}
@@ -406,19 +430,63 @@ export function PomodoroTimer({ subjects: propSubjects }) {
       {showNotes && (
         <div style={{
           background: 'var(--white)', border: '1.5px solid #c4b5fd',
-          borderRadius: 'var(--radius-lg)', padding: '20px 22px',
-          marginBottom: 20, boxShadow: 'var(--shadow-md)',
+          borderRadius: 'var(--r)', padding: '20px 22px',
+          marginBottom: 20, boxShadow: 'var(--shadow)',
         }}>
-          <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--gray-800)', marginBottom: 4 }}>
+          <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: 'var(--gray-800)', marginBottom: 4 }}>
             Sessão concluída ✨
           </p>
-          <p style={{ fontSize: '0.82rem', color: 'var(--gray-400)', marginBottom: 14 }}>
+          <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', marginBottom: 14 }}>
             {pendingMinutes} minutos · {subjects.find(s => s.key === subject)?.name}
           </p>
-          <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', marginBottom: 10 }}>
+          <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 10 }}>
             ✅ Sessão guardada automaticamente. Adiciona notas se quiseres (opcional).
           </p>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          {(() => {
+            try {
+              const allTopics = JSON.parse(localStorage.getItem('topics') || '{}')
+              const subjectObj = subjects.find(s => s.key === subject)
+              const sTopics = allTopics[subject] || allTopics[subjectObj?.name || ''] || []
+              const topicKey = allTopics[subject] ? subject : (subjectObj?.name || subject)
+              if (sTopics.length === 0) return null
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 8, letterSpacing: 0.4 }}>
+                    O que cobriste? (clica para aumentar confiança)
+                  </p>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {sTopics.map(topic => {
+                      const conf = CONFIDENCE.find(c => c.id === topic.confidence) || CONFIDENCE[0]
+                      return (
+                        <button key={topic.id}
+                          onClick={() => {
+                            const ids = ['unknown', 'little', 'good', 'great']
+                            const idx = ids.indexOf(topic.confidence)
+                            const next = ids[Math.min(idx + 1, ids.length - 1)]
+                            try {
+                              const raw = JSON.parse(localStorage.getItem('topics') || '{}')
+                              const subs = raw[subject] || []
+                              raw[topicKey] = subs.map(t => t.id === topic.id ? { ...t, confidence: next } : t)
+                              localStorage.setItem('topics', JSON.stringify(raw))
+                            } catch {}
+                          }}
+                          style={{
+                            padding: '4px 10px', borderRadius: 50, fontFamily: 'inherit',
+                            fontSize: 'var(--t-caption)', fontWeight: 600, cursor: 'pointer',
+                            background: conf.bg, color: conf.color,
+                            border: `1.5px solid ${conf.color}44`,
+                          }}
+                        >
+                          {topic.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            } catch { return null }
+          })()}
+          <label style={{ display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, letterSpacing: 0.4 }}>
             O que estudaste?
           </label>
           <textarea
@@ -428,8 +496,8 @@ export function PomodoroTimer({ subjects: propSubjects }) {
             onChange={e => setNoteText(e.target.value)}
             autoFocus
             style={{
-              width: '100%', fontFamily: 'inherit', fontSize: '0.88rem',
-              border: '1px solid var(--gray-200)', borderRadius: 10,
+              width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)',
+              border: '1px solid var(--gray-200)', borderRadius: 'var(--r)',
               padding: '10px 12px', outline: 'none',
               background: 'var(--gray-50)', color: 'var(--gray-900)',
               resize: 'vertical', lineHeight: 1.6, marginBottom: 12,
@@ -439,30 +507,6 @@ export function PomodoroTimer({ subjects: propSubjects }) {
             onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
             onKeyDown={e => e.key === 'Enter' && e.metaKey && confirmSave()}
           />
-          {projects.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                Ligar a projeto (opcional)
-              </label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => setSessionProject('')}
-                  style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${!sessionProject ? '#8b5cf6' : 'var(--gray-200)'}`, background: !sessionProject ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: !sessionProject ? '#5b21b6' : 'var(--gray-500)', fontWeight: !sessionProject ? 700 : 500 }}
-                >
-                  Nenhum
-                </button>
-                {projects.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => setSessionProject(p.id)}
-                    style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${sessionProject === p.id ? '#8b5cf6' : 'var(--gray-200)'}`, background: sessionProject === p.id ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: sessionProject === p.id ? '#5b21b6' : 'var(--gray-500)', fontWeight: sessionProject === p.id ? 700 : 500 }}
-                  >
-                    {p.emoji || '🗂'} {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={confirmSave} style={{ background: '#8b5cf6' }}>
               {isStopwatch ? 'Guardar sessão' : 'Adicionar notas'}
@@ -478,9 +522,9 @@ export function PomodoroTimer({ subjects: propSubjects }) {
       {log.length > 0 && (
         <div style={{
           background: 'var(--white)', border: '1px solid var(--gray-200)',
-          borderRadius: 'var(--radius)', padding: '16px 18px', boxShadow: 'var(--shadow-xs)',
+          borderRadius: 'var(--r)', padding: '16px 18px', boxShadow: 'var(--shadow)',
         }}>
-          <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-700)', marginBottom: 10 }}>
+          <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', marginBottom: 10 }}>
             Sessões de hoje
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -490,15 +534,15 @@ export function PomodoroTimer({ subjects: propSubjects }) {
                 <div key={l.id} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
                   padding: '8px 12px', background: 'var(--gray-50)',
-                  borderRadius: 8, fontSize: '0.85rem',
+                  borderRadius: 'var(--r)', fontSize: 'var(--t-body)',
                 }}>
                   <span>{subj?.emoji}</span>
                   <div style={{ flex: 1 }}>
                     <span style={{ fontWeight: 600, color: 'var(--gray-700)' }}>{subj?.name}</span>
-                    {l.notes && <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: '2px 0 0', fontStyle: 'italic' }}>{l.notes}</p>}
+                    {l.notes && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '2px 0 0', fontStyle: 'italic' }}>{l.notes}</p>}
                   </div>
                   <span style={{ color: 'var(--gray-400)', fontWeight: 600, flexShrink: 0 }}>{l.minutes} min</span>
-                  <span style={{ color: 'var(--gray-400)', fontSize: '0.75rem', flexShrink: 0 }}>{l.time}</span>
+                  <span style={{ color: 'var(--gray-400)', fontSize: 'var(--t-caption)', flexShrink: 0 }}>{l.time}</span>
                 </div>
               )
             })}

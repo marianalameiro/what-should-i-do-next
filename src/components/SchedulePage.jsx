@@ -409,7 +409,7 @@ const css = `
   font-family: inherit;
   font-size: 0.78rem;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--r);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -435,13 +435,13 @@ const css = `
 .sched-card {
   background: var(--white);
   border: 1px solid var(--gray-100);
-  border-radius: var(--radius-lg);
+  border-radius: var(--r);
   padding: 16px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
 }
 .sched-input {
   border: 1px solid var(--gray-200);
-  border-radius: var(--radius-sm);
+  border-radius: var(--r);
   padding: 8px 10px;
   font-size: 0.83rem;
   font-family: inherit;
@@ -453,11 +453,9 @@ const css = `
 }
 .sched-input:focus { border-color: var(--accent-300); box-shadow: 0 0 0 3px hsla(var(--accent-h), var(--accent-s), 60%, 0.1); }
 .sched-label {
-  font-size: 0.72rem;
+  font-size: var(--t-caption);
   font-weight: 700;
   color: var(--gray-400);
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -505,9 +503,9 @@ function Modal({ children, onClose, title, wide=false }) {
       onClick={onClose}
     >
       <div
-        style={{ background:'var(--white)', borderRadius:'var(--radius-lg)', padding:28,
+        style={{ background:'var(--white)', borderRadius:'var(--r)', padding:28,
                  width:wide?580:420, maxWidth:'100%', maxHeight:'88vh', overflowY:'auto',
-                 boxShadow:'var(--shadow-lg)' }}
+                 boxShadow:'var(--shadow)' }}
         onClick={e=>e.stopPropagation()}
       >
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
@@ -525,8 +523,8 @@ function ClassTimeForm({ initial, subjects, onSave, onCancel }) {
   const [form, setForm] = useState(initial)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   return (
-    <div style={{ background:'var(--gray-50)', borderRadius:12, padding:18, marginTop:16 }}>
-      <p style={{ fontFamily:'inherit', fontSize:'0.9rem', fontWeight:700, color:'var(--gray-900)', marginBottom:14 }}>
+    <div style={{ background:'var(--gray-50)', borderRadius:'var(--r)', padding:18, marginTop:16 }}>
+      <p style={{ fontFamily:'inherit', fontSize:'var(--t-body)', fontWeight:700, color:'var(--gray-900)', marginBottom:14 }}>
         {initial.id?'Editar aula':'Nova aula'}
       </p>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
@@ -559,8 +557,8 @@ function HouseholdForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   return (
-    <div style={{ background:'#fffbeb', borderRadius:12, padding:18, marginTop:16 }}>
-      <p style={{ fontFamily:'inherit', fontSize:'0.9rem', fontWeight:700, color:'#d97706', marginBottom:14 }}>
+    <div style={{ background:'var(--amber-50)', borderRadius:'var(--r)', padding:18, marginTop:16 }}>
+      <p style={{ fontFamily:'inherit', fontSize:'var(--t-body)', fontWeight:700, color:'#d97706', marginBottom:14 }}>
         {initial.id?'Editar tarefa':'Nova tarefa'}
       </p>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
@@ -656,18 +654,18 @@ function FocusOverlay({ block, currentMins, onClose, onStartPomodoro }) {
   const saveNotes=v=>{ setNotes(v); try{localStorage.setItem(noteKey,v)}catch{} }
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:24}} onClick={onClose}>
-      <div style={{background:'var(--white)',borderRadius:'var(--radius-xl)',padding:36,width:480,maxWidth:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'var(--shadow-lg)',position:'relative'}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:'var(--white)',borderRadius:'var(--r)',padding:36,width:480,maxWidth:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'var(--shadow)',position:'relative'}} onClick={e=>e.stopPropagation()}>
         <button className="sched-icon-btn" onClick={onClose} style={{position:'absolute',top:16,right:16,background:'var(--gray-100)',borderRadius:'50%',width:32,height:32}}>✕</button>
         <div style={{textAlign:'center',marginBottom:24}}>
           {block.emoji&&<div style={{fontSize:'3rem',marginBottom:10}}>{block.emoji}</div>}
           <h2 style={{fontFamily:'inherit',fontSize:'1.6rem',fontWeight:800,color:'var(--gray-900)',letterSpacing:'-0.04em'}}>{block.title}</h2>
-          <p style={{fontSize:'0.75rem',color:'var(--gray-400)',marginTop:6}}>{block.startTime} – {block.endTime} · {fmtDur(dur)}</p>
-          <div style={{display:'inline-flex',alignItems:'center',gap:6,background:isPast?'#f0fdf4':isActive?'#fdf2f7':'#fef3c7',color:isPast?'#16a34a':isActive?'#db2777':'#d97706',border:`1px solid ${isPast?'#86efac':isActive?'#f9a8d4':'#fde68a'}`,borderRadius:50,padding:'5px 14px',marginTop:12,fontSize:'0.75rem',fontWeight:500}}>
+          <p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',marginTop:6}}>{block.startTime} – {block.endTime} · {fmtDur(dur)}</p>
+          <div style={{display:'inline-flex',alignItems:'center',gap:6,background:isPast?'var(--green-50)':isActive?'#fdf2f7':'var(--amber-50)',color:isPast?'#16a34a':isActive?'#db2777':'#d97706',border:`1px solid ${isPast?'#86efac':isActive?'#f9a8d4':'#fde68a'}`,borderRadius:50,padding:'5px 14px',marginTop:12,fontSize:'var(--t-caption)',fontWeight:500}}>
             {isPast?'✓':isActive?'▶':'⏰'} {label}
           </div>
         </div>
         <label className="sched-label" style={{marginBottom:6}}>Notas</label>
-        <textarea value={notes} onChange={e=>saveNotes(e.target.value)} placeholder="Escreve notas sobre este bloco..." style={{width:'100%',border:'1.5px solid #e0e0e0',borderRadius:10,padding:'10px 12px',fontSize:'0.82rem',fontFamily:'inherit',color:'var(--gray-900)',background:'var(--white)',resize:'vertical',minHeight:100,outline:'none'}}/>
+        <textarea value={notes} onChange={e=>saveNotes(e.target.value)} placeholder="Escreve notas sobre este bloco..." style={{width:'100%',border:'1.5px solid #e0e0e0',borderRadius:'var(--r)',padding:'10px 12px',fontSize:'var(--t-body)',fontFamily:'inherit',color:'var(--gray-900)',background:'var(--white)',resize:'vertical',minHeight:100,outline:'none'}}/>
         <div style={{display:'flex',gap:8,marginTop:18,justifyContent:'center'}}>
           <Btn onClick={onStartPomodoro} solid color="#db2777" bg="#fdf2f7">🍅 Iniciar Pomodoro</Btn>
           <Btn onClick={onClose} bg="#f2f2f2" color="#666">Fechar</Btn>
@@ -1113,7 +1111,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20,flexWrap:'wrap'}}>
         {/* Date nav */}
         <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <button onClick={prevDay} style={{background:'var(--white)',border:'1px solid var(--gray-200)',borderRadius:8,width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--gray-500)'}}>
+          <button onClick={prevDay} style={{background:'var(--white)',border:'1px solid var(--gray-200)',borderRadius:'var(--r)',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--gray-500)'}}>
             <ChevronLeft size={16}/>
           </button>
           <div style={{textAlign:'center',minWidth:210}}>
@@ -1121,12 +1119,12 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
               {DAY_FULL[selDate.getDay()]}, {selDate.getDate()} de {MONTHS[selDate.getMonth()]}
             </p>
             {!isToday&&(
-              <p style={{fontSize:'0.68rem',color:'var(--gray-400)',marginTop:2,fontFamily:'inherit'}}>
+              <p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',marginTop:2,fontFamily:'inherit'}}>
                 {selDate>today?`+${Math.round((selDate-today)/86400000)}d`:`-${Math.round((today-selDate)/86400000)}d`}
               </p>
             )}
           </div>
-          <button onClick={nextDay} style={{background:'var(--white)',border:'1px solid var(--gray-200)',borderRadius:8,width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--gray-500)'}}>
+          <button onClick={nextDay} style={{background:'var(--white)',border:'1px solid var(--gray-200)',borderRadius:'var(--r)',width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--gray-500)'}}>
             <ChevronRight size={16}/>
           </button>
         </div>
@@ -1151,7 +1149,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
 
       {/* ─── AI error ─── */}
       {aiError&&(
-        <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:10,padding:'8px 14px',marginBottom:12,fontSize:'0.75rem',color:'#dc2626',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{background:'var(--red-50)',border:'1px solid #fca5a5',borderRadius:'var(--r)',padding:'8px 14px',marginBottom:12,fontSize:'var(--t-caption)',color:'#dc2626',display:'flex',alignItems:'center',gap:8}}>
           ⚠️ {aiError}
           <button onClick={()=>setAiError(null)} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'#dc2626',fontSize:'1rem'}}>✕</button>
         </div>
@@ -1163,8 +1161,8 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
           const isSel=wd.dateStr===dateStr
           return (
             <button key={wd.dateStr} onClick={()=>setSelDate(wd.date)} title={DAY_FULL[(i+1)%7]}
-              style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,background:isSel?'#f5f5f5':'transparent',border:'none',cursor:'pointer',padding:'4px 8px',borderRadius:8}}>
-              <span style={{fontSize:'0.58rem',fontWeight:500,color:isSel?'#1a1a1a':'#bbb',textTransform:'uppercase',letterSpacing:'0.06em'}}>{wd.label}</span>
+              style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,background:isSel?'#f5f5f5':'transparent',border:'none',cursor:'pointer',padding:'4px 8px',borderRadius:'var(--r)'}}>
+              <span style={{fontSize:'var(--t-caption)',fontWeight:500,color:isSel?'#1a1a1a':'#bbb',letterSpacing:'0.06em'}}>{wd.label}</span>
               <div style={{width:8,height:8,borderRadius:'50%',background:wd.hasBlocks?(isSel?'#1a1a1a':'#ccc'):'#f0f0f0',border:isSel?'2px solid #1a1a1a':'1.5px solid transparent'}}/>
             </button>
           )
@@ -1174,24 +1172,24 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       {/* ─── Stats bar ─── */}
       <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
         {[
-          {label:'Livre',     value:fmtDur(freeMins),         color:'#16a34a',bg:'#f0fdf4'},
-          {label:'Agendado',  value:fmtDur(scheduledMins),    color:'#0891b2',bg:'#ecfeff'},
+          {label:'Livre',     value:fmtDur(freeMins),         color:'#16a34a',bg:'var(--green-50)'},
+          {label:'Agendado',  value:fmtDur(scheduledMins),    color:'#0891b2',bg:'var(--cyan-50)'},
           {label:'Total dia', value:`${totalHours}h`,         color:'#71717a',bg:'#fafafa'},
           {label:'Aulas',     value:String(classBlocks.length),color:'#7c3aed',bg:'#f5f3ff'},
         ].map(s=>(
-          <div key={s.label} style={{background:s.bg,border:`1px solid ${s.color}22`,borderRadius:10,padding:'8px 14px',minWidth:90}}>
-            <p style={{fontSize:'0.62rem',fontWeight:500,color:s.color,textTransform:'uppercase',letterSpacing:'0.07em'}}>{s.label}</p>
+          <div key={s.label} style={{background:s.bg,border:`1px solid ${s.color}22`,borderRadius:'var(--r)',padding:'8px 14px',minWidth:90}}>
+            <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:s.color,letterSpacing:'0.07em'}}>{s.label}</p>
             <p style={{fontFamily:'inherit',fontSize:'1.1rem',fontWeight:700,color:s.color}}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* ─── AI summary ─── */}
-      <div style={{background:'var(--white)',border:'1px solid var(--gray-100)',borderRadius:12,padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'flex-start',gap:12}}>
+      <div style={{background:'var(--white)',border:'1px solid var(--gray-100)',borderRadius:'var(--r)',padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'flex-start',gap:12}}>
         <div style={{flex:1}}>
           {summary
-            ?<p style={{fontSize:'0.8rem',color:'var(--gray-600)',lineHeight:1.7}}>{summary}</p>
-            :<p style={{fontSize:'0.75rem',color:'var(--gray-400)',fontStyle:'italic'}}>Gera um resumo motivacional do teu dia com IA.</p>
+            ?<p style={{fontSize:'var(--t-body)',color:'var(--gray-600)',lineHeight:1.7}}>{summary}</p>
+            :<p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',fontStyle:'italic'}}>Gera um resumo motivacional do teu dia com IA.</p>
           }
         </div>
         <Btn onClick={handleAISummary} disabled={summaryLoading} bg="#f5f3ff" color="#7c3aed">
@@ -1204,7 +1202,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
           {allDayEvents.map(e=>{
             const s=STYLES[e.type]||STYLES.event
-            return <div key={e.id} style={{background:s.bg,border:`1px solid ${s.border}`,borderRadius:8,padding:'4px 10px',fontSize:'0.75rem',fontWeight:500,color:s.color}}>{e.title}</div>
+            return <div key={e.id} style={{background:s.bg,border:`1px solid ${s.border}`,borderRadius:'var(--r)',padding:'4px 10px',fontSize:'var(--t-caption)',fontWeight:500,color:s.color}}>{e.title}</div>
           })}
         </div>
       )}
@@ -1212,7 +1210,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       {/* ─── Week View ─── */}
       {weekView?(
         <>
-        <div style={{background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',overflow:'hidden',overflowX:'auto'}}>
+        <div style={{background:'var(--white)',borderRadius:'var(--r)',border:'1px solid var(--gray-100)',overflow:'hidden',overflowX:'auto'}}>
           <div style={{display:'grid',gridTemplateColumns:`48px repeat(7,1fr)`,minWidth:700}}>
             <div style={{borderBottom:'1px solid #ececec'}}/>
             {weekDays.map((d,i)=>{
@@ -1221,7 +1219,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
               return (
                 <div key={ds} onClick={()=>{setSelDate(d);setWeekView(false)}}
                   style={{borderBottom:'1px solid #ececec',borderLeft:'1px solid #ececec',padding:'8px 4px 4px',textAlign:'center',cursor:'pointer',background:isSel?'#f7f7f7':'transparent'}}>
-                  <p style={{fontSize:'0.6rem',fontWeight:500,color:isT?'#db2777':'#bbb',textTransform:'uppercase',letterSpacing:'0.06em'}}>{DAY_SHORT[(i+1)%7]}</p>
+                  <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:isT?'#db2777':'#bbb',letterSpacing:'0.06em'}}>{DAY_SHORT[(i+1)%7]}</p>
                   <p style={{fontFamily:'inherit',fontSize:'1rem',fontWeight:700,color:isT?'#db2777':'#1a1a1a'}}>{d.getDate()}</p>
                   <div style={{height:3,background:'var(--gray-100)',borderRadius:2,margin:'3px 4px 0'}}>
                     <div style={{height:'100%',width:`${fill}%`,background:stat.mins>4*60?'#16a34a':stat.mins>2*60?'#f59e0b':'#d4d4d8',borderRadius:2}}/>
@@ -1232,7 +1230,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
             <div style={{position:'relative'}}>
               {hours.map(m=>(
                 <div key={m} style={{height:HOUR_H,borderTop:'1px solid #f0f0f0',display:'flex',alignItems:'flex-start'}}>
-                  <span style={{fontSize:'0.62rem',color:'var(--gray-400)',padding:'0 4px',marginTop:-8,fontWeight:500}}>{fmtTime(toTime(m))}</span>
+                  <span style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',padding:'0 4px',marginTop:-8,fontWeight:500}}>{fmtTime(toTime(m))}</span>
                 </div>
               ))}
             </div>
@@ -1250,7 +1248,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                     const s=STYLES[block.type]||STYLES.manual
                     return (
                       <div key={block.id} title={block.title}
-                        style={{position:'absolute',top,left:2,right:2,height:h,background:block.bg||s.bg,border:`1px solid ${block.border||s.border}`,borderLeft:`3px solid ${block.color||s.color}`,borderRadius:4,overflow:'hidden',fontSize:'0.6rem',fontWeight:500,color:block.color||s.color,padding:'1px 3px',display:'flex',alignItems:'center',gap:2}}>
+                        style={{position:'absolute',top,left:2,right:2,height:h,background:block.bg||s.bg,border:`1px solid ${block.border||s.border}`,borderLeft:`3px solid ${block.color||s.color}`,borderRadius:4,overflow:'hidden',fontSize:'var(--t-caption)',fontWeight:500,color:block.color||s.color,padding:'1px 3px',display:'flex',alignItems:'center',gap:2}}>
                         {block.emoji&&<span>{block.emoji}</span>}
                         <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{block.title}</span>
                       </div>
@@ -1263,12 +1261,12 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         </div>
 
         {/* ─── Weekly task compilation ─── */}
-        <div style={{marginTop:14,background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',padding:'16px 20px'}}>
+        <div style={{marginTop:14,background:'var(--white)',borderRadius:'var(--r)',border:'1px solid var(--gray-100)',padding:'16px 20px'}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-            <p style={{fontSize:'0.65rem',fontWeight:700,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em'}}>
+            <p style={{fontSize:'var(--t-caption)',fontWeight:700,color:'var(--gray-400)',letterSpacing:'0.07em'}}>
               Tarefas da semana
             </p>
-            <p style={{fontSize:'0.62rem',color:'var(--gray-300)',marginLeft:'auto'}}>arrasta para o dia ↑</p>
+            <p style={{fontSize:'var(--t-caption)',color:'var(--gray-300)',marginLeft:'auto'}}>arrasta para o dia ↑</p>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:14}}>
             {weekDays.map(d=>{
@@ -1294,38 +1292,41 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                   }
                 })
               })
+              const pending=tasks.filter(t=>!t.isDone&&!t.isScheduled)
               if(tasks.length===0)return null
               const isT=ds===toDateStr(today)
               return (
                 <div key={ds}>
-                  <p style={{fontSize:'0.72rem',fontWeight:700,color:isT?'var(--rose-400)':'var(--gray-600)',marginBottom:6,borderBottom:'1px solid var(--gray-100)',paddingBottom:4}}>
+                  <p style={{fontSize:'var(--t-caption)',fontWeight:700,color:isT?'var(--rose-400)':'var(--gray-600)',marginBottom:6,borderBottom:'1px solid var(--gray-100)',paddingBottom:4}}>
                     {DAY_FULL[d.getDay()]} <span style={{fontWeight:500,color:'var(--gray-400)'}}>{d.getDate()}</span>
                   </p>
-                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                    {tasks.map(t=>(
-                      <div key={t.id}
-                        draggable={!t.isDone&&!t.isScheduled}
-                        onDragStart={!t.isDone&&!t.isScheduled?()=>setWeekPanelDragTask(t):undefined}
-                        onDragEnd={()=>{setWeekPanelDragTask(null);setDragOverWeekDay(null)}}
-                        style={{
-                          display:'flex',alignItems:'center',gap:6,
-                          padding:'4px 8px',borderRadius:7,
-                          background:t.isDone?'var(--gray-50)':t.isScheduled?'#f0fdf4':'var(--white)',
-                          border:`1px solid ${t.isDone?'var(--gray-100)':t.isScheduled?'#86efac':'var(--gray-200)'}`,
-                          opacity:weekPanelDragTask?.id===t.id?0.4:t.isDone?0.5:1,
-                          cursor:t.isDone||t.isScheduled?'default':'grab',
-                          transition:'opacity 0.15s',
-                        }}>
-                        <span style={{fontSize:'0.8rem',flexShrink:0}}>{t.emoji}</span>
-                        <span style={{flex:1,fontSize:'0.75rem',fontWeight:500,color:t.isDone?'var(--gray-400)':'var(--gray-700)',textDecoration:t.isDone?'line-through':'none',lineHeight:1.3}}>
-                          {t.label}
-                        </span>
-                        {!t.isDone&&!t.isScheduled&&<span style={{fontSize:'0.58rem',color:'var(--gray-400)',flexShrink:0,background:'var(--gray-50)',borderRadius:4,padding:'1px 4px',border:'1px solid var(--gray-200)'}}>{fmtDur(t.duration)}</span>}
-                        {t.isScheduled&&!t.isDone&&<span style={{fontSize:'0.58rem',fontWeight:700,color:'#16a34a',flexShrink:0}}>✓</span>}
-                        {t.isDone&&<span style={{fontSize:'0.58rem',color:'var(--gray-300)',flexShrink:0}}>✓</span>}
-                      </div>
-                    ))}
-                  </div>
+                  {pending.length===0?(
+                    <p style={{fontSize:'var(--t-caption)',color:'#16a34a',fontWeight:600}}>✓ tudo tratado</p>
+                  ):(
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      {pending.map(t=>(
+                        <div key={t.id}
+                          draggable
+                          onDragStart={()=>setWeekPanelDragTask(t)}
+                          onDragEnd={()=>{setWeekPanelDragTask(null);setDragOverWeekDay(null)}}
+                          style={{
+                            display:'flex',alignItems:'center',gap:6,
+                            padding:'4px 8px',borderRadius:7,
+                            background:'var(--white)',
+                            border:'1px solid var(--gray-200)',
+                            opacity:weekPanelDragTask?.id===t.id?0.4:1,
+                            cursor:'grab',
+                            transition:'opacity 0.15s',
+                          }}>
+                          <span style={{fontSize:'var(--t-body)',flexShrink:0}}>{t.emoji}</span>
+                          <span style={{flex:1,fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-700)',lineHeight:1.3}}>
+                            {t.label}
+                          </span>
+                          <span style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',flexShrink:0,background:'var(--gray-50)',borderRadius:4,padding:'1px 4px',border:'1px solid var(--gray-200)'}}>{fmtDur(t.duration)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -1337,18 +1338,18 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         <div style={{display:'grid',gridTemplateColumns:'1fr 272px',gap:18,alignItems:'start'}}>
 
           {/* Timeline */}
-          <div style={{background:'var(--white)',borderRadius:'var(--radius-lg)',border:'1px solid var(--gray-100)',overflow:'hidden',position:'relative'}}>
+          <div style={{background:'var(--white)',borderRadius:'var(--r)',border:'1px solid var(--gray-100)',overflow:'hidden',position:'relative'}}>
             {aiLoading&&(
               <div style={{position:'absolute',inset:0,background:'var(--white)',zIndex:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}>
                 <div style={{fontSize:'1.8rem',animation:'spin 1.2s linear infinite'}}>✨</div>
-                <p style={{fontSize:'0.82rem',fontWeight:500,color:'#db2777',fontFamily:'inherit'}}>A gerar horário com IA...</p>
+                <p style={{fontSize:'var(--t-body)',fontWeight:500,color:'#db2777',fontFamily:'inherit'}}>A gerar horário com IA...</p>
               </div>
             )}
             {!aiLoading&&blocks.length===0&&classBlocks.length===0&&gcalTimed.length===0&&(
               <div style={{padding:'56px 32px',display:'flex',flexDirection:'column',alignItems:'center',gap:14,textAlign:'center'}}>
                 <div style={{fontSize:'2.5rem'}}>✨</div>
                 <p style={{fontFamily:'inherit',fontWeight:700,fontSize:'1.1rem',color:'var(--gray-900)'}}>Dia em branco</p>
-                <p style={{fontSize:'0.78rem',color:'var(--gray-400)',maxWidth:220,lineHeight:1.7}}>
+                <p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',maxWidth:220,lineHeight:1.7}}>
                   Clica em <strong>Auto-agendar</strong> para gerar o horário deste dia.
                 </p>
                 <Btn onClick={handleAutoSchedule} solid color="#db2777" bg="#fdf2f7" style={{marginTop:4}}>
@@ -1362,7 +1363,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
               {/* Hour lines */}
               {hours.map(m=>(
                 <div key={m} style={{height:HOUR_H,borderTop:'1px solid #f5f5f5',position:'relative'}}>
-                  <span style={{position:'absolute',left:-50,top:-8,fontSize:'0.66rem',fontWeight:500,color:'var(--gray-300)',width:44,textAlign:'right'}}>{fmtTime(toTime(m))}</span>
+                  <span style={{position:'absolute',left:-50,top:-8,fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-300)',width:44,textAlign:'right'}}>{fmtTime(toTime(m))}</span>
                 </div>
               ))}
 
@@ -1380,11 +1381,11 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                   <div style={{position:'absolute',top:toPx(dragOverMins-wakeMin),left:4,right:4,
                     height:Math.max(toPx(Math.min(sleepMin,dragOverMins+(sidebarDragTask.duration||45))-dragOverMins),18),
                     background:sidebarDragTask.bg,border:`2px dashed ${sidebarDragTask.color}`,
-                    borderRadius:8,opacity:0.75,pointerEvents:'none',zIndex:25,
+                    borderRadius:'var(--r)',opacity:0.75,pointerEvents:'none',zIndex:25,
                     display:'flex',alignItems:'center',padding:'0 10px',gap:6}}>
-                    <span style={{fontSize:'0.82rem'}}>{sidebarDragTask.emoji}</span>
-                    <span style={{fontSize:'0.75rem',fontWeight:500,color:sidebarDragTask.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sidebarDragTask.label}</span>
-                    <span style={{fontSize:'0.65rem',color:sidebarDragTask.color+'99',marginLeft:'auto',flexShrink:0}}>{toTime(dragOverMins)}</span>
+                    <span style={{fontSize:'var(--t-body)'}}>{sidebarDragTask.emoji}</span>
+                    <span style={{fontSize:'var(--t-caption)',fontWeight:500,color:sidebarDragTask.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sidebarDragTask.label}</span>
+                    <span style={{fontSize:'var(--t-caption)',color:sidebarDragTask.color+'99',marginLeft:'auto',flexShrink:0}}>{toTime(dragOverMins)}</span>
                   </div>
                 )}
                 {allBlocks.filter(b=>b.startMins!=null&&b.endMins!=null).map((block,idx)=>{
@@ -1404,21 +1405,21 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                         background:block.bg||'#f5f3ff',
                         border:`1.5px solid ${hasConf?'#ef4444':(block.border||block.color||'#ccc')}`,
                         borderLeft:`3px solid ${hasConf?'#ef4444':(block.color||'#7c3aed')}`,
-                        borderRadius:8,padding:small?'2px 8px':'6px 10px',
+                        borderRadius:'var(--r)',padding:small?'2px 8px':'6px 10px',
                         display:'flex',alignItems:small?'center':'flex-start',flexDirection:small?'row':'column',gap:small?6:2,
                         overflow:'hidden',zIndex:isDrag?20:(block.locked?1:2),
                         opacity:isDone?0.38:1,cursor:block.locked?'default':'grab',
                         boxShadow:isDrag?'0 4px 20px rgba(0,0,0,0.14)':'none',
                         transition:isDrag?'none':'opacity 0.2s',
                         animationDelay:`${idx*0.04}s`}}>
-                      {hasConf&&<span style={{position:'absolute',top:3,left:6,fontSize:'0.6rem',zIndex:3}}>⚠️</span>}
+                      {hasConf&&<span style={{position:'absolute',top:3,left:6,fontSize:'var(--t-caption)',zIndex:3}}>⚠️</span>}
                       <div style={{display:'flex',alignItems:'center',gap:5,minWidth:0,flex:1}}>
-                        {block.emoji&&<span style={{fontSize:small?'0.72rem':'0.82rem',flexShrink:0}}>{block.emoji}</span>}
-                        <span style={{fontSize:small?'0.7rem':'0.76rem',fontWeight:500,color:block.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:isDone?'line-through':'none'}}>
+                        {block.emoji&&<span style={{fontSize:small?'var(--t-caption)':'var(--t-body)',flexShrink:0}}>{block.emoji}</span>}
+                        <span style={{fontSize:'var(--t-caption)',fontWeight:500,color:block.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:isDone?'line-through':'none'}}>
                           {block.title}
                         </span>
                       </div>
-                      {!small&&<span style={{fontSize:'0.65rem',color:(block.color||'#666')+'99',fontWeight:400}}>
+                      {!small&&<span style={{fontSize:'var(--t-caption)',color:(block.color||'#666')+'99',fontWeight:400}}>
                         {fmtTime(block.startTime)} – {fmtTime(block.endTime)} · {fmtDur(dur)}
                       </span>}
                       {!block.locked&&(
@@ -1455,7 +1456,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                         </div>
                       )}
                       {block.locked&&block.subtitle&&!small&&(
-                        <span style={{fontSize:'0.62rem',color:(block.color||'#666')+'88'}}>{block.subtitle}</span>
+                        <span style={{fontSize:'var(--t-caption)',color:(block.color||'#666')+'88'}}>{block.subtitle}</span>
                       )}
                       {!block.locked&&<>
                         <div onMouseDown={e=>handleResizeDown(e,block,'top')}
@@ -1476,7 +1477,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
             {/* Unscheduled tasks — drag to timeline */}
             {unscheduledTasks.length>0&&!weekView&&(
               <div className="sched-card">
-                <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
+                <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-400)',letterSpacing:'0.07em',marginBottom:10}}>
                   📋 Por agendar · arrasta para a timeline
                 </p>
                 <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:320,overflowY:'auto'}}>
@@ -1489,51 +1490,51 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                         background:task.bg,border:`1.5px solid ${task.border}`,borderLeft:`3px solid ${task.color}`,
                         borderRadius:7,cursor:'grab',userSelect:'none',
                         opacity:sidebarDragTask?.id===task.id?0.4:1,transition:'opacity 0.15s'}}>
-                      <span style={{fontSize:'0.82rem',flexShrink:0}}>{task.emoji}</span>
-                      <span style={{flex:1,fontSize:'0.72rem',fontWeight:500,color:task.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.label}</span>
-                      <span style={{fontSize:'0.6rem',color:task.color+'88',flexShrink:0,background:'var(--white)',borderRadius:4,padding:'1px 4px',border:`1px solid ${task.color}22`}}>{task.quadrant}</span>
+                      <span style={{fontSize:'var(--t-body)',flexShrink:0}}>{task.emoji}</span>
+                      <span style={{flex:1,fontSize:'var(--t-caption)',fontWeight:500,color:task.color,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.label}</span>
+                      <span style={{fontSize:'var(--t-caption)',color:task.color+'88',flexShrink:0,background:'var(--white)',borderRadius:4,padding:'1px 4px',border:`1px solid ${task.color}22`}}>{task.quadrant}</span>
                     </div>
                   ))}
                 </div>
-                {unscheduledTasks.length>6&&<p style={{fontSize:'0.6rem',color:'var(--gray-300)',marginTop:6,textAlign:'center'}}>{unscheduledTasks.length} tarefas</p>}
+                {unscheduledTasks.length>6&&<p style={{fontSize:'var(--t-caption)',color:'var(--gray-300)',marginTop:6,textAlign:'center'}}>{unscheduledTasks.length} tarefas</p>}
               </div>
             )}
 
           {/* Subjects */}
             {todaySubjects.length>0&&(
               <div className="sched-card">
-                <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:12}}>📚 Cadeiras hoje</p>
+                <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-400)',letterSpacing:'0.07em',marginBottom:12}}>📚 Cadeiras hoje</p>
                 {todaySubjects.map(subj=>{
                   const target=dailyTargets[subj.key]
                   return (
                     <div key={subj.key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                      <div style={{width:28,height:28,borderRadius:8,background:subj.color||'#f0f0f0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.85rem',flexShrink:0}}>{subj.emoji}</div>
-                      <p style={{flex:1,fontSize:'0.75rem',fontWeight:500,color:'var(--gray-900)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subj.name}</p>
+                      <div style={{width:28,height:28,borderRadius:'var(--r)',background:subj.color||'#f0f0f0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'var(--t-body)',flexShrink:0}}>{subj.emoji}</div>
+                      <p style={{flex:1,fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-900)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{subj.name}</p>
                       <div style={{display:'flex',alignItems:'center',gap:4}}>
                         <input type="number" min="0.25" max="6" step="0.25" value={target||''} placeholder="1.5"
                           onChange={e=>updateTarget(subj.key,e.target.value)}
-                          style={{width:44,border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 5px',fontSize:'0.72rem',textAlign:'center',fontFamily:'inherit',color:'var(--gray-900)'}}/>
-                        <span style={{fontSize:'0.62rem',color:'var(--gray-400)'}}>h</span>
+                          style={{width:44,border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 5px',fontSize:'var(--t-caption)',textAlign:'center',fontFamily:'inherit',color:'var(--gray-900)'}}/>
+                        <span style={{fontSize:'var(--t-caption)',color:'var(--gray-400)'}}>h</span>
                       </div>
                     </div>
                   )
                 })}
-                <p style={{fontSize:'0.62rem',color:'var(--gray-300)',marginTop:4}}>Meta de horas · usado no auto-agendamento</p>
+                <p style={{fontSize:'var(--t-caption)',color:'var(--gray-300)',marginTop:4}}>Meta de horas · usado no auto-agendamento</p>
               </div>
             )}
 
             {/* Household due */}
             {houseDueToday.length>0&&(
               <div className="sched-card">
-                <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:12}}>🏠 Domésticas hoje</p>
+                <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-400)',letterSpacing:'0.07em',marginBottom:12}}>🏠 Domésticas hoje</p>
                 {houseDueToday.map(h=>(
                   <div key={h.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                     <span style={{fontSize:'1rem'}}>{h.emoji}</span>
                     <div style={{flex:1}}>
-                      <p style={{fontSize:'0.75rem',fontWeight:500,color:'var(--gray-900)'}}>{h.name}</p>
-                      <p style={{fontSize:'0.62rem',color:'var(--gray-400)'}}>{fmtDur(h.duration)}</p>
+                      <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-900)'}}>{h.name}</p>
+                      <p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)'}}>{fmtDur(h.duration)}</p>
                     </div>
-                    <button className="sched-icon-btn" onClick={()=>markHouseDone(h.id)} style={{color:'#16a34a',background:'#f0fdf4',border:'1px solid #86efac',borderRadius:6,padding:'4px 8px'}}>
+                    <button className="sched-icon-btn" onClick={()=>markHouseDone(h.id)} style={{color:'#16a34a',background:'var(--green-50)',border:'1px solid #86efac',borderRadius:6,padding:'4px 8px'}}>
                       <Check size={12}/>
                     </button>
                   </div>
@@ -1543,7 +1544,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
 
             {/* Week chart */}
             <div className="sched-card">
-              <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>📊 Semana</p>
+              <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-400)',letterSpacing:'0.07em',marginBottom:10}}>📊 Semana</p>
               <div style={{display:'flex',gap:5,alignItems:'flex-end',height:60}}>
                 {weekStats.map(d=>{
                   const maxM=Math.max(...weekStats.map(x=>x.mins),1)
@@ -1552,7 +1553,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                   return (
                     <div key={d.label} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
                       <div style={{width:'100%',height:barH,background:barC,borderRadius:3,transition:'height 0.3s'}} title={`${d.label}: ${fmtDur(d.mins)}`}/>
-                      <span style={{fontSize:'0.56rem',fontWeight:500,color:'var(--gray-400)'}}>{d.label}</span>
+                      <span style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-400)'}}>{d.label}</span>
                     </div>
                   )
                 })}
@@ -1573,23 +1574,23 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       {showClassEditor&&(
         <Modal onClose={()=>{setShowClassEditor(false);setEditingClass(null)}} title="📖 Horário de aulas" wide>
           <div style={{marginBottom:16}}>
-            <Btn onClick={()=>setEditingClass({dayOfWeek:dow,startTime:'09:00',endTime:'11:00',subjectKey:'',room:''})} solid color="#0891b2" bg="#ecfeff"><Plus size={13}/> Nova aula</Btn>
+            <Btn onClick={()=>setEditingClass({dayOfWeek:dow,startTime:'09:00',endTime:'11:00',subjectKey:'',room:''})} solid color="#0891b2" bg="var(--cyan-50)"><Plus size={13}/> Nova aula</Btn>
           </div>
-          {!(settings?.classTimes||[]).length&&<p style={{fontSize:'0.78rem',color:'var(--gray-400)'}}>Nenhuma aula configurada.</p>}
+          {!(settings?.classTimes||[]).length&&<p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)'}}>Nenhuma aula configurada.</p>}
           {[0,1,2,3,4,5,6].map(d=>{
             const entries=(settings?.classTimes||[]).filter(ct=>ct.dayOfWeek===d)
             if(!entries.length)return null
             return (
               <div key={d} style={{marginBottom:14}}>
-                <p style={{fontSize:'0.65rem',fontWeight:500,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>{DAY_FULL[d]}</p>
+                <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'var(--gray-400)',letterSpacing:'0.07em',marginBottom:8}}>{DAY_FULL[d]}</p>
                 {entries.map(ct=>{
                   const subj=subjects.find(s=>s.key===ct.subjectKey)
                   return (
-                    <div key={ct.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'#ecfeff',border:'1px solid #a5f3fc',borderRadius:10,marginBottom:6}}>
+                    <div key={ct.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'var(--cyan-50)',border:'1px solid #a5f3fc',borderRadius:'var(--r)',marginBottom:6}}>
                       <span>{subj?.emoji||'📖'}</span>
                       <div style={{flex:1}}>
-                        <p style={{fontSize:'0.78rem',fontWeight:500,color:'#0891b2'}}>{subj?.name||ct.label||'Aula'}</p>
-                        <p style={{fontSize:'0.65rem',color:'#0891b2aa'}}>{fmtTime(ct.startTime)} – {fmtTime(ct.endTime)}{ct.room?` · ${ct.room}`:''}</p>
+                        <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'#0891b2'}}>{subj?.name||ct.label||'Aula'}</p>
+                        <p style={{fontSize:'var(--t-caption)',color:'#0891b2aa'}}>{fmtTime(ct.startTime)} – {fmtTime(ct.endTime)}{ct.room?` · ${ct.room}`:''}</p>
                       </div>
                       <button className="sched-icon-btn" onClick={()=>setEditingClass(ct)}><Pencil size={12}/></button>
                       <button className="sched-icon-btn" onClick={()=>deleteClassTime(ct.id)} style={{color:'#dc2626'}}><Trash2 size={12}/></button>
@@ -1607,14 +1608,14 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       {showHouseModal&&(
         <Modal onClose={()=>{setShowHouseModal(false);setEditingHouse(null)}} title="🏠 Tarefas domésticas" wide>
           <div style={{marginBottom:16}}>
-            <Btn onClick={()=>setEditingHouse({name:'',emoji:'🧹',duration:30,frequency:'weekly',color:'#71717a'})} solid color="#d97706" bg="#fffbeb"><Plus size={13}/> Nova tarefa</Btn>
+            <Btn onClick={()=>setEditingHouse({name:'',emoji:'🧹',duration:30,frequency:'weekly',color:'#71717a'})} solid color="#d97706" bg="var(--amber-50)"><Plus size={13}/> Nova tarefa</Btn>
           </div>
           {household.map(h=>(
-            <div key={h.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,marginBottom:6}}>
+            <div key={h.id} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'var(--amber-50)',border:'1px solid #fde68a',borderRadius:'var(--r)',marginBottom:6}}>
               <span style={{fontSize:'1.1rem'}}>{h.emoji}</span>
               <div style={{flex:1}}>
-                <p style={{fontSize:'0.78rem',fontWeight:500,color:'#d97706'}}>{h.name}</p>
-                <p style={{fontSize:'0.65rem',color:'#d97706aa'}}>{fmtDur(h.duration)} · {FREQUENCIES.find(f=>f.id===h.frequency)?.label}{h.preferredDay!==undefined?` · ${DAY_FULL[h.preferredDay]}`:''}{h.lastDone?` · Última: ${h.lastDone}`:' · Nunca feito'}</p>
+                <p style={{fontSize:'var(--t-caption)',fontWeight:500,color:'#d97706'}}>{h.name}</p>
+                <p style={{fontSize:'var(--t-caption)',color:'#d97706aa'}}>{fmtDur(h.duration)} · {FREQUENCIES.find(f=>f.id===h.frequency)?.label}{h.preferredDay!==undefined?` · ${DAY_FULL[h.preferredDay]}`:''}{h.lastDone?` · Última: ${h.lastDone}`:' · Nunca feito'}</p>
               </div>
               <button className="sched-icon-btn" onClick={()=>markHouseDone(h.id)} style={{color:'#16a34a'}} title="Marcar feito hoje"><Check size={13}/></button>
               <button className="sched-icon-btn" onClick={()=>setEditingHouse(h)}><Pencil size={13}/></button>

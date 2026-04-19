@@ -1,8 +1,66 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron')
+const { app, BrowserWindow, ipcMain, session, Tray, nativeImage } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
 let mainWindow
+let trayWindow
+let tray
+
+function createTray() {
+  try {
+    // Ícone template (preto sobre transparente) — macOS inverte automaticamente
+    // no dark mode. Ficheiro nomeado *Template* para ser detetado pelo sistema.
+    const iconPath = path.join(__dirname, 'trayTemplate.png')
+    const icon = nativeImage.createFromPath(iconPath)
+    if (icon.isEmpty()) throw new Error(`Ícone do tray não encontrado: ${iconPath}`)
+
+    tray = new Tray(icon)
+    tray.setToolTip('What Should I Do Next')
+
+    trayWindow = new BrowserWindow({
+      width: 260,
+      height: 380,
+      show: false,
+      frame: false,
+      fullscreenable: false,
+      resizable: false,
+      transparent: true,
+      alwaysOnTop: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.cjs'),
+      }
+    })
+
+    trayWindow.on('blur', () => trayWindow.hide())
+
+    tray.on('click', (event, bounds) => {
+      if (trayWindow.isVisible()) {
+        trayWindow.hide()
+        return
+      }
+      const { width, height } = trayWindow.getBounds()
+      // No macOS, bounds.y é o topo do menu bar e bounds.height é a sua altura.
+      // O popup deve aparecer imediatamente abaixo do ícone.
+      const x = Math.round(bounds.x + bounds.width / 2 - width / 2)
+      const y = process.platform === 'darwin'
+        ? bounds.y + bounds.height   // abaixo do menu bar
+        : bounds.y - height          // acima da barra de tarefas (Windows/Linux)
+      trayWindow.setBounds({ x, y, width, height })
+      trayWindow.show()
+    })
+
+    const isDev = process.env.ELECTRON_DEV === '1'
+    if (isDev) {
+      trayWindow.loadURL('http://localhost:5173/#/tray')
+    } else {
+      trayWindow.loadURL(`file://${path.join(__dirname, '../dist/index.html')}#/tray`)
+    }
+  } catch (err) {
+    console.error('[Tray] Falha ao criar tray:', err)
+  }
+}
 
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'user-settings.json')
@@ -107,38 +165,35 @@ app.whenReady().then(() => {
   const swPath = path.join(app.getPath('userData'), 'Service Worker')
   try { if (fs.existsSync(swPath)) fs.rmSync(swPath, { recursive: true, force: true }) } catch {}
 
-  // Observa o ficheiro da fila da widget e notifica o renderer imediatamente
-  const queuePath = path.join(app.getPath('home'), '.wsidnext-done-queue.json')
-  let queueWatcher = null
+  // Observa a home directory para detetar qualquer escrita no ficheiro da fila da widget.
+  // Vigiar a diretoria é mais robusto do que vigiar o ficheiro diretamente: funciona
+  // mesmo que o ficheiro seja substituído atomicamente (write temp + rename).
   let watchDebounce = null
-  function startQueueWatcher() {
-    try {
-      queueWatcher = fs.watch(queuePath, () => {
-        clearTimeout(watchDebounce)
-        watchDebounce = setTimeout(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('done-queue-changed')
-          }
-        }, 100)
-      })
-    } catch {}
-  }
-  // Começa a observar se o ficheiro já existe, caso contrário espera pela sua criação
-  if (fs.existsSync(queuePath)) {
-    startQueueWatcher()
-  } else {
-    const dirWatcher = fs.watch(app.getPath('home'), (event, filename) => {
-      if (filename === '.wsidnext-done-queue.json' && fs.existsSync(queuePath)) {
-        dirWatcher.close()
-        startQueueWatcher()
-      }
+  try {
+    fs.watch(app.getPath('home'), (event, filename) => {
+      if (filename !== '.wsidnext-done-queue.json') return
+      clearTimeout(watchDebounce)
+      watchDebounce = setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('done-queue-changed')
+        }
+      }, 100)
     })
-  }
+  } catch {}
 
   ipcMain.on('move-window', (event, { dx, dy }) => {
     if (!mainWindow) return
     const [x, y] = mainWindow.getPosition()
     mainWindow.setPosition(x + dx, y + dy)
+  })
+
+  ipcMain.on('focus-main', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+      app.focus()
+    }
   })
 
   ipcMain.handle('load-settings', () => {
@@ -200,8 +255,16 @@ app.whenReady().then(() => {
 
 
   createWindow()
+  createTray()
+  
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    // Se clicarem no ícone da doca e a janela principal estiver fechada (mas a Tray a manter a app viva), recriamos a principal!
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createWindow()
+    } else {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+    }
   })
 })
 

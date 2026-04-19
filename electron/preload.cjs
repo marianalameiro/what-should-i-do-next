@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
   moveWindow: (dx, dy) => ipcRenderer.send('move-window', { dx, dy }),
+  focusMainWindow: () => ipcRenderer.send('focus-main'),
   loadSettings: () => ipcRenderer.invoke('load-settings'),
   saveSettings: (data) => ipcRenderer.invoke('save-settings', data),
   exportWidgetData: (data) => ipcRenderer.invoke('export-widget-data', data),

@@ -210,17 +210,17 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
           const title = lines[0]
           const body  = lines.slice(1).join('\n')
           const colors = [
-            { bg: '#fefce8', border: '#fde047', text: '#854d0e' },
-            { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' },
-            { bg: '#f0fdf4', border: '#86efac', text: '#14532d' },
-            { bg: '#fff7ed', border: '#fdba74', text: '#9a3412' },
-            { bg: '#f5f3ff', border: '#c4b5fd', text: '#5b21b6' },
+            { bg: 'var(--amber-50)',  border: '#fde047', text: '#854d0e' },
+            { bg: 'var(--blue-100)', border: '#93c5fd', text: '#1e40af' },
+            { bg: 'var(--green-50)', border: '#86efac', text: '#14532d' },
+            { bg: 'var(--orange-50)',border: '#fdba74', text: '#9a3412' },
+            { bg: 'var(--purple-50)',border: '#c4b5fd', text: '#5b21b6' },
           ]
           const c = colors[i % colors.length]
           return (
-            <div key={i} style={{ background: c.bg, border: `1.5px solid ${c.border}`, borderRadius: 10, padding: '12px 14px' }}>
-              <p style={{ fontWeight: 800, fontSize: '0.82rem', color: c.text, marginBottom: 4 }}>{title}</p>
-              <p style={{ fontSize: '0.85rem', lineHeight: 1.6, color: c.text, margin: 0, opacity: 0.85 }}>{body}</p>
+            <div key={i} style={{ background: c.bg, border: `1.5px solid ${c.border}`, borderRadius: 'var(--r)', padding: '12px 14px' }}>
+              <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: c.text, marginBottom: 4 }}>{title}</p>
+              <p style={{ fontSize: 'var(--t-body)', lineHeight: 1.6, color: c.text, margin: 0, opacity: 0.85 }}>{body}</p>
             </div>
           )
         })}
@@ -241,29 +241,29 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
 
       {/* Auto review of today */}
       {autoLoading && (
-        <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 'var(--radius)', padding: '20px', marginBottom: 20, textAlign: 'center' }}>
+        <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 'var(--r)', padding: '20px', marginBottom: 20, textAlign: 'center' }}>
           <p style={{ color: '#7c3aed', fontWeight: 600 }}>✨ A gerar a tua review das 16h...</p>
         </div>
       )}
 
       {autoError && !autoLoading && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius)', padding: '14px 16px', marginBottom: 20 }}>
-          <p style={{ fontSize: '0.83rem', color: '#dc2626', fontWeight: 600 }}>⚠️ {autoError}</p>
+        <div style={{ background: 'var(--red-50)', border: '1px solid #fecaca', borderRadius: 'var(--r)', padding: '14px 16px', marginBottom: 20 }}>
+          <p style={{ fontSize: 'var(--t-body)', color: '#dc2626', fontWeight: 600 }}>⚠️ {autoError}</p>
         </div>
       )}
 
       {todayReview && !autoLoading && (
-        <div style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '20px', marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '20px', marginBottom: 20, boxShadow: 'var(--shadow)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--gray-800)', marginBottom: 2 }}>
+              <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: 'var(--gray-800)', marginBottom: 2 }}>
                 ✨ Review de hoje — Semana {todayReview.week}
               </p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{todayReview.date} · {todayReview.hoursThisWeek}h estudadas</p>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{todayReview.date} · {todayReview.hoursThisWeek}h estudadas</p>
             </div>
             <button
               className="btn btn-secondary"
-              style={{ flexShrink: 0, fontSize: '0.78rem' }}
+              style={{ flexShrink: 0, fontSize: 'var(--t-caption)' }}
               onClick={() => {
                 const reviewEmail = (() => { try { return JSON.parse(localStorage.getItem('user-settings') || '{}').reviewEmail || '' } catch { return '' } })()
                 const subject = encodeURIComponent(`Weekly Review — Semana ${todayReview.week}`)
@@ -291,9 +291,9 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
 
       {/* Manual review form */}
       {showManual && (
-        <div style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '24px', marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '24px', marginBottom: 20, boxShadow: 'var(--shadow)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--gray-800)' }}>Review manual — Semana {weekNum}</p>
+            <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-800)' }}>Review manual — Semana {weekNum}</p>
             <button className="btn btn-ghost" onClick={() => { setShowManual(false); setAnswers({}); setStep(0) }}>
               <RotateCcw size={13} /> Cancelar
             </button>
@@ -306,7 +306,7 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
             ))}
           </div>
 
-          <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--rose-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+          <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', letterSpacing: 0.5, marginBottom: 8 }}>
             {step + 1} / {QUESTIONS.length}
           </p>
           <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gray-800)', marginBottom: 14, lineHeight: 1.4 }}>
@@ -318,11 +318,11 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
             value={answers[QUESTIONS[step].id] || ''}
             onChange={e => setAnswers(prev => ({ ...prev, [QUESTIONS[step].id]: e.target.value }))}
             autoFocus
-            style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.9rem', border: '1.5px solid var(--gray-200)', borderRadius: 10, padding: '12px 14px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', resize: 'vertical', lineHeight: 1.6, marginBottom: 14, boxSizing: 'border-box' }}
+            style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '12px 14px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', resize: 'vertical', lineHeight: 1.6, marginBottom: 14, boxSizing: 'border-box' }}
           />
           {manualError && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
-              <p style={{ fontSize: '0.83rem', color: '#dc2626', fontWeight: 600, margin: 0 }}>⚠️ {manualError}</p>
+            <div style={{ background: 'var(--red-50)', border: '1px solid #fecaca', borderRadius: 'var(--r)', padding: '10px 14px', marginBottom: 12 }}>
+              <p style={{ fontSize: 'var(--t-body)', color: '#dc2626', fontWeight: 600, margin: 0 }}>⚠️ {manualError}</p>
             </div>
           )}
 
@@ -346,13 +346,13 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
       {/* History */}
       {reviews.filter(r => r.generatedOn !== todayKey()).length > 0 && (
         <div>
-          <button onClick={() => setShowHistory(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 12, padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <button onClick={() => setShowHistory(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-500)', marginBottom: 12, padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
             {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Reviews anteriores ({reviews.filter(r => r.generatedOn !== todayKey()).length})
           </button>
           {showHistory && reviews.filter(r => r.generatedOn !== todayKey()).map(review => (
-            <div key={review.id} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', padding: '16px 20px', marginBottom: 12, boxShadow: 'var(--shadow-xs)' }}>
-              <p style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--gray-700)', marginBottom: 2 }}>Semana {review.week} · {review.type === 'auto' ? '⚡ automática' : '✍️ manual'}</p>
-              <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', marginBottom: 12 }}>{review.date} · {review.hoursThisWeek}h</p>
+            <div key={review.id} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '16px 20px', marginBottom: 12, boxShadow: 'var(--shadow)' }}>
+              <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', marginBottom: 2 }}>Semana {review.week} · {review.type === 'auto' ? '⚡ automática' : '✍️ manual'}</p>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>{review.date} · {review.hoursThisWeek}h</p>
               {renderFeedback(review.feedback)}
             </div>
           ))}

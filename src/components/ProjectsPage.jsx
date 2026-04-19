@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Check, Edit3, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Plus, Trash2, Check, Edit3, ChevronDown, ChevronUp, X, LayoutList, LayoutGrid } from 'lucide-react'
 import { CalendarEmoji, smartEmoji } from './CalendarEmoji'
 import { daysUntil } from '../utils/dates'
 
 
 const STATUSES = [
-  { id: 'active',    label: 'Em curso',  color: '#2563eb', bg: '#dbeafe', dot: '#3b82f6' },
-  { id: 'paused',    label: 'Pausado',   color: '#d97706', bg: '#fef3c7', dot: '#f59e0b' },
-  { id: 'completed', label: 'Concluído', color: '#16a34a', bg: '#dcfce7', dot: '#22c55e' },
+  { id: 'active',    label: 'Em curso',  color: '#2563eb', bg: 'var(--blue-100)',  dot: '#3b82f6' },
+  { id: 'paused',    label: 'Pausado',   color: '#d97706', bg: 'var(--amber-100)', dot: '#f59e0b' },
+  { id: 'completed', label: 'Concluído', color: '#16a34a', bg: 'var(--green-100)', dot: '#22c55e' },
 ]
 
 const PRIORITIES = [
-  { id: 'high',   label: 'Alta',  color: '#dc2626', bg: '#fee2e2' },
-  { id: 'medium', label: 'Média', color: '#d97706', bg: '#fef3c7' },
-  { id: 'low',    label: 'Baixa', color: '#16a34a', bg: '#dcfce7' },
+  { id: 'high',   label: 'Alta',  color: '#dc2626', bg: 'var(--red-100)'   },
+  { id: 'medium', label: 'Média', color: '#d97706', bg: 'var(--amber-100)' },
+  { id: 'low',    label: 'Baixa', color: '#16a34a', bg: 'var(--green-100)' },
 ]
 
 const PROJECT_TYPES = ['Investigação','Manuscrito/Livro','Startup/Produto','Blog/Newsletter','Projeto académico','Estágio','Projeto pessoal','Outro']
@@ -42,9 +42,41 @@ const PHASES_BY_TYPE = {
   '_default':          ['Início', 'Em curso', 'Revisão', 'Concluído'],
 }
 
+const KANBAN_COLS = [
+  { id: 0, label: 'Planeamento', color: '#6366f1' },
+  { id: 1, label: 'Em curso',    color: '#2563eb' },
+  { id: 2, label: 'Revisão',     color: '#d97706' },
+  { id: 3, label: 'Concluído',   color: '#16a34a' },
+]
+
+function getKanbanCol(project) {
+  if (project.status === 'completed') return 3
+  const phases = PHASES_BY_TYPE[project.type] || PHASES_BY_TYPE['_default']
+  const n = phases.length
+  const ph = Math.min(project.phase ?? 0, n - 1)
+  if (n <= 1) return 0
+  const ratio = ph / (n - 1)
+  if (ratio >= 1)    return 3
+  if (ratio >= 0.6)  return 2
+  if (ratio >= 0.25) return 1
+  return 0
+}
+
+function moveToKanbanCol(project, colId) {
+  const phases = PHASES_BY_TYPE[project.type] || PHASES_BY_TYPE['_default']
+  const n = phases.length
+  const ratios = [0, 0.35, 0.7, 1]
+  const newPhase = Math.round(ratios[colId] * (n - 1))
+  const wasCompleted = project.status === 'completed'
+  return {
+    ...project,
+    phase: newPhase,
+    status: colId === 3 ? 'completed' : (wasCompleted ? 'active' : project.status),
+  }
+}
+
 function loadProjects() { try { return JSON.parse(localStorage.getItem('projects-v2')) || [] } catch { return [] } }
 function saveProjects(p) { localStorage.setItem('projects-v2', JSON.stringify(p)) }
-function loadSessions() { try { return JSON.parse(localStorage.getItem('study-sessions')) || [] } catch { return [] } }
 
 
 function calcProgress(project) {
@@ -84,7 +116,7 @@ function PhaseBar({ project, color, onUpdate }) {
   const current = Math.min(project.phase ?? 0, phases.length - 1)
   return (
     <div>
-      <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+      <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 8 }}>
         Fase do projeto <span style={{ fontWeight: 400, textTransform: 'none' }}>(clica para avançar)</span>
       </p>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
@@ -94,10 +126,10 @@ function PhaseBar({ project, color, onUpdate }) {
             <div key={i} onClick={() => onUpdate({ ...project, phase: i })}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, position: 'relative', cursor: 'pointer' }}>
               {i > 0 && <div style={{ position: 'absolute', right: '50%', top: 10, width: '100%', height: 2, background: i <= current ? color : 'var(--gray-200)', zIndex: 0 }} />}
-              <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${done || active ? color : 'var(--gray-200)'}`, background: done ? color : active ? `${color}22` : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, fontSize: '0.6rem', color: done ? 'white' : active ? color : 'var(--gray-400)', fontWeight: 700 }}>
+              <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${done || active ? color : 'var(--gray-200)'}`, background: done ? color : active ? `${color}22` : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, fontSize: 'var(--t-caption)', color: done ? 'white' : active ? color : 'var(--gray-400)', fontWeight: 700 }}>
                 {done ? <Check size={10} strokeWidth={3} /> : i + 1}
               </div>
-              <span style={{ fontSize: '0.62rem', textAlign: 'center', color: active ? color : done ? 'var(--gray-500)' : 'var(--gray-300)', fontWeight: active ? 700 : 400, lineHeight: 1.2, maxWidth: 52 }}>{p}</span>
+              <span style={{ fontSize: 'var(--t-caption)', textAlign: 'center', color: active ? color : done ? 'var(--gray-500)' : 'var(--gray-300)', fontWeight: active ? 700 : 400, lineHeight: 1.2, maxWidth: 52 }}>{p}</span>
             </div>
           )
         })}
@@ -121,8 +153,8 @@ function Timeline({ milestones }) {
         return (
           <div key={ms.id} style={{ position: 'relative', marginBottom: 20, paddingLeft: 20 }}>
             <div style={{ position: 'absolute', left: -4, top: 4, width: 14, height: 14, borderRadius: '50%', background: ms.done ? dotColor : 'var(--white)', border: `2px solid ${dotColor}` }} />
-            <p style={{ fontWeight: 700, fontSize: '0.85rem', color: ms.done ? 'var(--gray-400)' : 'var(--gray-800)', textDecoration: ms.done ? 'line-through' : 'none', margin: 0, marginBottom: 2 }}>{ms.label}</p>
-            <p style={{ fontSize: '0.72rem', color: d !== null && d < 0 && !ms.done ? '#ef4444' : 'var(--gray-400)', fontWeight: 600, margin: 0 }}>
+            <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: ms.done ? 'var(--gray-400)' : 'var(--gray-800)', textDecoration: ms.done ? 'line-through' : 'none', margin: 0, marginBottom: 2 }}>{ms.label}</p>
+            <p style={{ fontSize: 'var(--t-caption)', color: d !== null && d < 0 && !ms.done ? '#ef4444' : 'var(--gray-400)', fontWeight: 600, margin: 0 }}>
               {ms.date ? new Date(ms.date).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' }) : ''}
               {d !== null && !ms.done && ` · ${d < 0 ? `${Math.abs(d)}d em atraso` : d === 0 ? 'Hoje' : `${d}d`}`}
             </p>
@@ -134,30 +166,29 @@ function Timeline({ milestones }) {
 }
 
 // ── ProjectCard ───────────────────────────────────────────────────────────────
-function ProjectCard({ project, onClick, onDelete, allSubjects = [], sessions = [] }) {
+function ProjectCard({ project, onClick, onDelete, allSubjects = [] }) {
   const progress   = calcProgress(project)
   const status     = STATUSES.find(s => s.id === project.status) || STATUSES[0]
   const days       = daysUntil(project.deadline)
   const color      = project.color || '#6366f1'
   const ms         = project.milestones || []
   const nextAction = getNextAction(project)
-  const studyHrs   = sessions.filter(s => s.projectId === project.id).reduce((a, b) => a + (b.hours || 0), 0)
 
   return (
     <div
       onClick={onClick}
-      style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s', boxShadow: 'var(--shadow-xs)', borderLeft: `4px solid ${color}` }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--shadow-md)'}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = 'var(--shadow-xs)'}
+      style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--r)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s', boxShadow: 'var(--shadow)', borderLeft: `4px solid ${color}` }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--shadow)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = 'var(--shadow)'}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
         <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>{project.emoji || '📁'}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <p style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--gray-900)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</p>
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: 50, background: status.bg, color: status.color, flexShrink: 0 }}>{status.label}</span>
+            <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: 'var(--gray-900)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.name}</p>
+            <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '2px 8px', borderRadius: 50, background: status.bg, color: status.color, flexShrink: 0 }}>{status.label}</span>
           </div>
-          {project.description && <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.description}</p>}
+          {project.description && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.description}</p>}
         </div>
         <button className="btn btn-ghost" style={{ flexShrink: 0 }} onClick={e => { e.stopPropagation(); onDelete(project.id) }}><Trash2 size={13} /></button>
       </div>
@@ -165,31 +196,31 @@ function ProjectCard({ project, onClick, onDelete, allSubjects = [], sessions = 
       {(project.tags || []).length > 0 && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
           {project.tags.map(tag => (
-            <span key={tag} style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: 50, background: `${color}18`, color }}># {tag}</span>
+            <span key={tag} style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '2px 7px', borderRadius: 50, background: `${color}18`, color }}># {tag}</span>
           ))}
         </div>
       )}
 
       {nextAction && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 10px', background: 'var(--gray-50)', borderRadius: 8, border: '1px solid var(--gray-100)' }}>
-          <span style={{ fontSize: '0.62rem', fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>→</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--gray-600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nextAction.label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 10px', background: 'var(--gray-50)', borderRadius: 'var(--r)', border: '1px solid var(--gray-100)' }}>
+          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color, letterSpacing: 0.5, flexShrink: 0 }}>→</span>
+          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nextAction.label}</span>
         </div>
       )}
 
       <div style={{ marginBottom: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontSize: '0.68rem', color: 'var(--gray-400)', fontWeight: 600 }}>
+          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>
             {ms.length > 0 ? `${ms.filter(m=>m.done).length}/${ms.length} milestones` : `${(project.tasks||[]).filter(t=>t.done).length}/${(project.tasks||[]).length} tarefas`}
           </span>
-          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: progress === 100 ? '#16a34a' : 'var(--gray-500)' }}>{progress}%</span>
+          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: progress === 100 ? '#16a34a' : 'var(--gray-500)' }}>{progress}%</span>
         </div>
         <div style={{ background: 'var(--gray-100)', borderRadius: 50, height: 5, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${progress}%`, background: progress === 100 ? '#22c55e' : color, borderRadius: 50, transition: 'width 0.4s' }} />
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.7rem', color: 'var(--gray-400)', fontWeight: 600 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>
         {project.deadline && (
           <span style={{ color: days !== null && days <= 7 ? '#dc2626' : days !== null && days <= 30 ? '#d97706' : 'var(--gray-400)' }}>
             <CalendarEmoji /> {days === null ? project.deadline : days < 0 ? `${Math.abs(days)}d em atraso` : days === 0 ? 'Hoje' : `${days}d`}
@@ -198,11 +229,132 @@ function ProjectCard({ project, onClick, onDelete, allSubjects = [], sessions = 
         {(project.subjects || []).length > 0 && (
           <span>{project.subjects.map(sk => allSubjects.find(s => s.key === sk)?.emoji).join(' ')}</span>
         )}
-        {studyHrs > 0 && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 3, color }}>⏱️ {studyHrs.toFixed(1)}h</span>
-        )}
         {project.type && <span style={{ marginLeft: 'auto' }}>{project.type}</span>}
       </div>
+    </div>
+  )
+}
+
+// ── KanbanCard ────────────────────────────────────────────────────────────────
+function KanbanCard({ project, onClick, onDragStart, onDragEnd, isDragging }) {
+  const color      = project.color || '#6366f1'
+  const progress   = calcProgress(project)
+  const nextAction = getNextAction(project)
+  const days       = daysUntil(project.deadline)
+  const isPaused   = project.status === 'paused'
+  const phases     = PHASES_BY_TYPE[project.type] || PHASES_BY_TYPE['_default']
+  const phaseName  = phases[Math.min(project.phase ?? 0, phases.length - 1)]
+
+  return (
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart() }}
+      onDragEnd={onDragEnd}
+      onClick={onClick}
+      style={{
+        background: 'var(--white)',
+        border: '1px solid var(--gray-100)',
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 'var(--r)',
+        padding: '10px 12px',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        opacity: isDragging ? 0.4 : isPaused ? 0.6 : 1,
+        boxShadow: 'var(--shadow)',
+        userSelect: 'none',
+        transition: 'opacity 0.15s',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <span style={{ fontSize: '1rem', flexShrink: 0 }}>{project.emoji || '📁'}</span>
+        <p style={{ fontWeight: 700, fontSize: 'var(--t-caption)', color: 'var(--gray-900)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{project.name}</p>
+        {isPaused && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 50, background: 'var(--amber-100)', color: '#d97706', flexShrink: 0 }}>Pausado</span>}
+      </div>
+      {nextAction && (
+        <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '0 0 5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 22 }}>
+          → {nextAction.label}
+        </p>
+      )}
+      <div style={{ background: 'var(--gray-100)', borderRadius: 50, height: 3, overflow: 'hidden', marginBottom: 5 }}>
+        <div style={{ height: '100%', width: `${progress}%`, background: progress === 100 ? '#22c55e' : color, borderRadius: 50, transition: 'width 0.3s' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', alignItems: 'center' }}>
+        <span style={{ fontWeight: 600, color: 'var(--gray-400)' }}>{progress}%</span>
+        <span style={{ fontSize: 10, color: 'var(--gray-300)', fontWeight: 500 }}>{phaseName}</span>
+        {days !== null && (
+          <span style={{ fontWeight: 700, color: days < 0 ? '#dc2626' : days <= 7 ? '#dc2626' : days <= 30 ? '#d97706' : 'var(--gray-400)' }}>
+            {days < 0 ? `${Math.abs(days)}d atraso` : days === 0 ? 'hoje' : `${days}d`}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── KanbanBoard ───────────────────────────────────────────────────────────────
+function KanbanBoard({ projects, onSelect, onUpdate }) {
+  const [dragId, setDragId]         = useState(null)
+  const [dragOverCol, setDragOverCol] = useState(null)
+
+  const handleDrop = (colId) => {
+    if (dragId == null) return
+    const project = projects.find(p => p.id === dragId)
+    if (project && getKanbanCol(project) !== colId) onUpdate(moveToKanbanCol(project, colId))
+    setDragId(null)
+    setDragOverCol(null)
+  }
+
+  return (
+    <div style={{ overflowX: 'auto', paddingBottom: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(180px, 1fr))', gap: 10, alignItems: 'start', minWidth: 720 }}>
+        {KANBAN_COLS.map(col => {
+          const colProjects = projects.filter(p => getKanbanCol(p) === col.id)
+          const isOver = dragOverCol === col.id
+          return (
+            <div
+              key={col.id}
+              onDragOver={e => { e.preventDefault(); setDragOverCol(col.id) }}
+              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverCol(null) }}
+              onDrop={() => handleDrop(col.id)}
+              style={{
+                background: isOver ? `${col.color}0d` : 'var(--gray-50)',
+                border: `1.5px ${isOver ? 'solid' : 'dashed'} ${isOver ? col.color : 'var(--gray-200)'}`,
+                borderRadius: 'var(--r)',
+                padding: '12px 10px',
+                minHeight: 200,
+                transition: 'all 0.15s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, flexShrink: 0 }} />
+                <p style={{ fontWeight: 800, fontSize: 'var(--t-caption)', color: 'var(--gray-700)', margin: 0, flex: 1 }}>{col.label}</p>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', background: 'var(--gray-200)', borderRadius: 50, padding: '1px 7px' }}>
+                  {colProjects.length}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {colProjects.map(p => (
+                  <KanbanCard
+                    key={p.id}
+                    project={p}
+                    onClick={() => onSelect(p.id)}
+                    onDragStart={() => setDragId(p.id)}
+                    onDragEnd={() => { setDragId(null); setDragOverCol(null) }}
+                    isDragging={dragId === p.id}
+                  />
+                ))}
+                {colProjects.length === 0 && (
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-300)', textAlign: 'center', padding: '16px 0', fontWeight: 500 }}>
+                    Sem projetos
+                  </p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-300)', marginTop: 8, fontWeight: 500 }}>
+        Arrasta os cards para mover entre fases
+      </p>
     </div>
   )
 }
@@ -227,7 +379,6 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
-  const sessions = loadSessions()
   const color    = project.color || '#6366f1'
   const status   = STATUSES.find(s => s.id === project.status) || STATUSES[0]
   const days     = daysUntil(project.deadline)
@@ -241,13 +392,8 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
   const nextAction = getNextAction(project)
 
   const totalEstimated = tasks.reduce((a, t) => a + (parseFloat(t.estimatedHours) || 0), 0)
-  const projectSessions = sessions.filter(s => s.projectId === project.id)
-  const subjectSessions = subjects.length > 0 ? sessions.filter(s => subjects.includes(s.subject) && !s.projectId) : []
-  const realHours = projectSessions.reduce((a, s) => a + (s.hours || 0), 0) +
-    (subjects.length > 0 ? subjectSessions.reduce((a, s) => a + (s.hours || 0), 0) : 0)
-  const hasHours = projectSessions.length > 0 || subjectSessions.length > 0
 
-  const inputStyle = { fontFamily: 'inherit', fontSize: '0.85rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', padding: '7px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', width: '100%' }
+  const inputStyle = { fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '7px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', width: '100%' }
 
   const update = (key, val, logMsg) => {
     const updated = { ...project, [key]: val }
@@ -351,21 +497,21 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
 
   return (
     <div className="fade-in">
-      <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', color: 'var(--gray-400)', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--t-body)', color: 'var(--gray-400)', fontWeight: 600, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 5 }}>
         ← Todos os projetos
       </button>
 
       {/* Header card */}
-      <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: 16, boxShadow: 'var(--shadow-sm)', borderTop: `4px solid ${color}` }}>
+      <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--r)', padding: '24px', marginBottom: 16, boxShadow: 'var(--shadow)', borderTop: `4px solid ${color}` }}>
 
         {/* Emoji + color + name */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={() => { setShowEmojiPicker(v => !v); setShowColorPicker(false) }} style={{ fontSize: '2rem', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 12, padding: '8px 10px', cursor: 'pointer', lineHeight: 1 }}>
+            <button onClick={() => { setShowEmojiPicker(v => !v); setShowColorPicker(false) }} style={{ fontSize: '2rem', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 10px', cursor: 'pointer', lineHeight: 1 }}>
               {project.emoji || '📁'}
             </button>
             {showEmojiPicker && (
-              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 12, padding: 10, boxShadow: 'var(--shadow-md)', display: 'flex', flexWrap: 'wrap', gap: 4, width: 220 }}>
+              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: 10, boxShadow: 'var(--shadow)', display: 'flex', flexWrap: 'wrap', gap: 4, width: 220 }}>
                 {EMOJIS.map(e => <button key={e} onClick={() => { update('emoji', e); setShowEmojiPicker(false) }} style={{ fontSize: '1.2rem', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 6 }}>{e}</button>)}
               </div>
             )}
@@ -374,7 +520,7 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button onClick={() => { setShowColorPicker(v => !v); setShowEmojiPicker(false) }} style={{ width: 36, height: 36, borderRadius: '50%', background: color, border: '3px solid var(--white)', boxShadow: '0 0 0 1.5px var(--gray-200)', cursor: 'pointer' }} title="Cor do projeto" />
             {showColorPicker && (
-              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 12, padding: 10, boxShadow: 'var(--shadow-md)', display: 'flex', flexWrap: 'wrap', gap: 6, width: 160 }}>
+              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: 10, boxShadow: 'var(--shadow)', display: 'flex', flexWrap: 'wrap', gap: 6, width: 160 }}>
                 {COLORS.map(c => <button key={c.hex} onClick={() => { update('color', c.hex); setShowColorPicker(false) }} style={{ width: 26, height: 26, borderRadius: '50%', background: c.hex, border: color === c.hex ? '3px solid var(--gray-900)' : '2px solid transparent', cursor: 'pointer' }} />)}
               </div>
             )}
@@ -397,7 +543,7 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                 <button className="btn btn-primary" onClick={() => { update('description', editDesc); setEditingField(null) }}><Check size={13} /></button>
               </div>
             ) : (
-              <p style={{ fontSize: '0.85rem', color: 'var(--gray-400)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, margin: 0 }} onClick={() => setEditingField('desc')}>
+              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, margin: 0 }} onClick={() => setEditingField('desc')}>
                 {project.description || 'Adiciona uma descrição...'} <Edit3 size={11} color="var(--gray-300)" />
               </p>
             )}
@@ -405,15 +551,15 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         </div>
 
         {/* Why */}
-        <div style={{ background: `${color}12`, border: `1px solid ${color}30`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-          <p style={{ fontSize: '0.65rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>💡 Porquê este projeto?</p>
+        <div style={{ background: `${color}12`, border: `1px solid ${color}30`, borderRadius: 'var(--r)', padding: '12px 14px', marginBottom: 14 }}>
+          <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color, letterSpacing: 0.5, marginBottom: 4 }}>💡 Porquê este projeto?</p>
           {editingField === 'why' ? (
             <div style={{ display: 'flex', gap: 8 }}>
               <textarea value={editWhy} onChange={e => setEditWhy(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', flex: 1 }} autoFocus />
               <button className="btn btn-primary" onClick={() => { update('why', editWhy); setEditingField(null) }}><Check size={13} /></button>
             </div>
           ) : (
-            <p style={{ fontSize: '0.85rem', color, cursor: 'pointer', margin: 0, opacity: 0.85 }} onClick={() => setEditingField('why')}>
+            <p style={{ fontSize: 'var(--t-body)', color, cursor: 'pointer', margin: 0, opacity: 0.85 }} onClick={() => setEditingField('why')}>
               {project.why || 'Clica para adicionar a tua motivação...'}
             </p>
           )}
@@ -421,17 +567,17 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
 
         {/* Meta row */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-          <select value={project.status} onChange={e => update('status', e.target.value, `🔄 Status → "${STATUSES.find(s=>s.id===e.target.value)?.label}"`)} style={{ ...inputStyle, width: 'auto', padding: '5px 10px', background: status.bg, color: status.color, fontWeight: 700, fontSize: '0.78rem' }}>
+          <select value={project.status} onChange={e => update('status', e.target.value, `🔄 Status → "${STATUSES.find(s=>s.id===e.target.value)?.label}"`)} style={{ ...inputStyle, width: 'auto', padding: '5px 10px', background: status.bg, color: status.color, fontWeight: 700, fontSize: 'var(--t-caption)' }}>
             {STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-          <select value={project.type || ''} onChange={e => update('type', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '5px 10px', fontSize: '0.78rem' }}>
+          <select value={project.type || ''} onChange={e => update('type', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '5px 10px', fontSize: 'var(--t-caption)' }}>
             <option value="">Tipo...</option>
             {PROJECT_TYPES.map(t => <option key={t}>{t}</option>)}
           </select>
-          <input type="date" value={project.startDate || ''} onChange={e => update('startDate', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: '0.78rem' }} title="Início" />
-          <input type="date" value={project.deadline || ''} onChange={e => update('deadline', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: '0.78rem', color: days !== null && days <= 7 ? '#dc2626' : 'var(--gray-900)' }} title="Prazo" />
+          <input type="date" value={project.startDate || ''} onChange={e => update('startDate', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: 'var(--t-caption)' }} title="Início" />
+          <input type="date" value={project.deadline || ''} onChange={e => update('deadline', e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: 'var(--t-caption)', color: days !== null && days <= 7 ? '#dc2626' : 'var(--gray-900)' }} title="Prazo" />
           {days !== null && (
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: days < 0 ? '#dc2626' : days <= 7 ? '#dc2626' : days <= 30 ? '#d97706' : '#16a34a' }}>
+            <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: days < 0 ? '#dc2626' : days <= 7 ? '#dc2626' : days <= 30 ? '#d97706' : '#16a34a' }}>
               {days < 0 ? `${Math.abs(days)}d em atraso` : days === 0 ? 'Hoje!' : `${days}d restantes`}
             </span>
           )}
@@ -439,10 +585,10 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
 
         {/* Subjects */}
         <div style={{ marginBottom: 14 }}>
-          <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Disciplinas associadas</p>
+          <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 6 }}>Disciplinas associadas</p>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {allSubjects.map(s => (
-              <button key={s.key} onClick={() => toggleSubject(s.key)} style={{ padding: '4px 10px', borderRadius: 50, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${subjects.includes(s.key) ? color : 'var(--gray-200)'}`, background: subjects.includes(s.key) ? `${color}15` : 'var(--white)', color: subjects.includes(s.key) ? color : 'var(--gray-500)' }}>
+              <button key={s.key} onClick={() => toggleSubject(s.key)} style={{ padding: '4px 10px', borderRadius: 50, fontSize: 'var(--t-caption)', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${subjects.includes(s.key) ? color : 'var(--gray-200)'}`, background: subjects.includes(s.key) ? `${color}15` : 'var(--white)', color: subjects.includes(s.key) ? color : 'var(--gray-500)' }}>
                 {s.emoji} {s.name}
               </button>
             ))}
@@ -451,55 +597,41 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
 
         {/* Tags */}
         <div style={{ marginBottom: 14 }}>
-          <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Tags</p>
+          <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 6 }}>Tags</p>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
             {tags.map(tag => (
-              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, padding: '3px 9px', borderRadius: 50, background: `${color}15`, color }}>
+              <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--t-caption)', fontWeight: 700, padding: '3px 9px', borderRadius: 50, background: `${color}15`, color }}>
                 #{tag}
                 <button onClick={() => update('tags', tags.filter(t => t !== tag))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color }}><X size={10} /></button>
               </span>
             ))}
             <div style={{ display: 'flex', gap: 4 }}>
-              <input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="nova tag..." style={{ ...inputStyle, width: 100, padding: '3px 8px', fontSize: '0.75rem' }} />
+              <input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="nova tag..." style={{ ...inputStyle, width: 100, padding: '3px 8px', fontSize: 'var(--t-caption)' }} />
               <button className="btn btn-secondary" onClick={addTag} style={{ padding: '3px 8px' }}><Plus size={11} /></button>
             </div>
           </div>
         </div>
 
         {/* Progress */}
-        <div style={{ marginBottom: totalEstimated > 0 || hasHours ? 14 : 0 }}>
+        <div style={{ marginBottom: totalEstimated > 0 ? 14 : 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-500)' }}>
+            <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)' }}>
               Progresso {ms.length > 0 ? `— ${ms.filter(m=>m.done).length}/${ms.length} milestones` : `— ${tasks.filter(t=>t.done).length}/${tasks.length} tarefas`}
             </span>
-            <span style={{ fontSize: '0.9rem', fontWeight: 800, color: progress === 100 ? '#16a34a' : 'var(--gray-700)' }}>{progress}%</span>
+            <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: progress === 100 ? '#16a34a' : 'var(--gray-700)' }}>{progress}%</span>
           </div>
           <div style={{ background: 'var(--gray-100)', borderRadius: 50, height: 8, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${progress}%`, background: progress === 100 ? '#22c55e' : color, borderRadius: 50, transition: 'width 0.4s' }} />
           </div>
         </div>
 
-        {/* Hours */}
-        {(totalEstimated > 0 || hasHours) && (
+        {/* Hours (estimated only) */}
+        {totalEstimated > 0 && (
           <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
-            {totalEstimated > 0 && (
-              <div>
-                <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -0.5, margin: 0 }}>{totalEstimated.toFixed(1)}h</p>
-                <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Estimado</p>
-              </div>
-            )}
-            {hasHours && (
-              <div>
-                <p style={{ fontSize: '1.1rem', fontWeight: 800, color, letterSpacing: -0.5, margin: 0 }}>{realHours.toFixed(1)}h</p>
-                <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Registadas</p>
-              </div>
-            )}
-            {projectSessions.length > 0 && (
-              <div>
-                <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--gray-500)', letterSpacing: -0.5, margin: 0 }}>{projectSessions.length}</p>
-                <p style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>Sessões</p>
-              </div>
-            )}
+            <div>
+              <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -0.5, margin: 0 }}>{totalEstimated.toFixed(1)}h</p>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-400)', letterSpacing: 0.4, margin: 0 }}>Estimado</p>
+            </div>
           </div>
         )}
 
@@ -510,10 +642,10 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
 
         {/* Next action */}
         {nextAction && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: `${color}10`, border: `1px solid ${color}25`, borderRadius: 10 }}>
-            <span style={{ fontSize: '0.65rem', fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>→ Próxima ação</span>
-            <span style={{ fontSize: '0.85rem', color: 'var(--gray-700)', fontWeight: 600 }}>{nextAction.label}</span>
-            {nextAction.dueDate && <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)', marginLeft: 'auto', flexShrink: 0 }}>{new Date(nextAction.dueDate).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: `${color}10`, border: `1px solid ${color}25`, borderRadius: 'var(--r)' }}>
+            <span style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color, letterSpacing: 0.5, flexShrink: 0 }}>→ Próxima ação</span>
+            <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-700)', fontWeight: 600 }}>{nextAction.label}</span>
+            {nextAction.dueDate && <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginLeft: 'auto', flexShrink: 0 }}>{new Date(nextAction.dueDate).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}</span>}
           </div>
         )}
       </div>
@@ -521,7 +653,7 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: '7px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap', border: `2px solid ${activeTab === t.id ? color : 'var(--gray-200)'}`, background: activeTab === t.id ? `${color}15` : 'var(--white)', color: activeTab === t.id ? color : 'var(--gray-500)' }}>
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ padding: '7px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer', whiteSpace: 'nowrap', border: `2px solid ${activeTab === t.id ? color : 'var(--gray-200)'}`, background: activeTab === t.id ? `${color}15` : 'var(--white)', color: activeTab === t.id ? color : 'var(--gray-500)' }}>
             {t.icon ? <>{t.icon} {t.label}</> : t.label}{t.count !== null && t.count > 0 ? ` (${t.count})` : ''}
           </button>
         ))}
@@ -532,11 +664,11 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Tarefas</span>
-            <button className="btn btn-primary" onClick={() => setShowTaskForm(v => !v)} style={{ fontSize: '0.78rem', padding: '5px 12px' }}><Plus size={13} /> Tarefa</button>
+            <button className="btn btn-primary" onClick={() => setShowTaskForm(v => !v)} style={{ fontSize: 'var(--t-caption)', padding: '5px 12px' }}><Plus size={13} /> Tarefa</button>
           </div>
           <div className="card-body">
             {showTaskForm && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--gray-200)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)' }}>
                 <input value={newTask.label} onChange={e => setNewTask({...newTask, label: e.target.value})} placeholder="Descrição da tarefa..." style={inputStyle} autoFocus onKeyDown={e => e.key === 'Enter' && addTask()} />
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <select value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})} style={{ ...inputStyle, width: 'auto' }}>
@@ -559,11 +691,11 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                 <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--gray-50)' }}>
                   <button onClick={() => toggleTask(task.id)} style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${color}`, background: 'var(--white)', cursor: 'pointer', flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--gray-700)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.label}</p>
+                    <p style={{ fontSize: 'var(--t-body)', fontWeight: 500, color: 'var(--gray-700)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.label}</p>
                     <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: 50, background: pri.bg, color: pri.color }}>{pri.label}</span>
-                      {task.dueDate && <span style={{ fontSize: '0.65rem', color: td !== null && td <= 0 ? '#dc2626' : 'var(--gray-400)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}><CalendarEmoji /> {td === 0 ? 'Hoje' : td < 0 ? `${Math.abs(td)}d atraso` : `${td}d`}</span>}
-                      {task.estimatedHours && <span style={{ fontSize: '0.65rem', color: 'var(--gray-400)', fontWeight: 600 }}>⏱ {task.estimatedHours}h</span>}
+                      <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '1px 6px', borderRadius: 50, background: pri.bg, color: pri.color }}>{pri.label}</span>
+                      {task.dueDate && <span style={{ fontSize: 'var(--t-caption)', color: td !== null && td <= 0 ? '#dc2626' : 'var(--gray-400)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}><CalendarEmoji /> {td === 0 ? 'Hoje' : td < 0 ? `${Math.abs(td)}d atraso` : `${td}d`}</span>}
+                      {task.estimatedHours && <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>⏱ {task.estimatedHours}h</span>}
                     </div>
                   </div>
                   <button className="btn btn-ghost" onClick={() => removeTask(task.id)} style={{ padding: '4px 6px' }}><Trash2 size={12} /></button>
@@ -575,13 +707,13 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
 
             {tasks.filter(t => t.done).length > 0 && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--gray-100)' }}>
-                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Concluídas ({tasks.filter(t => t.done).length})</p>
+                <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 8 }}>Concluídas ({tasks.filter(t => t.done).length})</p>
                 {tasks.filter(t => t.done).map(task => (
                   <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--gray-50)' }}>
                     <button onClick={() => toggleTask(task.id)} style={{ width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#22c55e', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Check size={11} color="white" />
                     </button>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--gray-400)', textDecoration: 'line-through', flex: 1, margin: 0 }}>{task.label}</p>
+                    <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', textDecoration: 'line-through', flex: 1, margin: 0 }}>{task.label}</p>
                     <button className="btn btn-ghost" onClick={() => removeTask(task.id)} style={{ padding: '4px 6px' }}><Trash2 size={12} /></button>
                   </div>
                 ))}
@@ -596,7 +728,7 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Milestones</span>
-            <button className="btn btn-primary" onClick={() => setShowMsForm(v => !v)} style={{ fontSize: '0.78rem', padding: '5px 12px' }}><Plus size={13} /> Milestone</button>
+            <button className="btn btn-primary" onClick={() => setShowMsForm(v => !v)} style={{ fontSize: 'var(--t-caption)', padding: '5px 12px' }}><Plus size={13} /> Milestone</button>
           </div>
           <div className="card-body">
             {showMsForm && (
@@ -616,8 +748,8 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                     {m.done && <Check size={11} color="white" />}
                   </button>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: '0.85rem', fontWeight: 600, color: m.done ? 'var(--gray-400)' : 'var(--gray-800)', textDecoration: m.done ? 'line-through' : 'none', margin: 0 }}>{m.label}</p>
-                    {m.date && <p style={{ fontSize: '0.72rem', color: md !== null && md < 0 && !m.done ? '#dc2626' : 'var(--gray-400)', fontWeight: 600, margin: 0 }}>
+                    <p style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: m.done ? 'var(--gray-400)' : 'var(--gray-800)', textDecoration: m.done ? 'line-through' : 'none', margin: 0 }}>{m.label}</p>
+                    {m.date && <p style={{ fontSize: 'var(--t-caption)', color: md !== null && md < 0 && !m.done ? '#dc2626' : 'var(--gray-400)', fontWeight: 600, margin: 0 }}>
                       {new Date(m.date).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' })}
                       {md !== null && !m.done && ` · ${md < 0 ? `${Math.abs(md)}d em atraso` : md === 0 ? 'Hoje' : `${md}d`}`}
                     </p>}
@@ -645,14 +777,14 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Notas & Reflexões</span>
-            <button className="btn btn-primary" onClick={() => setShowNoteForm(v => !v)} style={{ fontSize: '0.78rem', padding: '5px 12px' }}><Plus size={13} /> Nota</button>
+            <button className="btn btn-primary" onClick={() => setShowNoteForm(v => !v)} style={{ fontSize: 'var(--t-caption)', padding: '5px 12px' }}><Plus size={13} /> Nota</button>
           </div>
           <div className="card-body">
             {showNoteForm && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--gray-200)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)' }}>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                   {NOTE_TYPES.map(t => (
-                    <button key={t.id} onClick={() => setNewNote({...newNote, type: t.id})} style={{ padding: '4px 10px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', border: `1.5px solid ${newNote.type === t.id ? color : 'var(--gray-200)'}`, background: newNote.type === t.id ? `${color}15` : 'var(--white)', color: newNote.type === t.id ? color : 'var(--gray-500)' }}>
+                    <button key={t.id} onClick={() => setNewNote({...newNote, type: t.id})} style={{ padding: '4px 10px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer', border: `1.5px solid ${newNote.type === t.id ? color : 'var(--gray-200)'}`, background: newNote.type === t.id ? `${color}15` : 'var(--white)', color: newNote.type === t.id ? color : 'var(--gray-500)' }}>
                       {t.emoji} {t.label}
                     </button>
                   ))}
@@ -669,13 +801,13 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
             {notes.map(n => {
               const nt = NOTE_TYPES.find(t => t.id === n.type) || NOTE_TYPES[0]
               return (
-                <div key={n.id} style={{ padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--gray-100)', marginBottom: 8 }}>
+                <div key={n.id} style={{ padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--r)', border: '1px solid var(--gray-100)', marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)' }}>{nt.emoji} {nt.label} · {n.createdAt}</span>
+                    <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)' }}>{nt.emoji} {nt.label} · {n.createdAt}</span>
                     <button className="btn btn-ghost" onClick={() => removeNote(n.id)} style={{ padding: '2px 5px' }}><Trash2 size={11} /></button>
                   </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--gray-700)', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{n.text}</p>
-                  {n.url && <a href={n.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color, marginTop: 4, display: 'block' }}>{n.url}</a>}
+                  <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-700)', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{n.text}</p>
+                  {n.url && <a href={n.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--t-caption)', color, marginTop: 4, display: 'block' }}>{n.url}</a>}
                 </div>
               )
             })}
@@ -694,24 +826,24 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
             </div>
             {blockers.length === 0 && <div className="empty-state"><div className="e-emoji">🚧</div><p>Nenhum bloqueio registado.</p></div>}
             {blockers.filter(b => !b.resolved).map(b => (
-              <div key={b.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}>
+              <div key={b.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--orange-50)', border: '1px solid #fed7aa', borderRadius: 'var(--r)', marginBottom: 6 }}>
                 <button onClick={() => toggleBlocker(b.id)} style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #f59e0b', background: 'var(--white)', cursor: 'pointer', flexShrink: 0, marginTop: 2 }} />
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '0.85rem', color: '#92400e', fontWeight: 500, margin: 0 }}>{b.text}</p>
-                  <p style={{ fontSize: '0.68rem', color: '#b45309', margin: 0 }}>{b.createdAt}</p>
+                  <p style={{ fontSize: 'var(--t-body)', color: '#92400e', fontWeight: 500, margin: 0 }}>{b.text}</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: '#b45309', margin: 0 }}>{b.createdAt}</p>
                 </div>
                 <button className="btn btn-ghost" onClick={() => removeBlocker(b.id)} style={{ padding: '2px 5px' }}><Trash2 size={11} /></button>
               </div>
             ))}
             {blockers.filter(b => b.resolved).length > 0 && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--gray-100)' }}>
-                <p style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Resolvidos</p>
+                <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 8 }}>Resolvidos</p>
                 {blockers.filter(b => b.resolved).map(b => (
                   <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--gray-50)' }}>
                     <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#22c55e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Check size={10} color="white" />
                     </div>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--gray-400)', textDecoration: 'line-through', flex: 1, margin: 0 }}>{b.text}</p>
+                    <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', textDecoration: 'line-through', flex: 1, margin: 0 }}>{b.text}</p>
                     <button className="btn btn-ghost" onClick={() => removeBlocker(b.id)} style={{ padding: '2px 5px' }}><Trash2 size={11} /></button>
                   </div>
                 ))}
@@ -726,11 +858,11 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Diário de bordo</span>
-            <button className="btn btn-primary" onClick={() => setShowDiaryForm(v => !v)} style={{ fontSize: '0.78rem', padding: '5px 12px' }}><Plus size={13} /> Entrada</button>
+            <button className="btn btn-primary" onClick={() => setShowDiaryForm(v => !v)} style={{ fontSize: 'var(--t-caption)', padding: '5px 12px' }}><Plus size={13} /> Entrada</button>
           </div>
           <div className="card-body">
             {showDiaryForm && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--gray-200)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)' }}>
                 <input type="date" value={newDiary.date} onChange={e => setNewDiary(d => ({ ...d, date: e.target.value }))} style={inputStyle} />
                 <textarea value={newDiary.text} onChange={e => setNewDiary(d => ({ ...d, text: e.target.value }))} rows={4} placeholder="O que aconteceu? Que progresso fizeste? Que decisões tomaste?" style={{ ...inputStyle, resize: 'vertical' }} autoFocus />
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -743,12 +875,12 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
             {[...diary].reverse().map(entry => (
               <div key={entry.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--gray-50)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: color }}>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: color }}>
                     {new Date(entry.date).toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </span>
                   <button className="btn btn-ghost" onClick={() => removeDiaryEntry(entry.id)} style={{ padding: '2px 5px' }}><Trash2 size={11} /></button>
                 </div>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-700)', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{entry.text}</p>
+                <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-700)', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{entry.text}</p>
               </div>
             ))}
           </div>
@@ -767,8 +899,8 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                 { key: 'hours',  label: 'Horas registadas',  emoji: '⏱️', show: null },
                 { key: 'custom', label: 'Métrica personalizada', emoji: '📌', show: null },
               ].filter(m => m.show === null || m.show.includes(project.type)).map(m => (
-                <div key={m.key} style={{ background: 'var(--gray-50)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--gray-100)' }}>
-                  <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{m.emoji} {m.label}</p>
+                <div key={m.key} style={{ background: 'var(--gray-50)', borderRadius: 'var(--r)', padding: '14px 16px', border: '1px solid var(--gray-100)' }}>
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 6 }}>{m.emoji} {m.label}</p>
                   <input type="number" min="0" value={metrics[m.key] || ''} onChange={e => updateMetric(m.key, parseFloat(e.target.value) || 0)} placeholder="0" style={{ ...inputStyle, fontSize: '1.4rem', fontWeight: 800, color, padding: '4px 0', border: 'none', background: 'transparent', outline: 'none' }} />
                 </div>
               ))}
@@ -776,8 +908,8 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
             {(project.type === 'Manuscrito/Livro') && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-500)' }}>Progresso do manuscrito</span>
-                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color }}>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)' }}>Progresso do manuscrito</span>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color }}>
                     {(metrics.words || 0).toLocaleString('pt-PT')} / {(metrics.targetWords || 80000).toLocaleString('pt-PT')} palavras
                   </span>
                 </div>
@@ -785,19 +917,10 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
                   <div style={{ height: '100%', width: `${Math.min(100, Math.round((metrics.words || 0) / (metrics.targetWords || 80000) * 100))}%`, background: color, borderRadius: 50, transition: 'width 0.4s' }} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>Meta:</span>
-                  <input type="number" min="1000" step="1000" value={metrics.targetWords || 80000} onChange={e => updateMetric('targetWords', parseInt(e.target.value) || 80000)} style={{ ...inputStyle, width: 120, padding: '3px 8px', fontSize: '0.8rem' }} />
-                  <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>palavras</span>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>Meta:</span>
+                  <input type="number" min="1000" step="1000" value={metrics.targetWords || 80000} onChange={e => updateMetric('targetWords', parseInt(e.target.value) || 80000)} style={{ ...inputStyle, width: 120, padding: '3px 8px', fontSize: 'var(--t-body)' }} />
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>palavras</span>
                 </div>
-              </div>
-            )}
-            {hasHours && (
-              <div style={{ padding: '12px 14px', background: `${color}10`, borderRadius: 10, border: `1px solid ${color}20` }}>
-                <p style={{ fontSize: '0.65rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>⏱️ Horas de estudo registadas</p>
-                <p style={{ fontSize: '1.6rem', fontWeight: 800, color, margin: 0 }}>{realHours.toFixed(1)}h</p>
-                <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', margin: 0 }}>
-                  {projectSessions.length > 0 ? `${projectSessions.length} sess. ligadas · ` : ''}{subjects.length > 0 ? 'nas disciplinas associadas' : ''}
-                </p>
               </div>
             )}
           </div>
@@ -814,8 +937,8 @@ function ProjectDetail({ project, onUpdate, onBack, allSubjects = [] }) {
               <div key={entry.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--gray-50)', alignItems: 'flex-start' }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 6 }} />
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--gray-700)', margin: 0 }}>{entry.text}</p>
-                  <p style={{ fontSize: '0.68rem', color: 'var(--gray-400)', margin: 0 }}>{entry.date}</p>
+                  <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-700)', margin: 0 }}>{entry.text}</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>{entry.date}</p>
                 </div>
               </div>
             ))}
@@ -831,9 +954,9 @@ export default function ProjectsPage({ settings }) {
   const allSubjects = settings?.subjects || []
   const [projects, setProjects]           = useState(loadProjects)
   const [selected, setSelected]           = useState(null)
-  const allSessions = loadSessions()
   const [showForm, setShowForm]           = useState(false)
   const [filterTag, setFilterTag]         = useState(null)
+  const [viewMode, setViewMode]           = useState('list')
   const [collapsedGroups, setCollapsedGroups] = useState({ paused: true, completed: true })
   const [newProject, setNewProject]       = useState({ name: '', emoji: '🚀', color: COLORS[0].hex, type: '', description: '' })
 
@@ -862,7 +985,7 @@ export default function ProjectsPage({ settings }) {
   const filtered = filterTag ? projects.filter(p => (p.tags || []).includes(filterTag)) : projects
   const grouped  = { active: filtered.filter(p => p.status === 'active'), paused: filtered.filter(p => p.status === 'paused'), completed: filtered.filter(p => p.status === 'completed') }
 
-  const inputStyle = { fontFamily: 'inherit', fontSize: '0.85rem', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-sm)', padding: '7px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', width: '100%' }
+  const inputStyle = { fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '7px 10px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', width: '100%' }
 
   if (selectedProject) return <ProjectDetail project={selectedProject} onUpdate={updateProject} onBack={() => setSelected(null)} allSubjects={allSubjects} />
 
@@ -873,7 +996,23 @@ export default function ProjectsPage({ settings }) {
           <h1>🗂 Projetos</h1>
           <p className="subtitle">{projects.filter(p=>p.status==='active').length} em curso · {projects.filter(p=>p.status==='completed').length} concluídos</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}><Plus size={14} /> Novo projeto</button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {projects.length > 0 && (
+            <div style={{ display: 'flex', background: 'var(--gray-100)', borderRadius: 'var(--r)', padding: 3, gap: 2 }}>
+              {[['list', <LayoutList size={14} />], ['board', <LayoutGrid size={14} />]].map(([mode, icon]) => (
+                <button key={mode} onClick={() => setViewMode(mode)} title={mode === 'list' ? 'Vista lista' : 'Vista kanban'}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    background: viewMode === mode ? 'var(--white)' : 'transparent',
+                    color: viewMode === mode ? 'var(--gray-800)' : 'var(--gray-400)',
+                    boxShadow: viewMode === mode ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  }}>
+                  {icon}
+                </button>
+              ))}
+            </div>
+          )}
+          <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}><Plus size={14} /> Novo projeto</button>
+        </div>
       </div>
 
       {showForm && (
@@ -901,10 +1040,110 @@ export default function ProjectsPage({ settings }) {
         </div>
       )}
 
+      {projects.length > 0 && (() => {
+        const active    = projects.filter(p => p.status === 'active')
+        const allTasks  = projects.flatMap(p => p.tasks || [])
+        const pending   = allTasks.filter(t => !t.done).length
+        const done      = allTasks.filter(t => t.done).length
+        const blockers  = projects.flatMap(p => (p.blockers || []).filter(b => !b.resolved)).length
+        const nearest   = active.filter(p => p.deadline).sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0]
+        const nearestDays = nearest ? daysUntil(nearest.deadline) : null
+
+        return (
+          <div style={{ background: 'var(--white)', border: '1px solid var(--gray-100)', borderRadius: 'var(--r)', padding: '18px 20px', marginBottom: 16, boxShadow: 'var(--shadow)' }}>
+
+            {/* Stat pills */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: active.length > 0 ? 18 : 0 }}>
+              {[
+                { label: 'Em curso',         value: active.length,    color: '#2563eb', bg: 'var(--blue-100)'  },
+                { label: 'Tarefas pendentes', value: pending,          color: '#d97706', bg: 'var(--amber-100)' },
+                { label: 'Bloqueios ativos',  value: blockers,         color: blockers > 0 ? '#dc2626' : '#16a34a', bg: blockers > 0 ? 'var(--red-100)' : 'var(--green-100)' },
+              ].map(s => (
+                <div key={s.label} style={{ background: s.bg, borderRadius: 'var(--r)', padding: '10px 12px', textAlign: 'center' }}>
+                  <p style={{ fontSize: '1.25rem', fontWeight: 800, color: s.color, margin: 0, lineHeight: 1.1 }}>{s.value}</p>
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: s.color, opacity: 0.75, margin: '3px 0 0', lineHeight: 1.2 }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Active projects progress */}
+            {active.length > 0 && (
+              <div>
+                <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: '0.07em', marginBottom: 10 }}>Progresso dos projetos ativos</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {active.map(p => {
+                    const pct   = calcProgress(p)
+                    const color = p.color || '#6366f1'
+                    const days  = p.deadline ? daysUntil(p.deadline) : null
+                    const tasksDone = (p.tasks || []).filter(t => t.done).length
+                    const tasksTotal = (p.tasks || []).length
+                    const msTotal = (p.milestones || []).length
+                    const msDone  = (p.milestones || []).filter(m => m.done).length
+                    return (
+                      <div key={p.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(p.id)}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 'var(--t-body)', flexShrink: 0 }}>{p.emoji || '📁'}</span>
+                          <span style={{ flex: 1, fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: pct === 100 ? '#16a34a' : 'var(--gray-500)', flexShrink: 0 }}>{pct}%</span>
+                          {days !== null && (
+                            <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: days < 0 ? '#dc2626' : days <= 7 ? '#dc2626' : days <= 30 ? '#d97706' : 'var(--gray-400)', flexShrink: 0 }}>
+                              {days < 0 ? `${Math.abs(days)}d atraso` : days === 0 ? 'hoje' : `${days}d`}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ flex: 1, background: 'var(--gray-100)', borderRadius: 50, height: 5, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#22c55e' : color, borderRadius: 50, transition: 'width 0.4s' }} />
+                          </div>
+                          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', flexShrink: 0 }}>
+                            {msTotal > 0 ? `${msDone}/${msTotal} ms` : tasksTotal > 0 ? `${tasksDone}/${tasksTotal} tarefas` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Nearest deadline alert */}
+            {nearestDays !== null && nearestDays <= 14 && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 'var(--t-caption)' }}>⚠️</span>
+                <p style={{ fontSize: 'var(--t-caption)', color: nearestDays <= 3 ? '#dc2626' : '#d97706', fontWeight: 700, margin: 0 }}>
+                  <span style={{ fontWeight: 800 }}>{nearest.emoji} {nearest.name}</span> — prazo {nearestDays <= 0 ? 'hoje' : `daqui a ${nearestDays} dia${nearestDays !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+            )}
+
+            {/* Overall done/pending summary */}
+            {(done + pending) > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--gray-100)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>Tarefas concluídas (todos os projetos)</span>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-600)' }}>{done} / {done + pending}</span>
+                </div>
+                <div style={{ background: 'var(--gray-100)', borderRadius: 50, height: 5, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.round(done / (done + pending) * 100)}%`, background: '#22c55e', borderRadius: 50, transition: 'width 0.4s' }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* ── KANBAN BOARD ── */}
+      {viewMode === 'board' && projects.length > 0 && (
+        <KanbanBoard projects={filtered} onSelect={setSelected} onUpdate={updateProject} />
+      )}
+
+      {/* ── LIST VIEW ── */}
+      {viewMode === 'list' && (
+      <>
       {allTags.length > 0 && (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
           {[null, ...allTags].map(tag => (
-            <button key={tag ?? '__all'} onClick={() => setFilterTag(tag)} style={{ padding: '4px 10px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', border: `1.5px solid ${filterTag === tag ? 'var(--gray-900)' : 'var(--gray-200)'}`, background: filterTag === tag ? 'var(--gray-900)' : 'var(--white)', color: filterTag === tag ? 'var(--white)' : 'var(--gray-500)' }}>
+            <button key={tag ?? '__all'} onClick={() => setFilterTag(tag)} style={{ padding: '4px 10px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer', border: `1.5px solid ${filterTag === tag ? 'var(--gray-900)' : 'var(--gray-200)'}`, background: filterTag === tag ? 'var(--gray-900)' : 'var(--white)', color: filterTag === tag ? 'var(--white)' : 'var(--gray-500)' }}>
               {tag === null ? 'Todos' : `#${tag}`}
             </button>
           ))}
@@ -915,7 +1154,7 @@ export default function ProjectsPage({ settings }) {
         <div className="card"><div className="empty-state">
           <div className="e-emoji">🗂</div>
           <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Ainda sem projetos</p>
-          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginBottom: 12 }}>Cria um projeto para acompanhar trabalhos, dissertações ou qualquer projeto académico</p>
+          <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>Cria um projeto para acompanhar trabalhos, dissertações ou qualquer projeto académico</p>
           <button className="btn btn-primary" onClick={() => setShowForm(true)}><Plus size={14} /> Criar primeiro projeto</button>
         </div></div>
       )}
@@ -928,17 +1167,19 @@ export default function ProjectsPage({ settings }) {
         return (
           <div key={groupId} style={{ marginBottom: 20 }}>
             <button onClick={() => groupId !== 'active' && setCollapsedGroups(prev => ({...prev, [groupId]: !prev[groupId]}))} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: groupId !== 'active' ? 'pointer' : 'default', fontFamily: 'inherit', marginBottom: 10, padding: 0 }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: 1 }}>{labels[groupId]} ({group.length})</span>
+              <span style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--gray-400)', letterSpacing: 1 }}>{labels[groupId]} ({group.length})</span>
               {groupId !== 'active' && (collapsed ? <ChevronDown size={13} color="var(--gray-400)" /> : <ChevronUp size={13} color="var(--gray-400)" />)}
             </button>
             {!collapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {group.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelected(p.id)} onDelete={deleteProject} allSubjects={allSubjects} sessions={allSessions} />)}
+                {group.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelected(p.id)} onDelete={deleteProject} allSubjects={allSubjects} />)}
               </div>
             )}
           </div>
         )
       })}
+      </>
+      )}
     </div>
   )
 }

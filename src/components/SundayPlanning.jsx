@@ -147,7 +147,7 @@ Sê específica, prática e usa as informações que ela deu. Máx 3 frases por 
     }
   }
 
-  const colors = ['#fef9c3', '#dbeafe', '#f0fdf4', '#fff7ed', '#f5f3ff']
+  const colors = ['var(--amber-100)', 'var(--blue-100)', 'var(--green-50)', 'var(--orange-50)', 'var(--purple-50)']
   const borderColors = ['#fde047', '#93c5fd', '#86efac', '#fdba74', '#c4b5fd']
   const textColors = ['#854d0e', '#1e40af', '#14532d', '#9a3412', '#5b21b6']
 
@@ -158,13 +158,13 @@ Sê específica, prática e usa as informações que ela deu. Máx 3 frases por 
       padding: 20,
     }}>
       <div style={{
-        background: 'var(--white)', borderRadius: 16, width: '100%', maxWidth: 560,
+        background: 'var(--white)', borderRadius: 'var(--r)', width: '100%', maxWidth: 560,
         maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <p style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--gray-800)', margin: 0 }}>🗓️ Planeamento de Domingo</p>
-            <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: 0, marginTop: 2 }}>
+            <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0, marginTop: 2 }}>
               {ctx.weekH}h esta semana{ctx.upcomingExams.length > 0 ? ` · ${ctx.upcomingExams.length} exame${ctx.upcomingExams.length !== 1 ? 's' : ''} próximo${ctx.upcomingExams.length !== 1 ? 's' : ''}` : ''}
             </p>
           </div>
@@ -183,9 +183,9 @@ Sê específica, prática e usa as informações que ela deu. Máx 3 frases por 
                   const body = lines.slice(1).join('\n')
                   const c = { bg: colors[i % colors.length], border: borderColors[i % borderColors.length], text: textColors[i % textColors.length] }
                   return (
-                    <div key={i} style={{ background: c.bg, border: `1.5px solid ${c.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
-                      <p style={{ fontWeight: 800, fontSize: '0.82rem', color: c.text, marginBottom: 4 }}>{title}</p>
-                      <p style={{ fontSize: '0.85rem', lineHeight: 1.6, color: c.text, margin: 0, opacity: 0.85, whiteSpace: 'pre-wrap' }}>{body}</p>
+                    <div key={i} style={{ background: c.bg, border: `1.5px solid ${c.border}`, borderRadius: 'var(--r)', padding: '12px 14px', marginBottom: 10 }}>
+                      <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: c.text, marginBottom: 4 }}>{title}</p>
+                      <p style={{ fontSize: 'var(--t-body)', lineHeight: 1.6, color: c.text, margin: 0, opacity: 0.85, whiteSpace: 'pre-wrap' }}>{body}</p>
                     </div>
                   )
                 })}
@@ -204,14 +204,14 @@ Sê específica, prática e usa as informações que ela deu. Máx 3 frases por 
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--rose-400)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', letterSpacing: 0.5, marginBottom: 6 }}>
                   {current.emoji} {current.title} · {step + 1}/{STEPS.length}
                 </p>
                 <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gray-800)', marginBottom: 14, lineHeight: 1.4 }}>
                   {current.question}
                 </p>
                 {ctx.upcomingExams.length > 0 && step === 1 && (
-                  <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: '0.78rem', color: '#854d0e', fontWeight: 600 }}>
+                  <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 'var(--r)', padding: '8px 12px', marginBottom: 10, fontSize: 'var(--t-caption)', color: '#854d0e', fontWeight: 600 }}>
                     💡 Exames próximos: {ctx.upcomingExams.join(' · ')}
                   </div>
                 )}
@@ -221,7 +221,7 @@ Sê específica, prática e usa as informações que ela deu. Máx 3 frases por 
                   value={answers[current.id] || ''}
                   onChange={e => setAnswers(prev => ({ ...prev, [current.id]: e.target.value }))}
                   autoFocus
-                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.9rem', border: '1.5px solid var(--gray-200)', borderRadius: 10, padding: '12px 14px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box' }}
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '12px 14px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box' }}
                 />
               </div>
 

@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, TrendingUp, TrendingDown, Minus, Clock, Flame, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
+import { Plus, X, TrendingUp, TrendingDown, Minus, Clock, Flame, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb, CalendarDays } from 'lucide-react'
+import { computeWeeklyStreak } from '../utils/streak'
 import { PomodoroTimer } from './PomodoroTimer'
 import { getMondayOfWeek } from '../utils/dates'
+import { useToast, ToastContainer } from './Toast'
+import { computeAchievements } from '../utils/achievements'
+import { CONFIDENCE } from '../constants'
 
 const TODAY = new Date()
 TODAY.setHours(0, 0, 0, 0)
@@ -50,14 +54,6 @@ function hoursThisWeek(sessions) {
   return sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
 }
 
-function currentStreak(sessions) {
-  const days = new Set(sessions.map(s => s.date))
-  let streak = 0
-  const d = new Date(TODAY)
-  if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1)
-  while (days.has(d.toDateString())) { streak++; d.setDate(d.getDate() - 1) }
-  return streak
-}
 
 function last7Days(sessions) {
   const result = []
@@ -216,6 +212,8 @@ export default function StudyHours({ settings }) {
   const [historySearch, setHistorySearch] = useState('')
   const [historySubject, setHistorySubject] = useState('')
   const [chartDays, setChartDays] = useState(7)
+  const [postSession, setPostSession] = useState(null)
+  const { toasts, toast, dismiss } = useToast()
   const [form, setForm] = useState({
     subject: subjects[0]?.key || '',
     hours: '',
@@ -223,11 +221,7 @@ export default function StudyHours({ settings }) {
     notes: '',
     mood: '😊',
     date: TODAY.toISOString().split('T')[0],
-    projectId: '',
   })
-
-  const activeProjects = (() => { try { return JSON.parse(localStorage.getItem('projects-v2')) || [] } catch { return [] } })()
-    .filter(p => p.status !== 'completed')
 
   useEffect(() => { saveSessions(sessions) }, [sessions])
   useEffect(() => { saveTargets(targets) }, [targets])
@@ -239,7 +233,7 @@ export default function StudyHours({ settings }) {
     const m = parseInt(form.mins) || 0
     const totalHours = parseFloat((h + m / 60).toFixed(2))
     if (totalHours <= 0) return
-    setSessions(prev => [{
+    const newSession = {
       id: Date.now(),
       subject: form.subject,
       hours: totalHours,
@@ -247,10 +241,21 @@ export default function StudyHours({ settings }) {
       mood: form.mood,
       date: new Date(form.date).toDateString(),
       startTime: null,
-      projectId: form.projectId || null,
-    }, ...prev])
-    setForm(p => ({ ...p, hours: '', mins: '0', notes: '', mood: '😊', projectId: '' }))
+    }
+    const achsBefore = computeAchievements(sessions)
+    const achsAfter = computeAchievements([newSession, ...sessions])
+    achsAfter.filter(a => !achsBefore.some(b => b.desc === a.desc))
+      .forEach(ach => toast({ message: `${ach.icon} ${ach.desc}`, duration: 8000 }))
+    setSessions(prev => [newSession, ...prev])
+    setForm(p => ({ ...p, hours: '', mins: '0', notes: '', mood: '😊' }))
     setShowForm(false)
+    try {
+      const allTopics = JSON.parse(localStorage.getItem('topics') || '{}')
+      const subjectObj = subjects.find(s => s.key === form.subject)
+      const sTopics = allTopics[form.subject] || allTopics[subjectObj?.name || ''] || []
+      const topicKey = allTopics[form.subject] ? form.subject : (subjectObj?.name || form.subject)
+      if (sTopics.length > 0) setPostSession({ subjectKey: topicKey, topics: sTopics })
+    } catch {}
   }
 
   const removeSession = (id) => setSessions(prev => prev.filter(s => s.id !== id))
@@ -292,7 +297,8 @@ export default function StudyHours({ settings }) {
     setEditDraft({})
   }
 
-  const streak    = currentStreak(sessions)
+  const weeklyMin    = Math.max(5, Math.round(avgWeeklyTarget))
+  const weeklyStreak = computeWeeklyStreak(sessions, weeklyMin)
   const chartData = (() => {
     const result = []
     for (let i = chartDays - 1; i >= 0; i--) {
@@ -328,6 +334,7 @@ export default function StudyHours({ settings }) {
 
   return (
     <div className="fade-in">
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <h1>⏱️ Horas de Estudo</h1>
@@ -351,268 +358,6 @@ export default function StudyHours({ settings }) {
         </div>
       )}
 
-      {/* Target editor */}
-      {showTargets && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-header">
-            <span className="card-title">Meta de horas por cadeira (semestre total)</span>
-          </div>
-          <div style={{ padding: '12px 20px' }}>
-            {subjects.map(s => (
-              <div key={s.key} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '10px 0', borderBottom: '1px solid var(--gray-50)',
-              }}>
-                <span style={{ fontSize: '1.1rem', width: 28 }}>{s.emoji}</span>
-                <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: 'var(--gray-700)' }}>
-                  {s.name}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max="500"
-                    step="5"
-                    value={targets[s.key] !== undefined ? targets[s.key] : s.defaultTarget}
-                    onChange={e => updateTarget(s.key, e.target.value)}
-                    style={{
-                      width: 76, fontFamily: 'inherit', fontSize: '0.9rem',
-                      border: '1.5px solid var(--gray-200)', borderRadius: 8,
-                      padding: '6px 8px', outline: 'none',
-                      background: 'var(--white)', color: 'var(--gray-900)',
-                      textAlign: 'center', fontWeight: 700,
-                    }}
-                    onFocus={e => e.target.style.borderColor = 'var(--rose-300)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
-                  />
-                  <span style={{ fontSize: '0.78rem', color: 'var(--gray-400)', fontWeight: 600 }}>h</span>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)', minWidth: 90 }}>
-                    ~{(getTarget(s.key) / WEEKS_REMAINING).toFixed(1)}h/semana
-                  </span>
-                </div>
-              </div>
-            ))}
-            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 500 }}>
-                Total: {totalTarget}h · Meta semanal: {avgWeeklyTarget.toFixed(1)}h
-              </p>
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: '0.72rem', color: 'var(--rose-400)' }}
-                onClick={resetTargets}
-              >
-                Repor padrao
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Two main counters */}
-      <div className="dashboard-grid" style={{ marginBottom: 14 }}>
-        <div className="stat-card">
-          <div className="stat-label"><Clock size={12} /> Total do semestre</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-            <div className="stat-value">{totalHours.toFixed(1)}</div>
-            <span style={{ fontSize: '0.85rem', color: 'var(--gray-400)', fontWeight: 600 }}>/ {totalTarget}h</span>
-          </div>
-          <div className="progress-wrap" style={{ marginBottom: 6 }}>
-            <div className="progress-fill" style={{ width: `${totalPct}%`, background: 'var(--rose-300)' }} />
-          </div>
-          <div className="stat-sub">{totalPct}% da meta global · {Math.max(0, totalTarget - totalHours).toFixed(1)}h em falta</div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-label"><Star size={12} /> Esta semana</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-            <div className="stat-value">{weekHours.toFixed(1)}</div>
-            <span style={{ fontSize: '0.85rem', color: 'var(--gray-400)', fontWeight: 600 }}>/ {weekTarget.toFixed(1)}h</span>
-          </div>
-          <div className="progress-wrap" style={{ marginBottom: 6 }}>
-            <div className="progress-fill" style={{
-              width: `${weekPct}%`,
-              background: weekPct >= 80 ? 'var(--green-400)' : weekPct >= 50 ? '#f59e0b' : 'var(--red-400)',
-            }} />
-          </div>
-          <div className="stat-sub">
-            Esperado ate {dowLabel}: {weekTargetNow.toFixed(1)}h
-            {!shouldShowBehind() && ' · (segunda - sem pressao ainda)'}
-          </div>
-        </div>
-      </div>
-
-      {/* Streak + chart */}
-      <div className="stat-card" style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
-          <div>
-            <div className="stat-label"><Flame size={12} /> Streak</div>
-            <div className="stat-value" style={{ fontSize: '1.5rem' }}>{streak} dias</div>
-          </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[7,30].map(n => (
-              <button key={n} onClick={() => setChartDays(n)} style={{
-                padding: '3px 10px', borderRadius: 50, cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: '0.7rem', fontWeight: 700, border: `1.5px solid ${chartDays === n ? 'var(--rose-300)' : 'var(--gray-200)'}`,
-                background: chartDays === n ? 'var(--rose-50)' : 'var(--white)', color: chartDays === n ? 'var(--rose-400)' : 'var(--gray-400)',
-              }}>{n}d</button>
-            ))}
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: chartDays > 7 ? 2 : 5, height: 50 }}>
-          {chartData.map(d => {
-            const h   = Math.max(0, (d.hours / maxChart) * 100)
-            const isT = d.date === TODAY.toDateString()
-            return (
-              <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <div style={{
-                  width: '100%', height: `${h}%`, minHeight: d.hours > 0 ? 3 : 0,
-                  background: isT ? 'var(--rose-400)' : 'var(--rose-200)',
-                  borderRadius: 2,
-                }} />
-                {chartDays <= 14 && (
-                  <span style={{ fontSize: '0.55rem', color: isT ? 'var(--rose-400)' : 'var(--gray-400)', fontWeight: isT ? 700 : 500 }}>
-                    {d.label}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Weekday breakdown */}
-      {sessions.length >= 5 && (
-        <div className="card" style={{ marginBottom: 14, padding: '16px 20px' }}>
-          <p style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
-            Média de horas por dia da semana
-          </p>
-          {(() => {
-            const maxAvg = Math.max(...dowBreakdown.map(d => d.avg), 0.1)
-            const best = dowBreakdown.reduce((b, d) => d.avg > b.avg ? d : b, dowBreakdown[0])
-            const todayDow = TODAY.getDay()
-            return (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
-                {dowBreakdown.map(d => {
-                  const pct = d.avg > 0 ? d.avg / maxAvg : 0
-                  const isToday = d.dow === todayDow
-                  const isBest = d.dow === best.dow
-                  const color = isBest ? '#16a34a' : isToday ? 'var(--rose-400)' : 'var(--gray-300)'
-                  return (
-                    <div key={d.dow} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
-                      {d.avg > 0 && (
-                        <span style={{ fontSize: '0.6rem', fontWeight: 700, color, lineHeight: 1 }}>
-                          {d.avg.toFixed(1)}h
-                        </span>
-                      )}
-                      <div style={{ width: '100%', height: `${Math.max(pct * 52, d.avg > 0 ? 4 : 2)}px`, background: color, borderRadius: '4px 4px 0 0', transition: 'height 0.3s', opacity: d.avg > 0 ? 1 : 0.25 }} />
-                      <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isToday ? 'var(--rose-400)' : 'var(--gray-400)', lineHeight: 1 }}>{d.label}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })()}
-        </div>
-      )}
-
-      {/* Per subject */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-header">
-          <span className="card-title">On Track — esperado ate {dowLabel}</span>
-          <button
-            onClick={() => setShowOnTrack(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: 4, display: 'flex', alignItems: 'center' }}
-          >
-            {showOnTrack ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-        </div>
-        {showOnTrack && <div style={{ padding: '8px 20px 16px' }}>
-          {subjects.length === 0 && (
-            <p style={{ fontSize: '0.83rem', color: 'var(--gray-400)', padding: '8px 0' }}>
-              Ainda sem cadeiras configuradas. Adiciona-as nas Definições.
-            </p>
-          )}
-          {subjects.map(s => {
-            const subjectTarget  = getTarget(s.key)
-            const weeklyT        = subjectTarget / WEEKS_REMAINING
-            const targetNow      = weeklyT * (weekDayNum() / 7)
-            const totalDone      = hoursForSubject(sessions, s.key)
-            const weekDone       = hoursForSubjectThisWeek(sessions, s.key)
-            const color          = statusColor(weekDone, targetNow)
-            const pct            = Math.min(100, targetNow < 0.1 ? 100 : Math.round(weekDone / targetNow * 100))
-            const remaining      = Math.max(0, subjectTarget - totalDone)
-            const deficit        = Math.max(0, targetNow - weekDone)
-            const daysLeftInWeek = Math.max(1, 7 - weekDayNum())
-            const isBehind       = shouldShowBehind() && pct < 80 && targetNow > 0.1
-            const showSuggestions = expandedSuggestions[s.key]
-            const suggestions    = isBehind ? getStudySuggestions(s, deficit, daysLeftInWeek, sessions) : []
-
-            return (
-              <div key={s.key} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span style={{ fontSize: '0.9rem' }}>{s.emoji}</span>
-                  <span style={{ fontWeight: 700, fontSize: '0.83rem', flex: 1, color: 'var(--gray-800)' }}>{s.name}</span>
-                  <span style={{ fontSize: '0.73rem', fontWeight: 700, color, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {statusIcon(weekDone, targetNow)} {statusLabel(weekDone, targetNow)}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)', fontWeight: 600, minWidth: 140, textAlign: 'right' }}>
-                    {weekDone.toFixed(1)}h semana · {totalDone.toFixed(1)}h / {subjectTarget}h
-                  </span>
-                </div>
-                <div className="progress-wrap">
-                  <div style={{
-                    height: '100%', width: `${pct}%`,
-                    background: s.color, borderRadius: 50, transition: 'width 0.4s',
-                  }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)' }}>
-                    Faltam {remaining.toFixed(1)}h ate ao fim do semestre · meta semanal: {weeklyT.toFixed(1)}h
-                  </span>
-                  {isBehind && (
-                    <button
-                      onClick={() => setExpandedSuggestions(prev => ({ ...prev, [s.key]: !prev[s.key] }))}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        background: showSuggestions ? '#fef9c3' : '#fffbeb',
-                        border: `1px solid ${showSuggestions ? '#fde047' : '#fde68a'}`,
-                        borderRadius: 20, padding: '3px 9px',
-                        fontSize: '0.68rem', fontWeight: 700, color: '#b45309',
-                        cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-                      }}
-                    >
-                      <Lightbulb size={10} />
-                      Sugestões
-                      {showSuggestions ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                    </button>
-                  )}
-                </div>
-
-                {/* ── Suggestions panel ── */}
-                {isBehind && showSuggestions && (
-                  <div style={{
-                    marginTop: 8, padding: '12px 14px',
-                    background: '#fffbeb', border: '1px solid #fde68a',
-                    borderRadius: 10,
-                  }}>
-                    <p style={{ fontSize: '0.68rem', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>
-                      Como recuperar {deficit.toFixed(1)}h em atraso
-                    </p>
-                    {suggestions.map((sg, i) => (
-                      <div key={i} style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                        <span style={{ flexShrink: 0, fontSize: '1rem', lineHeight: 1.4 }}>{sg.emoji}</span>
-                        <p style={{ fontSize: '0.8rem', color: '#78350f', lineHeight: 1.55, margin: 0 }}>{sg.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>}
-      </div>
-
       {showForm && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="card-body">
@@ -626,7 +371,7 @@ export default function StudyHours({ settings }) {
               <div>
                 <label className="form-label">Horas</label>
                 <input type="number" min="0" max="12" step="1" className="form-input"
-                  placeholder="0" value={form.hours}
+                  placeholder="0" value={form.hours} autoFocus
                   onChange={e => setForm(p => ({ ...p, hours: e.target.value }))} />
               </div>
               <div>
@@ -655,26 +400,13 @@ export default function StudyHours({ settings }) {
               <div style={{ display: 'flex', gap: 6 }}>
                 {[{emoji:'😴',label:'Cansada'},{emoji:'😐',label:'Normal'},{emoji:'😊',label:'Bem'},{emoji:'🔥',label:'Flow'}].map(m => (
                   <button key={m.emoji} type="button" onClick={() => setForm(p => ({ ...p, mood: m.emoji }))} title={m.label} style={{
-                    width: 36, height: 36, borderRadius: 8, cursor: 'pointer', fontSize: '1.1rem',
+                    width: 36, height: 36, borderRadius: 'var(--r)', cursor: 'pointer', fontSize: '1.1rem',
                     border: `2px solid ${form.mood === m.emoji ? 'var(--rose-300)' : 'var(--gray-200)'}`,
                     background: form.mood === m.emoji ? 'var(--rose-50)' : 'var(--white)',
                   }}>{m.emoji}</button>
                 ))}
               </div>
             </div>
-            {activeProjects.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <label className="form-label">Projeto (opcional)</label>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => setForm(p => ({ ...p, projectId: '' }))} style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${!form.projectId ? '#8b5cf6' : 'var(--gray-200)'}`, background: !form.projectId ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: !form.projectId ? '#5b21b6' : 'var(--gray-500)', fontWeight: !form.projectId ? 700 : 500 }}>Nenhum</button>
-                  {activeProjects.map(p => (
-                    <button key={p.id} type="button" onClick={() => setForm(f => ({ ...f, projectId: p.id }))} style={{ padding: '4px 10px', borderRadius: 50, border: `1.5px solid ${form.projectId === p.id ? '#8b5cf6' : 'var(--gray-200)'}`, background: form.projectId === p.id ? '#f5f3ff' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.78rem', cursor: 'pointer', color: form.projectId === p.id ? '#5b21b6' : 'var(--gray-500)', fontWeight: form.projectId === p.id ? 700 : 500 }}>
-                      {p.emoji || '🗂'} {p.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <button className="btn btn-primary" onClick={addSession}>
               <Plus size={14} /> Guardar sessao
             </button>
@@ -682,12 +414,353 @@ export default function StudyHours({ settings }) {
         </div>
       )}
 
+      {/* Post-session topic confidence chips */}
+      {postSession && (
+        <div className="card" style={{ marginBottom: 14, background: 'var(--green-50)', border: '1.5px solid #86efac' }}>
+          <div className="card-body">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p style={{ fontWeight: 800, color: '#15803d', margin: 0, fontSize: 'var(--t-body)' }}>
+                ✅ Guardado! O que cobriste nesta sessão?
+              </p>
+              <button onClick={() => setPostSession(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontFamily: 'inherit', fontSize: 'var(--t-caption)', fontWeight: 600 }}>
+                Fechar
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+              {postSession.topics.map(topic => {
+                const conf = CONFIDENCE.find(c => c.id === topic.confidence) || CONFIDENCE[0]
+                return (
+                  <button key={topic.id}
+                    onClick={() => {
+                      const ids = ['unknown', 'little', 'good', 'great']
+                      const idx = ids.indexOf(topic.confidence)
+                      const next = ids[Math.min(idx + 1, ids.length - 1)]
+                      try {
+                        const raw = JSON.parse(localStorage.getItem('topics') || '{}')
+                        const subs = raw[postSession.subjectKey] || []
+                        raw[postSession.subjectKey] = subs.map(t => t.id === topic.id ? { ...t, confidence: next } : t)
+                        localStorage.setItem('topics', JSON.stringify(raw))
+                        setPostSession(ps => ({ ...ps, topics: ps.topics.map(t => t.id === topic.id ? { ...t, confidence: next } : t) }))
+                      } catch {}
+                    }}
+                    style={{
+                      padding: '5px 12px', borderRadius: 50, fontFamily: 'inherit',
+                      fontSize: 'var(--t-caption)', fontWeight: 700, cursor: 'pointer',
+                      background: conf.bg, color: conf.color,
+                      border: `1.5px solid ${conf.color}44`,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {topic.name}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 'var(--t-caption)', color: '#16a34a', margin: 0, fontWeight: 500 }}>
+              Clica num tópico para aumentar a confiança · fica guardado em Exames
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Target editor */}
+      {showTargets && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <span className="card-title">Meta de horas por cadeira (semestre total)</span>
+          </div>
+          <div style={{ padding: '12px 20px' }}>
+            {subjects.map(s => (
+              <div key={s.key} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 0', borderBottom: '1px solid var(--gray-50)',
+              }}>
+                <span style={{ fontSize: '1.1rem', width: 28 }}>{s.emoji}</span>
+                <span style={{ flex: 1, fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)' }}>
+                  {s.name}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="5"
+                    value={targets[s.key] !== undefined ? targets[s.key] : s.defaultTarget}
+                    onChange={e => updateTarget(s.key, e.target.value)}
+                    style={{
+                      width: 76, fontFamily: 'inherit', fontSize: 'var(--t-body)',
+                      border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)',
+                      padding: '6px 8px', outline: 'none',
+                      background: 'var(--white)', color: 'var(--gray-900)',
+                      textAlign: 'center', fontWeight: 700,
+                    }}
+                    onFocus={e => e.target.style.borderColor = 'var(--rose-300)'}
+                    onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
+                  />
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>h</span>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', minWidth: 90 }}>
+                    ~{(getTarget(s.key) / WEEKS_REMAINING).toFixed(1)}h/semana
+                  </span>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>
+                Total: {totalTarget}h · Meta semanal: {avgWeeklyTarget.toFixed(1)}h
+              </p>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 'var(--t-caption)', color: 'var(--rose-400)' }}
+                onClick={resetTargets}
+              >
+                Repor padrao
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Two main counters */}
+      <div className="dashboard-grid" style={{ marginBottom: 14 }}>
+        <div className="stat-card">
+          <div className="stat-label"><Clock size={12} /> Total do semestre</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+            <div className="stat-value">{totalHours.toFixed(1)}</div>
+            <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', fontWeight: 600 }}>/ {totalTarget}h</span>
+          </div>
+          <div className="progress-wrap" style={{ marginBottom: 6 }}>
+            <div className="progress-fill" style={{ width: `${totalPct}%`, background: 'var(--rose-300)' }} />
+          </div>
+          <div className="stat-sub">{totalPct}% da meta global · {Math.max(0, totalTarget - totalHours).toFixed(1)}h em falta</div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-label"><Star size={12} /> Esta semana</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+            <div className="stat-value">{weekHours.toFixed(1)}</div>
+            <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', fontWeight: 600 }}>/ {weekTarget.toFixed(1)}h</span>
+          </div>
+          <div className="progress-wrap" style={{ marginBottom: 6 }}>
+            <div className="progress-fill" style={{
+              width: `${weekPct}%`,
+              background: weekPct >= 80 ? 'var(--green-400)' : weekPct >= 50 ? '#f59e0b' : 'var(--red-400)',
+            }} />
+          </div>
+          <div className="stat-sub">
+            Esperado ate {dowLabel}: {weekTargetNow.toFixed(1)}h
+            {!shouldShowBehind() && ' · (segunda - sem pressao ainda)'}
+          </div>
+        </div>
+      </div>
+
+      {/* Weekly streak + daily activity chart */}
+      <div className="stat-card" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 12 }}>
+          {/* Streak */}
+          <div style={{ minWidth: 0 }}>
+            <div className="stat-label"><Flame size={12} /> Streak semanal</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <span className="stat-value" style={{ fontSize: '1.5rem' }}>{weeklyStreak.current}</span>
+              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-400)' }}>
+                semana{weeklyStreak.current !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="stat-sub" style={{ marginTop: 2 }}>
+              meta: {weeklyMin}h/sem{weeklyStreak.best > weeklyStreak.current ? ` · recorde ${weeklyStreak.best}` : ''}
+            </div>
+          </div>
+          {/* Weeks hit */}
+          <div style={{ minWidth: 0 }}>
+            <div className="stat-label"><CalendarDays size={12} /> Metas cumpridas</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <span className="stat-value" style={{ fontSize: '1.5rem' }}>{weeklyStreak.weeksHit}</span>
+              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-400)' }}>semanas</span>
+            </div>
+            <div className="stat-sub" style={{ marginTop: 2 }}>semanas com ≥{weeklyMin}h (total)</div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', gap: 4, alignSelf: 'flex-start' }}>
+            {[7,30].map(n => (
+              <button key={n} onClick={() => setChartDays(n)} style={{
+                padding: '3px 10px', borderRadius: 50, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 'var(--t-caption)', fontWeight: 700, border: `1.5px solid ${chartDays === n ? 'var(--rose-300)' : 'var(--gray-200)'}`,
+                background: chartDays === n ? 'var(--rose-50)' : 'var(--white)', color: chartDays === n ? 'var(--rose-400)' : 'var(--gray-400)',
+              }}>{n}d</button>
+            ))}
+          </div>
+        </div>
+        <div className="stat-label" style={{ marginBottom: 6 }}>Actividade diária</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: chartDays > 7 ? 2 : 5, height: 50 }}>
+          {chartData.map(d => {
+            const h   = Math.max(0, (d.hours / maxChart) * 100)
+            const isT = d.date === TODAY.toDateString()
+            return (
+              <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <div style={{
+                  width: '100%', height: `${h}%`, minHeight: d.hours > 0 ? 3 : 0,
+                  background: isT ? 'var(--rose-400)' : 'var(--rose-200)',
+                  borderRadius: 2,
+                }} />
+                {chartDays <= 14 && (
+                  <span style={{ fontSize: 'var(--t-caption)', color: isT ? 'var(--rose-400)' : 'var(--gray-400)', fontWeight: isT ? 700 : 500 }}>
+                    {d.label}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Weekday breakdown */}
+      {sessions.length >= 5 && (
+        <div className="card" style={{ marginBottom: 14, padding: '16px 20px' }}>
+          <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: '0.07em', marginBottom: 14 }}>
+            Média de horas por dia da semana
+          </p>
+          {(() => {
+            const maxAvg = Math.max(...dowBreakdown.map(d => d.avg), 0.1)
+            const best = dowBreakdown.reduce((b, d) => d.avg > b.avg ? d : b, dowBreakdown[0])
+            const todayDow = TODAY.getDay()
+            return (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
+                {dowBreakdown.map(d => {
+                  const pct = d.avg > 0 ? d.avg / maxAvg : 0
+                  const isToday = d.dow === todayDow
+                  const isBest = d.dow === best.dow
+                  const color = isBest ? '#16a34a' : isToday ? 'var(--rose-400)' : 'var(--gray-300)'
+                  return (
+                    <div key={d.dow} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
+                      {d.avg > 0 && (
+                        <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color, lineHeight: 1 }}>
+                          {d.avg.toFixed(1)}h
+                        </span>
+                      )}
+                      <div style={{ width: '100%', height: `${Math.max(pct * 52, d.avg > 0 ? 4 : 2)}px`, background: color, borderRadius: '4px 4px 0 0', transition: 'height 0.3s', opacity: d.avg > 0 ? 1 : 0.25 }} />
+                      <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: isToday ? 'var(--rose-400)' : 'var(--gray-400)', lineHeight: 1 }}>{d.label}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* Per subject */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-header">
+          <span className="card-title">On Track — esperado ate {dowLabel}</span>
+          <button
+            onClick={() => setShowOnTrack(v => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: 4, display: 'flex', alignItems: 'center' }}
+          >
+            {showOnTrack ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </div>
+        {showOnTrack && <div style={{ padding: '8px 20px 16px' }}>
+          {subjects.length === 0 && (
+            <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', padding: '8px 0' }}>
+              Ainda sem cadeiras configuradas. Adiciona-as nas Definições.
+            </p>
+          )}
+          {subjects.map(s => {
+            const subjectTarget  = getTarget(s.key)
+            const weeklyT        = subjectTarget / WEEKS_REMAINING
+            const targetNow      = weeklyT * (weekDayNum() / 7)
+            const totalDone      = hoursForSubject(sessions, s.key)
+            const weekDone       = hoursForSubjectThisWeek(sessions, s.key)
+            const color          = statusColor(weekDone, targetNow)
+            const pct            = Math.min(100, targetNow < 0.1 ? 100 : Math.round(weekDone / targetNow * 100))
+            const remaining      = Math.max(0, subjectTarget - totalDone)
+            const deficit        = Math.max(0, targetNow - weekDone)
+            const daysLeftInWeek = Math.max(1, 7 - weekDayNum())
+            const isBehind       = shouldShowBehind() && pct < 80 && targetNow > 0.1
+            const showSuggestions = expandedSuggestions[s.key]
+            const suggestions    = isBehind ? getStudySuggestions(s, deficit, daysLeftInWeek, sessions) : []
+
+            return (
+              <div key={s.key} style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                  <span style={{ fontSize: 'var(--t-body)' }}>{s.emoji}</span>
+                  <span style={{ fontWeight: 700, fontSize: 'var(--t-body)', flex: 1, color: 'var(--gray-800)' }}>{s.name}</span>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {statusIcon(weekDone, targetNow)} {statusLabel(weekDone, targetNow)}
+                  </span>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600, minWidth: 140, textAlign: 'right' }}>
+                    {weekDone.toFixed(1)}h semana · {totalDone.toFixed(1)}h / {subjectTarget}h
+                  </span>
+                </div>
+                <div className="progress-wrap">
+                  <div style={{
+                    height: '100%', width: `${pct}%`,
+                    background: s.color, borderRadius: 50, transition: 'width 0.4s',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
+                    Faltam {remaining.toFixed(1)}h ate ao fim do semestre · meta semanal: {weeklyT.toFixed(1)}h
+                  </span>
+                  {isBehind && (
+                    <button
+                      onClick={() => setExpandedSuggestions(prev => ({ ...prev, [s.key]: !prev[s.key] }))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        background: showSuggestions ? 'var(--amber-100)' : 'var(--amber-50)',
+                        border: `1px solid ${showSuggestions ? '#fde047' : '#fde68a'}`,
+                        borderRadius: 'var(--r-pill)', padding: '3px 9px',
+                        fontSize: 'var(--t-caption)', fontWeight: 700, color: '#b45309',
+                        cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                      }}
+                    >
+                      <Lightbulb size={10} />
+                      Sugestões
+                      {showSuggestions ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                    </button>
+                  )}
+                </div>
+
+                {/* ── Suggestions panel ── */}
+                {isBehind && showSuggestions && (
+                  <div style={{
+                    marginTop: 8, padding: '12px 14px',
+                    background: 'var(--amber-50)', border: '1px solid #fde68a',
+                    borderRadius: 'var(--r)',
+                  }}>
+                    <p style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: '#92400e', letterSpacing: 0.4, marginBottom: 10 }}>
+                      Como recuperar {deficit.toFixed(1)}h em atraso
+                    </p>
+                    {suggestions.map((sg, i) => (
+                      <div key={i} style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <span style={{ flexShrink: 0, fontSize: '1rem', lineHeight: 1.4 }}>{sg.emoji}</span>
+                        <p style={{ fontSize: 'var(--t-body)', color: '#78350f', lineHeight: 1.55, margin: 0 }}>{sg.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>}
+      </div>
+
       {/* History */}
       {sessions.length === 0 && (
-        <div className="empty-state" style={{ marginBottom: 20 }}>
-          <div className="e-emoji">⏱️</div>
-          <p style={{ fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Ainda sem sessões registadas</p>
-          <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>Usa o formulário acima para registar a tua primeira sessão de estudo!</p>
+        <div style={{
+          marginBottom: 20, padding: '28px 24px', textAlign: 'center',
+          background: 'var(--white)', borderRadius: 'var(--r)',
+          border: '1.5px dashed var(--gray-200)',
+        }}>
+          <p style={{ fontSize: '2rem', marginBottom: 10 }}>⏱️</p>
+          <p style={{ fontWeight: 800, color: 'var(--gray-800)', marginBottom: 6, fontSize: 'var(--t-body)' }}>
+            Nenhuma sessão registada ainda
+          </p>
+          <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', marginBottom: 16, lineHeight: 1.55 }}>
+            Cada sessão conta — mesmo 30 minutos. Começa agora.
+          </p>
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            <Plus size={14} /> Registar primeira sessão
+          </button>
         </div>
       )}
       {sessions.length > 0 && (
@@ -700,10 +773,10 @@ export default function StudyHours({ settings }) {
                 placeholder="Pesquisar notas..."
                 value={historySearch}
                 onChange={e => setHistorySearch(e.target.value)}
-                style={{ fontSize: '0.78rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none', width: 140 }}
+                style={{ fontSize: 'var(--t-caption)', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none', width: 140 }}
               />
               <select value={historySubject} onChange={e => setHistorySubject(e.target.value)}
-                style={{ fontSize: '0.78rem', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none' }}>
+                style={{ fontSize: 'var(--t-caption)', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none' }}>
                 <option value="">Todas</option>
                 {subjects.map(s => <option key={s.key} value={s.key}>{s.emoji} {s.name}</option>)}
               </select>
@@ -718,30 +791,30 @@ export default function StudyHours({ settings }) {
               const subj = subjects.find(s => s.key === session.subject)
               const isEditing = editingSession === session.id
               return (
-                <div key={session.id} style={{ borderBottom: '1px solid var(--gray-50)' }}>
+                <div key={session.id} style={{ borderBottom: '1px solid var(--gray-50)', borderLeft: `3px solid ${subj?.color || 'var(--gray-200)'}`, paddingLeft: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
                     <span>{subj?.emoji}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontWeight: 600, fontSize: '0.83rem', color: subj?.textColor }}>{subj?.name}</span>
-                        {session.mood && <span style={{ fontSize: '0.9rem' }}>{session.mood}</span>}
+                        <span style={{ fontWeight: 600, fontSize: 'var(--t-body)', color: subj?.textColor }}>{subj?.name}</span>
+                        {session.mood && <span style={{ fontSize: 'var(--t-body)' }}>{session.mood}</span>}
                       </div>
-                      {session.notes && <p style={{ fontSize: '0.73rem', color: 'var(--gray-400)', margin: 0 }}>{session.notes}</p>}
+                      {session.notes && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>{session.notes}</p>}
                     </div>
-                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-700)' }}>{session.hours}h</span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)', minWidth: 80, textAlign: 'right' }}>{session.date}</span>
-                    <button className="btn btn-ghost" style={{ fontSize: '0.7rem', padding: '2px 6px' }}
+                    <span style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)' }}>{session.hours}h</span>
+                    <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', minWidth: 80, textAlign: 'right' }}>{session.date}</span>
+                    <button className="btn btn-ghost" style={{ fontSize: 'var(--t-caption)', padding: '2px 6px' }}
                       onClick={() => { setEditingSession(isEditing ? null : session.id); setEditDraft({ hours: session.hours, notes: session.notes || '', mood: session.mood || '😊', date: new Date(session.date).toISOString().split('T')[0] }) }}>
                       ✏️
                     </button>
                     {confirmDeleteId === session.id ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         <button className="btn" onClick={() => { removeSession(session.id); setConfirmDeleteId(null) }}
-                          style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'var(--red-100)', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 6 }}>
+                          style={{ fontSize: 'var(--t-caption)', padding: '3px 8px', background: 'var(--red-100)', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 6 }}>
                           Apagar
                         </button>
                         <button className="btn" onClick={() => setConfirmDeleteId(null)}
-                          style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'var(--gray-100)', color: 'var(--gray-600)', border: '1px solid var(--gray-200)', borderRadius: 6 }}>
+                          style={{ fontSize: 'var(--t-caption)', padding: '3px 8px', background: 'var(--gray-100)', color: 'var(--gray-600)', border: '1px solid var(--gray-200)', borderRadius: 6 }}>
                           Não
                         </button>
                       </div>
@@ -750,7 +823,7 @@ export default function StudyHours({ settings }) {
                     )}
                   </div>
                   {isEditing && (
-                    <div style={{ padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 8, marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 'var(--r)', marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                       <div>
                         <label className="form-label">Horas</label>
                         <input type="number" min="0.25" max="12" step="0.25" className="form-input" style={{ width: 70 }}
@@ -766,8 +839,8 @@ export default function StudyHours({ settings }) {
                         <input type="text" className="form-input" value={editDraft.notes}
                           onChange={e => setEditDraft(p => ({ ...p, notes: e.target.value }))} />
                       </div>
-                      <button className="btn btn-primary" style={{ fontSize: '0.78rem', padding: '6px 12px' }} onClick={saveEditSession}>Guardar</button>
-                      <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '6px 12px' }} onClick={() => setEditingSession(null)}>Cancelar</button>
+                      <button className="btn btn-primary" style={{ fontSize: 'var(--t-caption)', padding: '6px 12px' }} onClick={saveEditSession}>Guardar</button>
+                      <button className="btn btn-secondary" style={{ fontSize: 'var(--t-caption)', padding: '6px 12px' }} onClick={() => setEditingSession(null)}>Cancelar</button>
                     </div>
                   )}
                 </div>

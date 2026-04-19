@@ -31,10 +31,10 @@ export function ToastContainer({ toasts, onDismiss }) {
       {toasts.map(t => (
         <div key={t.id} style={{
           background: 'var(--gray-900, #111)', color: '#fff',
-          borderRadius: 10, padding: '10px 16px',
+          borderRadius: 'var(--r)', padding: '10px 16px',
           display: 'flex', alignItems: 'center', gap: 12,
           boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600,
+          fontFamily: 'inherit', fontSize: 'var(--t-body)', fontWeight: 600,
           animation: 'fadeSlideUp 0.2s ease',
           minWidth: 240,
         }}>
@@ -45,7 +45,7 @@ export function ToastContainer({ toasts, onDismiss }) {
               style={{
                 background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)',
                 borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '0.78rem', color: '#fff', fontWeight: 700,
+                fontFamily: 'inherit', fontSize: 'var(--t-caption)', color: '#fff', fontWeight: 700,
               }}
             >
               Desfazer

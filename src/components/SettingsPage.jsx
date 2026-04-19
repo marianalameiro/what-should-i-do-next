@@ -37,8 +37,22 @@ const USER_TYPES = [
   { id: 'other',        label: 'Outro',                   emoji: '✨' },
 ]
 
+const SECTIONS = [
+  { id: 'perfil',       label: 'Perfil',        emoji: '👤' },
+  { id: 'cadeiras',     label: 'Cadeiras',      emoji: '📚' },
+  { id: 'preferencias', label: 'Preferências',  emoji: '✨' },
+  { id: 'dados',        label: 'Dados',         emoji: '🔧' },
+  { id: 'sobre',        label: 'Sobre',         emoji: 'ℹ️' },
+]
+
+const SHORTCUTS = [
+  { key: '1–9', desc: 'Navegar entre páginas' },
+  { key: '⌘K',  desc: 'Pesquisa rápida' },
+  { key: 'ESC', desc: 'Fechar modais / voltar' },
+]
+
 export default function SettingsPage({ settings, setSettings }) {
-  const [section, setSection]         = useState('profile')
+  const [section, setSection]         = useState('perfil')
   const [showSubjectForm, setShowSubjectForm] = useState(false)
   const [editingSubject, setEditingSubject]   = useState(null)
   const [newSubject, setNewSubject]    = useState({ name: '', emoji: '📚', color: COLORS[0].color, textColor: COLORS[0].textColor, methods: '' })
@@ -54,7 +68,6 @@ export default function SettingsPage({ settings, setSettings }) {
     setShowSubjectForm(false)
   }
 
-  // Normalize methods to always be { label, duration? } objects
   const normalizeMethods = (methods) =>
     (methods || []).map(m => typeof m === 'string' ? { label: m, duration: '' } : { label: m.label || '', duration: m.duration || '' })
 
@@ -139,7 +152,6 @@ export default function SettingsPage({ settings, setSettings }) {
 
   const [apiKey, setApiKeyState] = useState(() => localStorage.getItem('groq-key') || '')
 
-  // ── Auto-backup (3 rolling snapshots) ─────────────────────────────────────
   const AUTO_BACKUP_KEYS = ['wsidnx-auto-bk-0', 'wsidnx-auto-bk-1', 'wsidnx-auto-bk-2']
   const [autoBackups, setAutoBackups] = useState(() =>
     AUTO_BACKUP_KEYS.map(k => { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } }).filter(Boolean)
@@ -158,7 +170,6 @@ export default function SettingsPage({ settings, setSettings }) {
       if (k.startsWith('tasks-')) { try { data[k] = JSON.parse(localStorage.getItem(k)) } catch {} }
     }
     const snapshot = { ts: Date.now(), data }
-    // Rotate: shift existing backups down, save new as slot 0
     const prev = AUTO_BACKUP_KEYS.map(k => { try { return localStorage.getItem(k) } catch { return null } })
     AUTO_BACKUP_KEYS.forEach((k, i) => {
       if (i === 0) localStorage.setItem(k, JSON.stringify(snapshot))
@@ -174,6 +185,15 @@ export default function SettingsPage({ settings, setSettings }) {
     })
     window.alert('Backup restaurado! A app vai recarregar.')
     window.location.reload()
+  }
+
+  const deleteAutoBackup = (ts) => {
+    const remaining = autoBackups.filter(bk => bk.ts !== ts)
+    AUTO_BACKUP_KEYS.forEach((k, i) => {
+      if (remaining[i]) localStorage.setItem(k, JSON.stringify(remaining[i]))
+      else localStorage.removeItem(k)
+    })
+    setAutoBackups(remaining)
   }
 
   const saveApiKey = (val) => {
@@ -193,7 +213,6 @@ export default function SettingsPage({ settings, setSettings }) {
       const raw = localStorage.getItem(k)
       if (raw !== null) data[k] = k === 'groq-key' ? raw : JSON.parse(raw)
     })
-    // include per-day task completion (tasks-Mon Mar 21 2026 …)
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i)
       if (k.startsWith('tasks-')) {
@@ -217,7 +236,25 @@ export default function SettingsPage({ settings, setSettings }) {
       try {
         const data = JSON.parse(ev.target.result)
         if (typeof data !== 'object' || Array.isArray(data) || data === null)
-          throw new Error('Estrutura inválida')
+          throw new Error('Estrutura inválida: o ficheiro deve ser um objeto JSON')
+
+        // Schema validation for known array/object keys
+        const ARRAY_KEYS = ['study-sessions','exams','extra-tasks','diary-entries','weekly-reviews','projects-v2','calendar-events','gcal-events','quick-links']
+        const OBJECT_KEYS = ['subject-targets','eisenhower-overrides','energy-levels','topics','user-settings']
+        const errors = []
+        ARRAY_KEYS.forEach(k => { if (data[k] !== undefined && !Array.isArray(data[k])) errors.push(`"${k}" deve ser uma lista`) })
+        OBJECT_KEYS.forEach(k => { if (data[k] !== undefined && (typeof data[k] !== 'object' || Array.isArray(data[k]) || data[k] === null)) errors.push(`"${k}" deve ser um objeto`) })
+        // Validate session structure if present
+        if (Array.isArray(data['study-sessions'])) {
+          const bad = data['study-sessions'].filter(s => typeof s !== 'object' || s === null || typeof s.hours !== 'number')
+          if (bad.length > 0) errors.push(`${bad.length} sessões inválidas em "study-sessions"`)
+        }
+        if (errors.length > 0) {
+          window.alert(`Ficheiro inválido:\n• ${errors.join('\n• ')}`)
+          e.target.value = ''
+          return
+        }
+
         const ALLOWED_KEYS = new Set([
           'study-sessions','exams','topics','exam-schedule','extra-tasks',
           'diary-entries','weekly-reviews','projects-v2','household-tasks',
@@ -238,8 +275,8 @@ export default function SettingsPage({ settings, setSettings }) {
         })
         window.alert('Dados importados! A app vai recarregar.')
         window.location.reload()
-      } catch {
-        window.alert('Ficheiro inválido.')
+      } catch (err) {
+        window.alert(`Ficheiro inválido: ${err.message || 'JSON mal formatado'}`)
       }
     }
     reader.readAsText(file)
@@ -256,19 +293,20 @@ export default function SettingsPage({ settings, setSettings }) {
     update('schedule', newSchedule)
   }
 
-  const SECTIONS = [
-    { id: 'profile',       label: 'Perfil',          emoji: '👤' },
-    { id: 'subjects',      label: 'Cadeiras',         emoji: '📚' },
-    { id: 'schedule',      label: 'Plano diário',     emoji: '📅' },
-    { id: 'goals',         label: 'Metas',            emoji: '🎯' },
-    { id: 'links',         label: 'Links rápidos',    emoji: '🔗' },
-    { id: 'notifications', label: 'Notificações',     emoji: '🔔' },
-    { id: 'appearance',    label: 'Aparência',         emoji: '✨' },
-    { id: 'accent',        label: 'Cor de acento',    emoji: '🎨' },
-    { id: 'data',          label: 'Dados & API',      emoji: '🔧' },
-  ]
-
   const notifUpdate = (key, val) => update('notifications', { ...(settings.notifications || {}), [key]: val })
+
+  // Period / goals calculations (used in cadeiras section)
+  const today = new Date(); today.setHours(0,0,0,0)
+  const periodStart = settings.periodStart ? new Date(settings.periodStart) : null
+  const periodEnd   = settings.periodEnd   ? new Date(settings.periodEnd)   : null
+  const totalDays     = periodStart && periodEnd ? Math.round((periodEnd - periodStart) / 86400000) : null
+  const daysElapsed   = periodStart ? Math.max(0, Math.round((today - periodStart) / 86400000)) : null
+  const daysRemaining = periodEnd   ? Math.max(0, Math.round((periodEnd - today) / 86400000)) : null
+  const weeksRemaining = daysRemaining ? Math.max(1, daysRemaining / 7) : 1
+  const periodPct = totalDays && daysElapsed !== null ? Math.min(100, Math.round(daysElapsed / totalDays * 100)) : 0
+  const totalHours = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
+  const hoursPct = settings.hoursGoal > 0 ? Math.min(100, Math.round(totalHours / settings.hoursGoal * 100)) : 0
+  const totalTarget = settings.subjects?.reduce((a, s) => a + getTarget(s.key), 0) || 0
 
   return (
     <div className="fade-in">
@@ -281,7 +319,7 @@ export default function SettingsPage({ settings, setSettings }) {
       <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
         {SECTIONS.map(s => (
           <button key={s.id} onClick={() => setSection(s.id)} style={{
-            padding: '7px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
+            padding: '7px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer',
             border: `2px solid ${section === s.id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
             background: section === s.id ? 'var(--rose-50)' : 'var(--white)',
             color: section === s.id ? 'var(--rose-400)' : 'var(--gray-500)',
@@ -289,8 +327,8 @@ export default function SettingsPage({ settings, setSettings }) {
         ))}
       </div>
 
-      {/* ── PROFILE ── */}
-      {section === 'profile' && (
+      {/* ── PERFIL ── */}
+      {section === 'perfil' && (
         <div className="card">
           <div className="card-body">
             <div style={{ marginBottom: 16 }}>
@@ -302,12 +340,12 @@ export default function SettingsPage({ settings, setSettings }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {USER_TYPES.map(t => (
                   <button key={t.id} onClick={() => update('userType', t.id)} style={{
-                    padding: '10px 14px', borderRadius: 'var(--radius)', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                    padding: '10px 14px', borderRadius: 'var(--r)', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
                     border: `2px solid ${settings.userType === t.id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
                     background: settings.userType === t.id ? 'var(--rose-50)' : 'var(--white)',
                   }}>
                     <span style={{ fontSize: '1rem', marginRight: 8 }}>{t.emoji}</span>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: settings.userType === t.id ? 'var(--rose-400)' : 'var(--gray-700)' }}>{t.label}</span>
+                    <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: settings.userType === t.id ? 'var(--rose-400)' : 'var(--gray-700)' }}>{t.label}</span>
                   </button>
                 ))}
               </div>
@@ -316,222 +354,349 @@ export default function SettingsPage({ settings, setSettings }) {
         </div>
       )}
 
-      {/* ── SUBJECTS ── */}
-      {section === 'subjects' && (
-        <div>
-          {settings.subjects.map((s, idx) => (
-            <div key={s.key} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', marginBottom: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderLeft: `4px solid ${s.color}` }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <button onClick={() => moveSubject(s.key, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>▲</button>
-                  <button onClick={() => moveSubject(s.key, 1)} disabled={idx === settings.subjects.length - 1} style={{ background: 'none', border: 'none', cursor: idx === settings.subjects.length - 1 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>▼</button>
-                </div>
-                <span style={{ fontSize: '1.2rem' }}>{s.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontWeight: 700, fontSize: '0.88rem', color: s.textColor }}>{s.name}</p>
-                  <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>{s.methods?.length || 0} métodos · {(s.resources || []).length} recursos</p>
-                </div>
-                <button onClick={() => setEditingSubject(editingSubject === s.key ? null : s.key)} style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                  {editingSubject === s.key ? 'Fechar' : 'Editar'}
-                </button>
-                <button className="btn btn-ghost" onClick={() => removeSubject(s.key)}><Trash2 size={13} /></button>
-              </div>
-              {editingSubject === s.key && (
-                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div>
-                    <label style={labelStyle}>Métodos de estudo</label>
-                    {normalizeMethods(s.methods).map((m, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                        <input
-                          value={m.label}
-                          onChange={e => updateMethod(s.key, i, 'label', e.target.value)}
-                          placeholder="Ex: Fazer resumo"
-                          style={{ ...inputStyle, flex: 1, fontSize: '0.8rem' }}
-                        />
-                        <input
-                          type="number"
-                          value={m.duration}
-                          onChange={e => updateMethod(s.key, i, 'duration', e.target.value)}
-                          placeholder="min"
-                          min="5"
-                          max="240"
-                          title="Duração em minutos"
-                          style={{ ...inputStyle, width: 62, fontSize: '0.8rem', textAlign: 'center' }}
-                        />
-                        <button
-                          onClick={() => removeMethod(s.key, i)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: '1rem', padding: '0 4px', lineHeight: 1 }}>×</button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => addMethod(s.key)}
-                      style={{ fontSize: '0.75rem', color: 'var(--gray-500)', background: 'none', border: '1px dashed var(--gray-200)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', marginTop: 2 }}>
-                      + Método
-                    </button>
+      {/* ── CADEIRAS ── */}
+      {section === 'cadeiras' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+          {/* Subject list */}
+          <div>
+            <p style={subHeadStyle}>CADEIRAS</p>
+            {settings.subjects.map((s, idx) => (
+              <div key={s.key} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', marginBottom: 10, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderLeft: `4px solid ${s.color}` }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <button onClick={() => moveSubject(s.key, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: 'var(--t-caption)', padding: 0, lineHeight: 1 }}>▲</button>
+                    <button onClick={() => moveSubject(s.key, 1)} disabled={idx === settings.subjects.length - 1} style={{ background: 'none', border: 'none', cursor: idx === settings.subjects.length - 1 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: 'var(--t-caption)', padding: 0, lineHeight: 1 }}>▼</button>
                   </div>
-                  <div>
-                    <label style={labelStyle}>Notas rápidas</label>
-                    <textarea
-                      rows={3}
-                      style={{ ...inputStyle, resize: 'vertical' }}
-                      value={s.notes || ''}
-                      onChange={e => updateSubjectNotes(s.key, e.target.value)}
-                      placeholder="Notas, dicas, professores, horários..."
-                    />
+                  <span style={{ fontSize: '1.2rem' }}>{s.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: s.textColor }}>{s.name}</p>
+                    <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{s.methods?.length || 0} métodos · {(s.resources || []).length} recursos</p>
                   </div>
-                  <div>
-                    <label style={labelStyle}>Recursos & links</label>
-                    {(s.resources || []).map((r, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: '0.8rem', color: 'var(--purple-dark)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          🔗 {r.label}
-                        </a>
-                        <button onClick={() => removeResource(s.key, i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: '0.85rem' }}>×</button>
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                      <input
-                        type="text"
-                        placeholder="Label (opcional)"
-                        value={newResourceLabel}
-                        onChange={e => setNewResourceLabel(e.target.value)}
-                        style={{ ...inputStyle, flex: 1 }}
-                      />
-                      <input
-                        type="url"
-                        placeholder="URL"
-                        value={newResourceUrl}
-                        onChange={e => setNewResourceUrl(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addResource(s.key)}
-                        style={{ ...inputStyle, flex: 2 }}
-                      />
-                      <button className="btn btn-secondary" onClick={() => addResource(s.key)}>+</button>
+                  <button onClick={() => setEditingSubject(editingSubject === s.key ? null : s.key)} style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    {editingSubject === s.key ? 'Fechar' : 'Editar'}
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => removeSubject(s.key)}><Trash2 size={13} /></button>
+                </div>
+                {editingSubject === s.key && (
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <label style={labelStyle}>Métodos de estudo</label>
+                      {normalizeMethods(s.methods).map((m, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                          <input
+                            value={m.label}
+                            onChange={e => updateMethod(s.key, i, 'label', e.target.value)}
+                            placeholder="Ex: Fazer resumo"
+                            style={{ ...inputStyle, flex: 1, fontSize: 'var(--t-body)' }}
+                          />
+                          <input
+                            type="number"
+                            value={m.duration}
+                            onChange={e => updateMethod(s.key, i, 'duration', e.target.value)}
+                            placeholder="min"
+                            min="5"
+                            max="240"
+                            title="Duração em minutos"
+                            style={{ ...inputStyle, width: 62, fontSize: 'var(--t-body)', textAlign: 'center' }}
+                          />
+                          <button
+                            onClick={() => removeMethod(s.key, i)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: '1rem', padding: '0 4px', lineHeight: 1 }}>×</button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => addMethod(s.key)}
+                        style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)', background: 'none', border: '1px dashed var(--gray-200)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', marginTop: 2 }}>
+                        + Método
+                      </button>
                     </div>
+                    <div>
+                      <label style={labelStyle}>Notas rápidas</label>
+                      <textarea
+                        rows={3}
+                        style={{ ...inputStyle, resize: 'vertical' }}
+                        value={s.notes || ''}
+                        onChange={e => updateSubjectNotes(s.key, e.target.value)}
+                        placeholder="Notas, dicas, professores, horários..."
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Recursos & links</label>
+                      {(s.resources || []).map((r, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <a href={r.url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: 'var(--t-body)', color: 'var(--purple-dark)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            🔗 {r.label}
+                          </a>
+                          <button onClick={() => removeResource(s.key, i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: 'var(--t-body)' }}>×</button>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                        <input
+                          type="text"
+                          placeholder="Label (opcional)"
+                          value={newResourceLabel}
+                          onChange={e => setNewResourceLabel(e.target.value)}
+                          style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <input
+                          type="url"
+                          placeholder="URL"
+                          value={newResourceUrl}
+                          onChange={e => setNewResourceUrl(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addResource(s.key)}
+                          style={{ ...inputStyle, flex: 2 }}
+                        />
+                        <button className="btn btn-secondary" onClick={() => addResource(s.key)}>+</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {showSubjectForm ? (
+              <div style={{ background: 'var(--gray-50)', border: '1px dashed var(--gray-200)', borderRadius: 'var(--r)', padding: 16 }}>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Nome</label>
+                  <input type="text" style={inputStyle} placeholder="Ex: Matemática, Python..." value={newSubject.name} onChange={e => setNewSubject(p => ({ ...p, name: e.target.value }))} autoFocus />
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Emoji</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {EMOJIS.map(e => (
+                      <button key={e} onClick={() => setNewSubject(p => ({ ...p, emoji: e }))} style={{ width: 32, height: 32, borderRadius: 6, border: `2px solid ${newSubject.emoji === e ? 'var(--rose-400)' : 'var(--gray-200)'}`, background: newSubject.emoji === e ? 'var(--rose-50)' : 'var(--white)', cursor: 'pointer', fontSize: 'var(--t-body)' }}>{e}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle}>Cor</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {COLORS.map(c => (
+                      <button key={c.color} onClick={() => setNewSubject(p => ({ ...p, color: c.color, textColor: c.textColor }))} style={{ width: 28, height: 28, borderRadius: '50%', background: c.color, border: `3px solid ${newSubject.color === c.color ? 'var(--gray-800)' : 'transparent'}`, cursor: 'pointer' }} />
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={labelStyle}>Métodos de estudo (um por linha)</label>
+                  <textarea rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder={'Ex:\nLer o capítulo\nFazer resumo'} value={newSubject.methods} onChange={e => setNewSubject(p => ({ ...p, methods: e.target.value }))} />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" onClick={addSubject}><Plus size={13} /> Adicionar</button>
+                  <button className="btn btn-ghost" onClick={() => setShowSubjectForm(false)}>Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn btn-secondary" onClick={() => setShowSubjectForm(true)} style={{ width: '100%', justifyContent: 'center' }}>
+                <Plus size={14} /> Adicionar cadeira
+              </button>
+            )}
+          </div>
+
+          {/* Schedule */}
+          <div>
+            <p style={subHeadStyle}>PLANO DIÁRIO</p>
+            <div className="card">
+              <div className="card-body">
+                <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-500)', marginBottom: 16 }}>Define o que estudas em cada dia da semana. Isto gera as tarefas automaticamente.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {[1,2,3,4,5,6,0].map(day => (
+                    <div key={day}>
+                      <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>{DAY_NAMES[day]}</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {settings.subjects.map(s => {
+                          const active = (settings.schedule[day] || []).includes(s.key)
+                          return (
+                            <button key={s.key} onClick={() => toggleSchedule(day, s.key)} style={{
+                              padding: '5px 12px', borderRadius: 50, fontFamily: 'inherit', fontSize: 'var(--t-caption)', fontWeight: 700, cursor: 'pointer',
+                              border: `2px solid ${active ? s.color : 'var(--gray-200)'}`,
+                              background: active ? s.color + '30' : 'var(--white)',
+                              color: active ? s.textColor : 'var(--gray-400)',
+                            }}>{s.emoji} {s.name}</button>
+                          )
+                        })}
+                        {settings.subjects.length === 0 && <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)' }}>Adiciona cadeiras primeiro</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Period & Goals */}
+          <div>
+            <p style={subHeadStyle}>PERÍODO & METAS</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Period */}
+              <div className="card">
+                <div className="card-body">
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 5 }}>{smartEmoji('📅')} Período letivo</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                    <div>
+                      <label style={labelStyle}>Início</label>
+                      <input type="date" style={inputStyle} value={settings.periodStart || ''} onChange={e => update('periodStart', e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Fim</label>
+                      <input type="date" style={inputStyle} value={settings.periodEnd || ''} onChange={e => update('periodEnd', e.target.value)} />
+                    </div>
+                  </div>
+                  {totalDays && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-600)', marginBottom: 6 }}>
+                        <span>{daysElapsed}d passados</span>
+                        <span style={{ color: 'var(--rose-400)' }}>{daysRemaining}d restantes · {weeksRemaining.toFixed(1)} semanas</span>
+                      </div>
+                      <div className="progress-wrap" style={{ height: 8 }}>
+                        <div className="progress-fill" style={{ width: `${periodPct}%`, height: '100%', background: 'var(--rose-300)' }} />
+                      </div>
+                      <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 5 }}>{periodPct}% do semestre concluído</p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Total hours goal */}
+              <div className="card">
+                <div className="card-body">
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4, marginBottom: 14 }}>⏱️ Meta global de horas</p>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -1 }}>{settings.hoursGoal}</span>
+                    <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', fontWeight: 600 }}>horas no semestre</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 'var(--t-caption)', fontWeight: 700, color: hoursPct >= 80 ? 'var(--green-500)' : 'var(--rose-400)' }}>
+                      {totalHours.toFixed(1)}h feitas ({hoursPct}%)
+                    </span>
+                  </div>
+                  <input type="range" min="10" max="600" step="5" value={settings.hoursGoal}
+                    onChange={e => update('hoursGoal', parseInt(e.target.value))}
+                    style={{ width: '100%', marginBottom: 4, accentColor: 'var(--rose-400)' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
+                    <span>10h</span>
+                    <span style={{ color: 'var(--gray-500)', fontWeight: 600 }}>~{(settings.hoursGoal / weeksRemaining).toFixed(1)}h/semana necessárias</span>
+                    <span>600h</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-subject targets */}
+              {settings.subjects?.length > 0 && (
+                <div className="card">
+                  <div className="card-body">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4 }}>📚 Metas por cadeira</p>
+                      <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>Total: {totalTarget.toFixed(0)}h</span>
+                    </div>
+                    {settings.subjects.map(s => {
+                      const target = getTarget(s.key)
+                      const weeklyNeeded = (target / weeksRemaining).toFixed(1)
+                      const done = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).filter(x => x.subject === s.key).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
+                      const pct = Math.min(100, target > 0 ? Math.round(done / target * 100) : 0)
+                      return (
+                        <div key={s.key} style={{ marginBottom: 16 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                            <span style={{ fontSize: '1.1rem' }}>{s.emoji}</span>
+                            <span style={{ flex: 1, fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)' }}>{s.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <input
+                                type="number" min="0" max="600" step="5"
+                                value={subjectTargets[s.key] !== undefined ? subjectTargets[s.key] : Math.round(target)}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value)
+                                  const updated = { ...subjectTargets, [s.key]: isNaN(val) ? e.target.value : val }
+                                  saveSubjectTargets(updated)
+                                }}
+                                style={{ width: 70, fontFamily: 'inherit', fontSize: 'var(--t-body)', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '5px 8px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', textAlign: 'center' }}
+                                onFocus={e => e.target.style.borderColor = 'var(--rose-300)'}
+                                onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
+                              />
+                              <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>h</span>
+                            </div>
+                          </div>
+                          <div className="progress-wrap" style={{ height: 6 }}>
+                            <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: s.color || 'var(--rose-300)' }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 3 }}>
+                            <span>{done.toFixed(1)}h feitas de {target.toFixed(0)}h ({pct}%)</span>
+                            <span>~{weeklyNeeded}h/semana</span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
-            </div>
-          ))}
-
-          {showSubjectForm ? (
-            <div style={{ background: 'var(--gray-50)', border: '1px dashed var(--gray-200)', borderRadius: 'var(--radius)', padding: 16 }}>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Nome</label>
-                <input type="text" style={inputStyle} placeholder="Ex: Matemática, Python..." value={newSubject.name} onChange={e => setNewSubject(p => ({ ...p, name: e.target.value }))} autoFocus />
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Emoji</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {EMOJIS.map(e => (
-                    <button key={e} onClick={() => setNewSubject(p => ({ ...p, emoji: e }))} style={{ width: 32, height: 32, borderRadius: 6, border: `2px solid ${newSubject.emoji === e ? 'var(--rose-400)' : 'var(--gray-200)'}`, background: newSubject.emoji === e ? 'var(--rose-50)' : 'var(--white)', cursor: 'pointer', fontSize: '0.95rem' }}>{e}</button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 10 }}>
-                <label style={labelStyle}>Cor</label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {COLORS.map(c => (
-                    <button key={c.color} onClick={() => setNewSubject(p => ({ ...p, color: c.color, textColor: c.textColor }))} style={{ width: 28, height: 28, borderRadius: '50%', background: c.color, border: `3px solid ${newSubject.color === c.color ? 'var(--gray-800)' : 'transparent'}`, cursor: 'pointer' }} />
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={labelStyle}>Métodos de estudo (um por linha)</label>
-                <textarea rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder={'Ex:\nLer o capítulo\nFazer resumo'} value={newSubject.methods} onChange={e => setNewSubject(p => ({ ...p, methods: e.target.value }))} />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary" onClick={addSubject}><Plus size={13} /> Adicionar</button>
-                <button className="btn btn-ghost" onClick={() => setShowSubjectForm(false)}>Cancelar</button>
-              </div>
-            </div>
-          ) : (
-            <button className="btn btn-secondary" onClick={() => setShowSubjectForm(true)} style={{ width: '100%', justifyContent: 'center' }}>
-              <Plus size={14} /> Adicionar cadeira
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── SCHEDULE ── */}
-      {section === 'schedule' && (
-        <div className="card">
-          <div className="card-body">
-            <p style={{ fontSize: '0.83rem', color: 'var(--gray-500)', marginBottom: 16 }}>Define o que estudas em cada dia da semana. Isto gera as tarefas automaticamente.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {[1,2,3,4,5,6,0].map(day => (
-                <div key={day}>
-                  <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>{DAY_NAMES[day]}</p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {settings.subjects.map(s => {
-                      const active = (settings.schedule[day] || []).includes(s.key)
-                      return (
-                        <button key={s.key} onClick={() => toggleSchedule(day, s.key)} style={{
-                          padding: '5px 12px', borderRadius: 50, fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-                          border: `2px solid ${active ? s.color : 'var(--gray-200)'}`,
-                          background: active ? s.color + '30' : 'var(--white)',
-                          color: active ? s.textColor : 'var(--gray-400)',
-                        }}>{s.emoji} {s.name}</button>
-                      )
-                    })}
-                    {settings.subjects.length === 0 && <p style={{ fontSize: '0.8rem', color: 'var(--gray-400)' }}>Adiciona cadeiras primeiro</p>}
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* ── GOALS ── */}
-      {section === 'goals' && (() => {
-        const today = new Date(); today.setHours(0,0,0,0)
-        const start = settings.periodStart ? new Date(settings.periodStart) : null
-        const end   = settings.periodEnd   ? new Date(settings.periodEnd)   : null
-        const totalDays     = start && end ? Math.round((end - start) / 86400000) : null
-        const daysElapsed   = start ? Math.max(0, Math.round((today - start) / 86400000)) : null
-        const daysRemaining = end   ? Math.max(0, Math.round((end - today) / 86400000)) : null
-        const weeksRemaining = daysRemaining ? Math.max(1, daysRemaining / 7) : 1
-        const periodPct = totalDays && daysElapsed !== null ? Math.min(100, Math.round(daysElapsed / totalDays * 100)) : 0
-        const totalHours = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
-        const hoursPct = settings.hoursGoal > 0 ? Math.min(100, Math.round(totalHours / settings.hoursGoal * 100)) : 0
-        const totalTarget = settings.subjects?.reduce((a, s) => a + getTarget(s.key), 0) || 0
+      {/* ── PREFERÊNCIAS ── */}
+      {section === 'preferencias' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-            {/* Period */}
+          {/* Appearance */}
+          <div>
+            <p style={subHeadStyle}>APARÊNCIA</p>
             <div className="card">
               <div className="card-body">
-                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 5 }}>{smartEmoji('📅')} Período letivo</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                  <div>
-                    <label style={labelStyle}>Início</label>
-                    <input type="date" style={inputStyle} value={settings.periodStart || ''} onChange={e => update('periodStart', e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Fim</label>
-                    <input type="date" style={inputStyle} value={settings.periodEnd || ''} onChange={e => update('periodEnd', e.target.value)} />
+                <div style={{ marginBottom: 20 }}>
+                  <label style={labelStyle}>Nome da app</label>
+                  <input type="text" style={inputStyle} value={settings.appName} onChange={e => update('appName', e.target.value)} />
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={labelStyle}>Tema</label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {[{ id: 'light', label: '☀️ Claro' }, { id: 'dark', label: '🌙 Escuro' }].map(t => (
+                      <button key={t.id} onClick={() => update('theme', t.id)} style={{
+                        flex: 1, padding: '12px', borderRadius: 'var(--r)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)',
+                        border: `2px solid ${settings.theme === t.id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
+                        background: settings.theme === t.id ? 'var(--rose-50)' : 'var(--white)',
+                        color: settings.theme === t.id ? 'var(--rose-400)' : 'var(--gray-600)',
+                      }}>{t.label}</button>
+                    ))}
                   </div>
                 </div>
-                {totalDays && (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 600, color: 'var(--gray-600)', marginBottom: 6 }}>
-                      <span>{daysElapsed}d passados</span>
-                      <span style={{ color: 'var(--rose-400)' }}>{daysRemaining}d restantes · {weeksRemaining.toFixed(1)} semanas</span>
-                    </div>
-                    <div className="progress-wrap" style={{ height: 8 }}>
-                      <div className="progress-fill" style={{ width: `${periodPct}%`, height: '100%', background: 'var(--rose-300)' }} />
-                    </div>
-                    <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', marginTop: 5 }}>{periodPct}% do semestre concluído</p>
-                  </>
-                )}
+                <div>
+                  <label style={labelStyle}>Cor de acento</label>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                    {ACCENT_COLORS.map(c => {
+                      const isActive = settings.accentH === c.h
+                      return (
+                        <button
+                          key={c.name}
+                          onClick={() => {
+                            applyAccent(c.h, c.s, c.l)
+                            update('accentH', c.h)
+                            update('accentS', c.s)
+                            update('accentL', c.l)
+                          }}
+                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          <div style={{
+                            width: 44, height: 44, borderRadius: '50%',
+                            background: `hsl(${c.h}, ${c.s}, ${c.l})`,
+                            border: isActive ? '3px solid var(--gray-800)' : '3px solid transparent',
+                            boxShadow: isActive ? '0 0 0 2px white inset' : 'none',
+                            transition: 'all 0.15s',
+                          }} />
+                          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: isActive ? 'var(--gray-800)' : 'var(--gray-400)' }}>{c.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
 
-            {/* Wake / sleep times */}
+          {/* Wake / sleep times */}
+          <div>
+            <p style={subHeadStyle}>HORÁRIO DO DIA</p>
             <div className="card">
               <div className="card-body">
-                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 14 }}>🌅 Horário do dia (Horário)</p>
+                <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 14 }}>Usado para personalizar notificações ao longo do dia.</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <label style={labelStyle}>Acordar às</label>
@@ -544,177 +709,137 @@ export default function SettingsPage({ settings, setSettings }) {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Total hours goal */}
+          {/* Notifications */}
+          <div>
+            <p style={subHeadStyle}>NOTIFICAÇÕES</p>
             <div className="card">
               <div className="card-body">
-                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 14 }}>⏱️ Meta global de horas</p>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-                  <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -1 }}>{settings.hoursGoal}</span>
-                  <span style={{ fontSize: '0.88rem', color: 'var(--gray-400)', fontWeight: 600 }}>horas no semestre</span>
-                  <span style={{ marginLeft: 'auto', fontSize: '0.78rem', fontWeight: 700, color: hoursPct >= 80 ? 'var(--green-500)' : 'var(--rose-400)' }}>
-                    {totalHours.toFixed(1)}h feitas ({hoursPct}%)
-                  </span>
-                </div>
-                <input type="range" min="10" max="600" step="5" value={settings.hoursGoal}
-                  onChange={e => update('hoursGoal', parseInt(e.target.value))}
-                  style={{ width: '100%', marginBottom: 4, accentColor: 'var(--rose-400)' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--gray-400)' }}>
-                  <span>10h</span>
-                  <span style={{ color: 'var(--gray-500)', fontWeight: 600 }}>~{(settings.hoursGoal / weeksRemaining).toFixed(1)}h/semana necessárias</span>
-                  <span>600h</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Per-subject targets */}
-            {settings.subjects?.length > 0 && (
-              <div className="card">
-                <div className="card-body">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: 0.4 }}>📚 Metas por cadeira</p>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>Total: {totalTarget.toFixed(0)}h</span>
-                  </div>
-                  {settings.subjects.map(s => {
-                    const target = getTarget(s.key)
-                    const weeklyNeeded = (target / weeksRemaining).toFixed(1)
-                    const done = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).filter(x => x.subject === s.key).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
-                    const pct = Math.min(100, target > 0 ? Math.round(done / target * 100) : 0)
-                    return (
-                      <div key={s.key} style={{ marginBottom: 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                          <span style={{ fontSize: '1.1rem' }}>{s.emoji}</span>
-                          <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 700, color: 'var(--gray-800)' }}>{s.name}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <input
-                              type="number" min="0" max="600" step="5"
-                              value={subjectTargets[s.key] !== undefined ? subjectTargets[s.key] : Math.round(target)}
-                              onChange={e => {
-                                const val = parseFloat(e.target.value)
-                                const updated = { ...subjectTargets, [s.key]: isNaN(val) ? e.target.value : val }
-                                saveSubjectTargets(updated)
-                              }}
-                              style={{ width: 70, fontFamily: 'inherit', fontSize: '0.88rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '5px 8px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', textAlign: 'center' }}
-                              onFocus={e => e.target.style.borderColor = 'var(--rose-300)'}
-                              onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
-                            />
-                            <span style={{ fontSize: '0.78rem', color: 'var(--gray-400)', fontWeight: 600 }}>h</span>
-                          </div>
-                        </div>
-                        <div className="progress-wrap" style={{ height: 6 }}>
-                          <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: s.color || 'var(--rose-300)' }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--gray-400)', marginTop: 3 }}>
-                          <span>{done.toFixed(1)}h feitas de {target.toFixed(0)}h ({pct}%)</span>
-                          <span>~{weeklyNeeded}h/semana</span>
-                        </div>
+                <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 20 }}>
+                  Ativa ou desativa cada tipo de notificação. As notificações requerem permissão do sistema.
+                </p>
+                {[
+                  { key: 'studyProgress',   label: 'Progresso de estudo (cada hora)',  desc: 'Avisa quantas horas estudaste durante o dia' },
+                  { key: 'streakRisk',      label: 'Streak em risco',                  desc: 'Alerta às 21h se ainda não estudaste e tens streak ativo' },
+                  { key: 'weeklyReview',    label: 'Lembrete de review semanal',       desc: 'Avisa ao domingo à noite se não fizeste a review da semana' },
+                  { key: 'longBreak',       label: 'Pausa longa após 4 Pomodoros',     desc: 'Sugere uma pausa mais longa depois de 4 sessões seguidas' },
+                  { key: 'examDay',         label: 'Notificação no dia do exame',      desc: 'Lembra-te de exames/testes no próprio dia' },
+                  { key: 'morningReminder', label: 'Lembrete matinal',                 desc: 'Mensagem motivacional ao acordar, com destaque para exames próximos' },
+                  { key: 'dailyGoal',       label: 'Meta do dia atingida',             desc: 'Avisa quando atinges o total de horas diárias definidas nas metas' },
+                  { key: 'neglectedSubject',label: 'Cadeira sem atenção',              desc: 'Alerta se não estudas uma cadeira há 5 ou mais dias' },
+                  { key: 'midWeekGoal',     label: 'Balanço a meio da semana',         desc: 'Resumo do progresso semanal às quartas-feiras ao meio-dia' },
+                ].map(({ key, label, desc }) => {
+                  const val = settings.notifications?.[key] !== false
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 16 }}>
+                      <div>
+                        <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', margin: 0 }}>{label}</p>
+                        <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '2px 0 0' }}>{desc}</p>
                       </div>
-                    )
-                  })}
+                      <button
+                        onClick={() => notifUpdate(key, !val)}
+                        style={{
+                          flexShrink: 0, width: 44, height: 24, borderRadius: 'var(--r)', border: 'none', cursor: 'pointer',
+                          background: val ? 'var(--rose-400)' : 'var(--gray-200)',
+                          transition: 'background 0.2s', position: 'relative',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 3, left: val ? 23 : 3, width: 18, height: 18,
+                          borderRadius: '50%', background: 'white', transition: 'left 0.2s',
+                        }} />
+                      </button>
+                    </div>
+                  )
+                })}
+                <div style={{ marginTop: 8, paddingTop: 18, borderTop: '1px solid var(--gray-100)' }}>
+                  <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Email para a weekly review</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>Usado no botão "Enviar por email" na página de weekly review</p>
+                  <input
+                    type="email"
+                    placeholder="o-teu@email.com"
+                    value={settings.reviewEmail || ''}
+                    onChange={e => update('reviewEmail', e.target.value)}
+                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box' }}
+                  />
                 </div>
               </div>
-            )}
+            </div>
           </div>
-        )
-      })()}
 
-
-      {/* ── LINKS ── */}
-      {section === 'links' && (
-        <div>
-          {links.map((link, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius)', marginBottom: 8 }}>
-              <span style={{ fontSize: '1.1rem' }}>{link.emoji}</span>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--gray-800)', margin: 0 }}>{link.label}</p>
-                <p style={{ fontSize: '0.72rem', color: 'var(--gray-400)', margin: 0 }}>{link.url}</p>
+          {/* Quick links */}
+          <div>
+            <p style={subHeadStyle}>LINKS RÁPIDOS</p>
+            {links.map((link, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', marginBottom: 8 }}>
+                <span style={{ fontSize: '1.1rem' }}>{link.emoji}</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-800)', margin: 0 }}>{link.label}</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>{link.url}</p>
+                </div>
+                <button className="btn btn-ghost" onClick={() => saveLinks(links.filter((_, j) => j !== i))}><Trash2 size={13} /></button>
               </div>
-              <button className="btn btn-ghost" onClick={() => saveLinks(links.filter((_, j) => j !== i))}><Trash2 size={13} /></button>
+            ))}
+            <div style={{ background: 'var(--gray-50)', border: '1px dashed var(--gray-200)', borderRadius: 'var(--r)', padding: 16, marginTop: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 10, marginBottom: 10, alignItems: 'end' }}>
+                <div>
+                  <label style={labelStyle}>Emoji</label>
+                  <input type="text" style={{ ...inputStyle, width: 56, textAlign: 'center' }} maxLength={2} value={newLink.emoji} onChange={e => setNewLink(p => ({ ...p, emoji: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Nome</label>
+                  <input type="text" style={inputStyle} placeholder="Ex: Moodle" value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={labelStyle}>URL</label>
+                  <input type="url" style={inputStyle} placeholder="https://..." value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))} />
+                </div>
+              </div>
+              <button className="btn btn-primary" onClick={() => {
+                if (!newLink.label.trim() || !newLink.url.trim()) return
+                saveLinks([...links, { ...newLink }])
+                setNewLink({ label: '', url: '', emoji: '🔗' })
+              }}><Plus size={13} /> Adicionar link</button>
             </div>
-          ))}
-          <div style={{ background: 'var(--gray-50)', border: '1px dashed var(--gray-200)', borderRadius: 'var(--radius)', padding: 16, marginTop: 8 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 10, marginBottom: 10, alignItems: 'end' }}>
-              <div>
-                <label style={labelStyle}>Emoji</label>
-                <input type="text" style={{ ...inputStyle, width: 56, textAlign: 'center' }} maxLength={2} value={newLink.emoji} onChange={e => setNewLink(p => ({ ...p, emoji: e.target.value }))} />
-              </div>
-              <div>
-                <label style={labelStyle}>Nome</label>
-                <input type="text" style={inputStyle} placeholder="Ex: Moodle" value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))} />
-              </div>
-              <div>
-                <label style={labelStyle}>URL</label>
-                <input type="url" style={inputStyle} placeholder="https://..." value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))} />
-              </div>
-            </div>
-            <button className="btn btn-primary" onClick={() => {
-              if (!newLink.label.trim() || !newLink.url.trim()) return
-              saveLinks([...links, { ...newLink }])
-              setNewLink({ label: '', url: '', emoji: '🔗' })
-            }}><Plus size={13} /> Adicionar link</button>
           </div>
         </div>
       )}
 
-      {/* ── DATA & API ── */}
-      {/* ── NOTIFICATIONS ── */}
-      {section === 'notifications' && (
-        <div className="card">
-          <div className="card-body">
-            <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginBottom: 20 }}>
-              Ativa ou desativa cada tipo de notificação. As notificações requerem permissão do sistema.
-            </p>
-            {[
-              { key: 'studyProgress',   label: 'Progresso de estudo (cada hora)',  desc: 'Avisa quantas horas estudaste durante o dia' },
-              { key: 'streakRisk',      label: 'Streak em risco',                  desc: 'Alerta às 21h se ainda não estudaste e tens streak ativo' },
-              { key: 'weeklyReview',    label: 'Lembrete de review semanal',       desc: 'Avisa ao domingo à noite se não fizeste a review da semana' },
-              { key: 'longBreak',       label: 'Pausa longa após 4 Pomodoros',     desc: 'Sugere uma pausa mais longa depois de 4 sessões seguidas' },
-              { key: 'examDay',         label: 'Notificação no dia do exame',      desc: 'Lembra-te de exames/testes no próprio dia' },
-              { key: 'morningReminder', label: 'Lembrete matinal',                 desc: 'Mensagem motivacional ao acordar, com destaque para exames próximos' },
-              { key: 'dailyGoal',       label: 'Meta do dia atingida',             desc: 'Avisa quando atinges o total de horas diárias definidas nas metas' },
-              { key: 'neglectedSubject',label: 'Cadeira sem atenção',              desc: 'Alerta se não estudas uma cadeira há 5 ou mais dias' },
-              { key: 'midWeekGoal',     label: 'Balanço a meio da semana',         desc: 'Resumo do progresso semanal às quartas-feiras ao meio-dia' },
-            ].map(({ key, label, desc }) => {
-              const val = settings.notifications?.[key] !== false
+      {/* ── DADOS ── */}
+      {section === 'dados' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {(() => {
+            try {
+              let bytes = 0
+              for (const k of Object.keys(localStorage)) bytes += (localStorage.getItem(k) || '').length * 2
+              const mb = bytes / (1024 * 1024)
+              const pct = Math.min(100, Math.round(mb / 5 * 100))
+              if (mb < 1) return null
               return (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 16 }}>
-                  <div>
-                    <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gray-700)', margin: 0 }}>{label}</p>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: '2px 0 0' }}>{desc}</p>
+                <div className="card" style={{ border: mb >= 3 ? '1.5px solid #fbbf24' : '1px solid var(--gray-200)', background: mb >= 3 ? 'var(--amber-50)' : undefined }}>
+                  <div className="card-body">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <p style={{ fontWeight: 700, color: mb >= 3 ? '#b45309' : 'var(--gray-700)', margin: 0, fontSize: 'var(--t-body)' }}>
+                        {mb >= 3 ? '⚠️ ' : '💾 '}Armazenamento local
+                      </p>
+                      <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: mb >= 3 ? '#b45309' : 'var(--gray-500)' }}>
+                        {mb.toFixed(1)} MB / 5 MB
+                      </span>
+                    </div>
+                    <div style={{ height: 6, background: 'var(--gray-100)', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: mb >= 4 ? '#ef4444' : mb >= 3 ? '#f59e0b' : '#16a34a', borderRadius: 99 }} />
+                    </div>
+                    {mb >= 3 && (
+                      <p style={{ fontSize: 'var(--t-caption)', color: '#b45309', margin: 0 }}>
+                        Estás perto do limite. Exporta os dados e elimina sessões antigas para libertar espaço.
+                      </p>
+                    )}
                   </div>
-                  <button
-                    onClick={() => notifUpdate(key, !val)}
-                    style={{
-                      flexShrink: 0, width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-                      background: val ? 'var(--rose-400)' : 'var(--gray-200)',
-                      transition: 'background 0.2s', position: 'relative',
-                    }}
-                  >
-                    <span style={{
-                      position: 'absolute', top: 3, left: val ? 23 : 3, width: 18, height: 18,
-                      borderRadius: '50%', background: 'white', transition: 'left 0.2s',
-                    }} />
-                  </button>
                 </div>
               )
-            })}
-            <div style={{ marginTop: 8, paddingTop: 18, borderTop: '1px solid var(--gray-100)' }}>
-              <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Email para a weekly review</p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', marginBottom: 8 }}>Usado no botão "Enviar por email" na página de weekly review</p>
-              <input
-                type="email"
-                placeholder="o-teu@email.com"
-                value={settings.reviewEmail || ''}
-                onChange={e => update('reviewEmail', e.target.value)}
-                style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.88rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box' }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {section === 'data' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            } catch { return null }
+          })()}
           <div className="card">
             <div className="card-body">
               <label style={labelStyle}>Chave API Groq (Weekly Review + Auto-agendamento com IA)</label>
@@ -725,16 +850,16 @@ export default function SettingsPage({ settings, setSettings }) {
                 value={apiKey}
                 onChange={e => saveApiKey(e.target.value)}
               />
-              <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', marginTop: 6 }}>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 6 }}>
                 Guardada localmente. Usada para reviews automáticas e auto-agendamento inteligente.
               </p>
             </div>
           </div>
           <div className="card">
             <div className="card-body">
-              <p style={{ fontSize: '0.83rem', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Exportar dados</p>
-              <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginBottom: 12 }}>
-                Descarrega uma cópia de todos os teus dados (sessões, exames, projetos, diário).
+              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Exportar dados</p>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>
+                Descarrega uma cópia de todos os teus dados (sessões, exames, projetos, reflexões).
               </p>
               <button className="btn btn-secondary" onClick={exportData}>
                 💾 Exportar JSON
@@ -744,8 +869,8 @@ export default function SettingsPage({ settings, setSettings }) {
 
           <div className="card">
             <div className="card-body">
-              <p style={{ fontSize: '0.83rem', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Importar dados</p>
-              <p style={{ fontSize: '0.78rem', color: 'var(--gray-400)', marginBottom: 12 }}>
+              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Importar dados</p>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>
                 Restaura um backup exportado anteriormente. Os dados existentes serão substituídos.
               </p>
               <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
@@ -759,24 +884,27 @@ export default function SettingsPage({ settings, setSettings }) {
             <div className="card-body">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div>
-                  <p style={{ fontSize: '0.83rem', color: 'var(--gray-600)', fontWeight: 600, margin: 0 }}>Auto-backup (3 cópias)</p>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)', margin: '2px 0 0' }}>Guarda um snapshot manual dos teus dados</p>
+                  <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, margin: 0 }}>Auto-backup (3 cópias)</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '2px 0 0' }}>Guarda um snapshot manual dos teus dados</p>
                 </div>
-                <button className="btn btn-secondary" onClick={saveAutoBackup} style={{ fontSize: '0.78rem' }}>
+                <button className="btn btn-secondary" onClick={saveAutoBackup} style={{ fontSize: 'var(--t-caption)' }}>
                   📸 Guardar agora
                 </button>
               </div>
               {autoBackups.length === 0 ? (
-                <p style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>Nenhum backup guardado ainda.</p>
+                <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>Nenhum backup guardado ainda.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {autoBackups.map((bk, i) => (
-                    <div key={bk.ts} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 8 }}>
-                      <span style={{ fontSize: '0.78rem', color: 'var(--gray-600)', fontWeight: 600 }}>
+                    <div key={bk.ts} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 'var(--r)' }}>
+                      <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-600)', fontWeight: 600, flex: 1 }}>
                         Cópia {i + 1} — {new Date(bk.ts).toLocaleString('pt-PT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      <button onClick={() => restoreAutoBackup(bk)} style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                      <button onClick={() => restoreAutoBackup(bk)} style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
                         Restaurar
+                      </button>
+                      <button onClick={() => deleteAutoBackup(bk.ts)} style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }} title="Apagar backup">
+                        ✕
                       </button>
                     </div>
                   ))}
@@ -787,64 +915,34 @@ export default function SettingsPage({ settings, setSettings }) {
         </div>
       )}
 
-      {/* ── ACCENT COLOR ── */}
-      {section === 'accent' && (
-        <div className="card">
-          <div className="card-body">
-            <p style={{ fontSize: '0.83rem', color: 'var(--gray-500)', marginBottom: 16 }}>
-              Escolhe a cor de acento da app — afeta botões, links e elementos ativos.
-            </p>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {ACCENT_COLORS.map(c => {
-                const isActive = settings.accentH === c.h
-                return (
-                  <button
-                    key={c.name}
-                    onClick={() => {
-                      applyAccent(c.h, c.s, c.l)
-                      update('accentH', c.h)
-                      update('accentS', c.s)
-                      update('accentL', c.l)
-                    }}
-                    style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                      background: 'none', border: 'none', cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{
-                      width: 44, height: 44, borderRadius: '50%',
-                      background: `hsl(${c.h}, ${c.s}, ${c.l})`,
-                      border: isActive ? '3px solid var(--gray-800)' : '3px solid transparent',
-                      boxShadow: isActive ? '0 0 0 2px white inset' : 'none',
-                      transition: 'all 0.15s',
-                    }} />
-                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: isActive ? 'var(--gray-800)' : 'var(--gray-400)' }}>{c.name}</span>
-                  </button>
-                )
-              })}
+      {/* ── SOBRE ── */}
+      {section === 'sobre' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="card">
+            <div className="card-body">
+              <p style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: 'var(--gray-800)', marginBottom: 4 }}>
+                {settings?.appName || 'what should I do next?'}
+              </p>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
+                App pessoal de gestão de estudo — sessões, exames, reflexões e progresso num só sítio.
+              </p>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ── APPEARANCE ── */}
-      {section === 'appearance' && (
-        <div className="card">
-          <div className="card-body">
-            <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Nome da app</label>
-              <input type="text" style={inputStyle} value={settings.appName} onChange={e => update('appName', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Tema</label>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {[{ id: 'light', label: '☀️ Claro' }, { id: 'dark', label: '🌙 Escuro' }].map(t => (
-                  <button key={t.id} onClick={() => update('theme', t.id)} style={{
-                    flex: 1, padding: '12px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.88rem',
-                    border: `2px solid ${settings.theme === t.id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
-                    background: settings.theme === t.id ? 'var(--rose-50)' : 'var(--white)',
-                    color: settings.theme === t.id ? 'var(--rose-400)' : 'var(--gray-600)',
-                  }}>{t.label}</button>
+          <div className="card">
+            <div className="card-body">
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4, marginBottom: 14 }}>ATALHOS DE TECLADO</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {SHORTCUTS.map(s => (
+                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{
+                      fontFamily: 'monospace', fontSize: 'var(--t-caption)', fontWeight: 700,
+                      background: 'var(--gray-100)', border: '1px solid var(--gray-200)',
+                      borderRadius: 6, padding: '3px 8px', color: 'var(--gray-700)',
+                      flexShrink: 0, minWidth: 40, textAlign: 'center',
+                    }}>{s.key}</span>
+                    <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)' }}>{s.desc}</span>
+                  </div>
                 ))}
               </div>
             </div>
@@ -855,5 +953,6 @@ export default function SettingsPage({ settings, setSettings }) {
   )
 }
 
-const labelStyle = { display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.4 }
-const inputStyle = { width: '100%', fontFamily: 'inherit', fontSize: '0.88rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '9px 12px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', boxSizing: 'border-box' }
+const labelStyle = { display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 5, letterSpacing: 0.4 }
+const inputStyle = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '9px 12px', outline: 'none', background: 'var(--white)', color: 'var(--gray-900)', boxSizing: 'border-box' }
+const subHeadStyle = { fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--gray-400)', letterSpacing: '0.08em', marginBottom: 10 }

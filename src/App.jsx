@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Component } from "react"
+import { useState, useEffect, useRef, Component, lazy, Suspense } from "react"
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -7,10 +7,10 @@ class ErrorBoundary extends Component {
     if (this.state.error) return (
       <div style={{ padding: 32, fontFamily: 'inherit' }}>
         <p style={{ fontWeight: 700, color: '#dc2626', marginBottom: 8 }}>Erro ao carregar esta página</p>
-        <pre style={{ fontSize: '0.75rem', color: '#71717a', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <pre style={{ fontSize: 'var(--t-caption)', color: '#71717a', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
           {this.state.error.message}{'\n'}{this.state.error.stack}
         </pre>
-        <button onClick={() => this.setState({ error: null })} style={{ marginTop: 16, padding: '6px 14px', borderRadius: 8, border: '1px solid #e4e4e7', cursor: 'pointer', fontFamily: 'inherit' }}>
+        <button onClick={() => this.setState({ error: null })} style={{ marginTop: 16, padding: '6px 14px', borderRadius: 'var(--r)', border: '1px solid #e4e4e7', cursor: 'pointer', fontFamily: 'inherit' }}>
           Tentar novamente
         </button>
       </div>
@@ -18,34 +18,35 @@ class ErrorBoundary extends Component {
     return this.props.children
   }
 }
+import { BookOpen, ListTodo, CalendarDays, FolderKanban, Target, Timer, NotebookPen, BarChart3, Settings, LogOut, ChevronLeft, ChevronRight, GraduationCap } from 'lucide-react'
 import { supabase } from "./lib/supabase"
 import { useUserSettings } from "./hooks/useUserSettings"
 import { getTasksForDay, getSubjectsMap } from "./data/schedule"
 
 import LoginPage from "./components/LoginPage"
 import Onboarding from "./components/Onboarding"
-import SettingsPage from "./components/SettingsPage"
 
-import Dashboard from "./components/Dashboard"
-import DailyView from "./components/DailyView"
-import ExamsView from "./components/ExamsView"
-import StudyHours from "./components/StudyHours"
-import StudyDiary from "./components/StudyDiary"
-import ProjectsPage from "./components/ProjectsPage"
-import StatsPage from "./components/StatsPage"
-import SchedulePage from "./components/SchedulePage"
-import { smartEmoji } from "./components/CalendarEmoji"
+const SettingsPage  = lazy(() => import("./components/SettingsPage"))
+const Dashboard     = lazy(() => import("./components/Dashboard"))
+const CadeiraPage   = lazy(() => import("./components/CadeiraPage"))
+const DailyView     = lazy(() => import("./components/DailyView"))
+const ExamsView     = lazy(() => import("./components/ExamsView"))
+const StudyHours    = lazy(() => import("./components/StudyHours"))
+const StudyDiary    = lazy(() => import("./components/StudyDiary"))
+const ProjectsPage  = lazy(() => import("./components/ProjectsPage"))
+const StatsPage     = lazy(() => import("./components/StatsPage"))
+const SchedulePage  = lazy(() => import("./components/SchedulePage"))
 
 const TABS = [
-  { id: "dashboard", emoji: "🏠", label: "Diário de Bordo" },
-  { id: "today", emoji: "📋", label: "Hoje" },
-  { id: "schedule", emoji: "🗓️", label: "Horário" },
-  { id: "projects", emoji: "🗂", label: "Projetos" },
-  { id: "exams", emoji: "🎯", label: "Exames" },
-  { id: "hours", emoji: "⏱️", label: "Horas & Metas" },
-  { id: "diary", emoji: "📓", label: "Diário" },
-  { id: "stats", emoji: "📊", label: "Estatísticas" },
-  { id: "settings", emoji: "⚙️", label: "Definições" },
+  { id: "dashboard", icon: BookOpen,     label: "Diário de Bordo" },
+  { id: "today",     icon: ListTodo,     label: "Hoje" },
+  { id: "schedule",  icon: CalendarDays, label: "Horário" },
+  { id: "projects",  icon: FolderKanban, label: "Projetos" },
+  { id: "exams",     icon: Target,       label: "Exames" },
+  { id: "hours",     icon: Timer,        label: "Horas & Metas" },
+  { id: "diary",     icon: NotebookPen,  label: "Reflexões" },
+  { id: "stats",     icon: BarChart3,    label: "Estatísticas" },
+  { id: "settings",  icon: Settings,     label: "Definições" },
 ]
 
 function QuickLogModal({ onClose, settings }) {
@@ -72,9 +73,9 @@ function QuickLogModal({ onClose, settings }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9997, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
-      <div style={{ background: 'var(--white)', borderRadius: 14, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'var(--white)', borderRadius: 'var(--r)', width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)' }}>
-          <p style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--gray-800)', margin: 0 }}>⏱️ Registar sessão</p>
+          <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: 'var(--gray-800)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><Timer size={15} strokeWidth={1.5} /> Registar sessão</p>
         </div>
         {saved ? (
           <div style={{ padding: '28px 20px', textAlign: 'center', fontSize: '1.5rem' }}>✅</div>
@@ -82,32 +83,32 @@ function QuickLogModal({ onClose, settings }) {
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {subjects.map(s => (
-                <button key={s.key} onClick={() => setSubject(s.key)} style={{ padding: '5px 12px', borderRadius: 50, border: `2px solid ${subject === s.key ? s.color : 'var(--gray-200)'}`, background: subject === s.key ? s.color + '33' : 'var(--white)', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', color: subject === s.key ? s.textColor : 'var(--gray-500)' }}>
+                <button key={s.key} onClick={() => setSubject(s.key)} style={{ padding: '5px 12px', borderRadius: 50, border: `2px solid ${subject === s.key ? s.color : 'var(--gray-200)'}`, background: subject === s.key ? s.color + '33' : 'var(--white)', fontFamily: 'inherit', fontSize: 'var(--t-body)', fontWeight: 700, cursor: 'pointer', color: subject === s.key ? s.textColor : 'var(--gray-500)' }}>
                   {s.emoji} {s.name}
                 </button>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4, textTransform: 'uppercase' }}>Horas</label>
+                <label style={{ display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4 }}>Horas</label>
                 <input type="number" min="0" max="12" step="1" placeholder="0" value={hours} onChange={e => setHours(e.target.value)} autoFocus
-                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '1rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '1rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 10px', outline: 'none', background: 'var(--white)', boxSizing: 'border-box' }} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4, textTransform: 'uppercase' }}>Minutos</label>
+                <label style={{ display: 'block', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 4 }}>Minutos</label>
                 <select value={mins} onChange={e => setMins(e.target.value)}
-                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '1rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)', boxSizing: 'border-box' }}>
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '1rem', fontWeight: 700, border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 10px', outline: 'none', background: 'var(--white)', boxSizing: 'border-box' }}>
                   {[0,5,10,15,20,25,30,35,40,45,50,55].map(m => <option key={m} value={m}>{String(m).padStart(2,'0')}</option>)}
                 </select>
               </div>
             </div>
             <input type="text" placeholder="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()}
-              style={{ fontFamily: 'inherit', fontSize: '0.88rem', border: '1.5px solid var(--gray-200)', borderRadius: 8, padding: '8px 10px', outline: 'none', background: 'var(--white)' }} />
+              style={{ fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 10px', outline: 'none', background: 'var(--white)' }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={save} disabled={!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: 'var(--rose-400)', color: '#fff', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', opacity: (!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)) ? 0.5 : 1 }}>
+              <button onClick={save} disabled={!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)} style={{ flex: 1, padding: '10px', borderRadius: 'var(--r)', border: 'none', background: 'var(--rose-400)', color: '#fff', fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer', opacity: (!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)) ? 0.5 : 1 }}>
                 Guardar
               </button>
-              <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--gray-200)', background: 'var(--white)', fontFamily: 'inherit', cursor: 'pointer', color: 'var(--gray-500)' }}>
+              <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)', background: 'var(--white)', fontFamily: 'inherit', cursor: 'pointer', color: 'var(--gray-500)' }}>
                 Cancelar
               </button>
             </div>
@@ -153,7 +154,7 @@ function CommandPalette({ onClose, onNavigate }) {
       diary.filter(e => (e.text || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q))
         .slice(0, 3).forEach(e => results.push({
           id: `diary-${e.id}`, emoji: '📓', type: 'diary',
-          label: (e.text || '').slice(0, 50) || 'Entrada', sub: `Diário · ${new Date(e.id).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}`,
+          label: (e.text || '').slice(0, 50) || 'Entrada', sub: `Reflexões · ${new Date(e.id).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}`,
           action: () => onNavigate('diary'),
         }))
     } catch {}
@@ -175,7 +176,7 @@ function CommandPalette({ onClose, onNavigate }) {
     if (e.key === 'Enter' && filtered[sel]) { filtered[sel].action(); onClose() }
   }
 
-  const TYPE_LABEL = { nav: 'Páginas', session: 'Sessões', exam: 'Exames', diary: 'Diário' }
+  const TYPE_LABEL = { nav: 'Páginas', session: 'Sessões', exam: 'Exames', diary: 'Reflexões' }
 
   return (
     <div
@@ -183,7 +184,7 @@ function CommandPalette({ onClose, onNavigate }) {
       onClick={onClose}
     >
       <div
-        style={{ background: 'var(--white)', borderRadius: 14, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: 500, maxWidth: '90vw', overflow: 'hidden' }}
+        style={{ background: 'var(--white)', borderRadius: 'var(--r)', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: 500, maxWidth: '90vw', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--gray-100)' }}>
@@ -194,13 +195,13 @@ function CommandPalette({ onClose, onNavigate }) {
             onChange={e => { setQuery(e.target.value); setSel(0) }}
             onKeyDown={handleKey}
             placeholder="Pesquisar páginas, sessões, exames, diário..."
-            style={{ flex: 1, border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: '0.95rem', background: 'transparent', color: 'var(--gray-900)' }}
+            style={{ flex: 1, border: 'none', outline: 'none', fontFamily: 'inherit', fontSize: 'var(--t-body)', background: 'transparent', color: 'var(--gray-900)' }}
           />
-          <span style={{ fontSize: '0.7rem', color: 'var(--gray-400)', fontWeight: 700 }}>ESC</span>
+          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 700 }}>ESC</span>
         </div>
         <div style={{ maxHeight: 360, overflowY: 'auto' }}>
           {filtered.length === 0 ? (
-            <p style={{ padding: '20px 16px', color: 'var(--gray-400)', fontSize: '0.88rem', textAlign: 'center' }}>Nenhum resultado para "{query}"</p>
+            <p style={{ padding: '20px 16px', color: 'var(--gray-400)', fontSize: 'var(--t-body)', textAlign: 'center' }}>Nenhum resultado para "{query}"</p>
           ) : (() => {
             const els = []
             let lastType = null
@@ -208,7 +209,7 @@ function CommandPalette({ onClose, onNavigate }) {
               if (item.type !== lastType) {
                 lastType = item.type
                 els.push(
-                  <p key={`hd-${item.type}`} style={{ padding: '6px 16px 2px', fontSize: '0.68rem', fontWeight: 800, color: 'var(--gray-400)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                  <p key={`hd-${item.type}`} style={{ padding: '6px 16px 2px', fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--gray-400)', letterSpacing: '0.06em', margin: 0 }}>
                     {TYPE_LABEL[item.type] || item.type}
                   </p>
                 )
@@ -224,10 +225,12 @@ function CommandPalette({ onClose, onNavigate }) {
                     color: 'var(--gray-800)',
                   }}
                 >
-                  <span style={{ fontSize: '1rem', flexShrink: 0 }}>{item.emoji}</span>
+                  <span style={{ fontSize: '1rem', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    {item.icon ? <item.icon size={16} strokeWidth={1.5} /> : item.emoji}
+                  </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: i === sel ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    {item.sub && <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--gray-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</span>}
+                    <span style={{ display: 'block', fontSize: 'var(--t-body)', fontWeight: i === sel ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    {item.sub && <span style={{ display: 'block', fontSize: 'var(--t-caption)', color: 'var(--gray-400)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</span>}
                   </span>
                 </button>
               )
@@ -235,8 +238,73 @@ function CommandPalette({ onClose, onNavigate }) {
             return els
           })()}
         </div>
-        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gray-100)', fontSize: '0.7rem', color: 'var(--gray-400)', display: 'flex', gap: 12 }}>
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gray-100)', fontSize: 'var(--t-caption)', color: 'var(--gray-400)', display: 'flex', gap: 12 }}>
           <span>↑↓ navegar</span><span>↵ abrir</span><span>esc fechar</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ShortcutsModal({ onClose }) {
+  const GROUPS = [
+    {
+      title: 'Navegação',
+      items: [
+        { keys: ['1–9'],    desc: 'Ir para página' },
+        { keys: ['J'],      desc: 'Descer na lista' },
+        { keys: ['K'],      desc: 'Subir na lista' },
+        { keys: ['ESC'],    desc: 'Fechar / voltar' },
+      ],
+    },
+    {
+      title: 'Sessões & Timer',
+      items: [
+        { keys: ['N'],      desc: 'Nova sessão de estudo' },
+        { keys: ['Space'],  desc: 'Pausar / retomar Pomodoro' },
+      ],
+    },
+    {
+      title: 'Pesquisa',
+      items: [
+        { keys: ['⌘', 'K'], desc: 'Pesquisa rápida' },
+        { keys: ['?'],      desc: 'Esta folha de atalhos' },
+      ],
+    },
+  ]
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: 'var(--white)', borderRadius: 'var(--r)', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: 460, maxWidth: '90vw' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--gray-100)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <p style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--gray-900)', margin: 0 }}>Atalhos de teclado</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', fontSize: '1.1rem', lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ padding: '20px 22px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 32px' }}>
+          {GROUPS.map(g => (
+            <div key={g.title}>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--gray-400)', letterSpacing: '0.07em', marginBottom: 10 }}>{g.title.toUpperCase()}</p>
+              {g.items.map(item => (
+                <div key={item.desc} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9, gap: 12 }}>
+                  <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)' }}>{item.desc}</span>
+                  <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                    {item.keys.map((k, i) => (
+                      <kbd key={i} style={{ fontFamily: 'monospace', fontSize: '0.72rem', fontWeight: 700, background: 'var(--gray-100)', border: '1px solid var(--gray-300)', borderRadius: 5, padding: '3px 7px', color: 'var(--gray-700)', lineHeight: 1.4, whiteSpace: 'nowrap' }}>{k}</kbd>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '10px 22px', borderTop: '1px solid var(--gray-100)', fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
+          Pressiona <kbd style={{ fontFamily: 'monospace', fontSize: '0.68rem', fontWeight: 700, background: 'var(--gray-100)', border: '1px solid var(--gray-300)', borderRadius: 4, padding: '1px 5px' }}>ESC</kbd> para fechar
         </div>
       </div>
     </div>
@@ -247,11 +315,13 @@ const isElectron = typeof window !== "undefined" && window.electronAPI
 
 export default function App() {
   const [tab, setTab] = useState("dashboard")
+  const [selectedCadeira, setSelectedCadeira] = useState(null)
   const [session, setSession] = useState(undefined)
   const [dragging, setDragging] = useState(false)
   const [pomodoroTick, setPomodoroTick] = useState(null)
   const [todayHours, setTodayHours] = useState(0)
   const [quickLog, setQuickLog] = useState(false)
+  const [quickLinks, setQuickLinks] = useState([])
 
   const dragOrigin = useRef(null)
 
@@ -320,8 +390,10 @@ export default function App() {
     }
   }, [dragging])
 
-  // ───────── Keyboard navigation (1-9) + Cmd+K command palette
+  // ───────── Keyboard navigation + shortcuts
   const [cmdOpen, setCmdOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const scrollPositions = useRef({})
 
   useEffect(() => {
     const handle = (e) => {
@@ -330,14 +402,81 @@ export default function App() {
         setCmdOpen(v => !v)
         return
       }
-      if (e.key === 'Escape') { setCmdOpen(false); return }
+      if (e.key === 'Escape') {
+        setCmdOpen(false)
+        setShortcutsOpen(false)
+        setSelectedCadeira(null)
+        return
+      }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      // 1-9 navigation
       const map = { '1':'dashboard','2':'today','3':'schedule','4':'projects','5':'exams','6':'hours','7':'diary','8':'stats','9':'settings' }
-      if (map[e.key]) { e.preventDefault(); setTab(map[e.key]) }
+      if (map[e.key]) { e.preventDefault(); setTab(map[e.key]); setSelectedCadeira(null); return }
+
+      // N — nova sessão
+      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setQuickLog(true); return }
+
+      // ? — shortcuts sheet
+      if (e.key === '?') { e.preventDefault(); setShortcutsOpen(v => !v); return }
+
+      // J / K — scroll main content
+      if (e.key === 'j' || e.key === 'J') { e.preventDefault(); document.querySelector('.main-content')?.scrollBy({ top: 80, behavior: 'smooth' }); return }
+      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); document.querySelector('.main-content')?.scrollBy({ top: -80, behavior: 'smooth' }); return }
+
+      // Space — toggle Pomodoro
+      if (e.key === ' ') {
+        e.preventDefault()
+        try {
+          const state = JSON.parse(localStorage.getItem('pomodoro-timer-state') || 'null')
+          if (state) {
+            const now = Date.now()
+            let updated
+            if (state.running) {
+              const elapsed = state.savedAt ? Math.floor((now - state.savedAt) / 1000) : 0
+              updated = state.isStopwatch
+                ? { ...state, running: false, secondsElapsed: (state.secondsElapsed || 0) + elapsed, savedAt: now }
+                : { ...state, running: false, secondsLeft: Math.max(0, (state.secondsLeft || 0) - elapsed), savedAt: now }
+            } else {
+              updated = { ...state, running: true, savedAt: now }
+            }
+            localStorage.setItem('pomodoro-timer-state', JSON.stringify(updated))
+            window.dispatchEvent(new StorageEvent('storage', { key: 'pomodoro-timer-state', newValue: JSON.stringify(updated) }))
+          } else {
+            setTab('hours')
+            setSelectedCadeira(null)
+          }
+        } catch {}
+      }
     }
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
+  }, [])
+
+  // ───────── Scroll position preservation
+  useEffect(() => {
+    const key = selectedCadeira || tab
+    const el = document.querySelector('.main-content')
+    if (!el) return
+    const saved = scrollPositions.current[key]
+    if (saved != null) requestAnimationFrame(() => { const e = document.querySelector('.main-content'); if (e) e.scrollTop = saved })
+    const onScroll = () => { scrollPositions.current[key] = document.querySelector('.main-content')?.scrollTop || 0 }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [tab, selectedCadeira])
+
+  // ───────── Broadcast channel listeners
+  useEffect(() => {
+    const channel = new BroadcastChannel('pomodoro-sync')
+    channel.onmessage = (event) => {
+      if (event.data.type === 'FOCUS_APP') {
+        if (window.electronAPI?.focusMainWindow) {
+          window.electronAPI.focusMainWindow()
+        }
+      }
+    }
+    return () => channel.close()
   }, [])
 
   // ───────── Pomodoro sidebar ticker + today hours + deep work
@@ -692,9 +831,30 @@ export default function App() {
     processQueue()
     exportWidget()
     window.electronAPI.onDoneQueueChanged(processQueue)
+
+    // Re-exporta dados a cada 30s — garante que horas de estudo, exames, etc.
+    // ficam atualizados na widget mesmo que o utilizador esteja noutras páginas
+    const exportInterval = setInterval(exportWidget, 30_000)
+
+    // Polling da queue a cada 8s como fallback — apanha escritas que o fs.watch
+    // possa ter perdido (ex: substituição atómica em algumas versões do macOS)
+    const queueInterval = setInterval(processQueue, 8_000)
+
     return () => {
       window.electronAPI.offDoneQueueChanged(processQueue)
+      clearInterval(exportInterval)
+      clearInterval(queueInterval)
     }
+  }, [])
+
+  // ───────── Quick links (sidebar footer)
+  useEffect(() => {
+    const load = () => {
+      try { setQuickLinks(JSON.parse(localStorage.getItem('quick-links') || '[]')) } catch {}
+    }
+    load()
+    window.addEventListener('storage', load)
+    return () => window.removeEventListener('storage', load)
   }, [])
 
   // ───────── Logout
@@ -710,16 +870,9 @@ export default function App() {
   // ───────── Loading state
   if (session === undefined || settingsLoading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--bg)",
-        }}
-      >
-        <p style={{ color: "var(--gray-400)", fontWeight: 600 }}>A carregar...</p>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
+        <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid var(--gray-100)', borderTopColor: 'var(--rose-400)', animation: 'spin 0.7s linear infinite' }} />
+        <p style={{ color: 'var(--gray-400)', fontWeight: 600, fontSize: 'var(--t-caption)' }}>A carregar...</p>
       </div>
     )
   }
@@ -750,6 +903,9 @@ export default function App() {
           onNavigate={(id) => { setTab(id); setCmdOpen(false) }}
         />
       )}
+      {shortcutsOpen && (
+        <ShortcutsModal onClose={() => setShortcutsOpen(false)} />
+      )}
       {quickLog && (
         <QuickLogModal onClose={() => setQuickLog(false)} settings={settings} />
       )}
@@ -774,13 +930,13 @@ export default function App() {
             style={{
               margin: '0 10px 6px', padding: '6px 10px',
               background: 'var(--gray-50)', border: '1px solid var(--gray-200)',
-              borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+              borderRadius: 'var(--r)', cursor: 'pointer', fontFamily: 'inherit',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              color: 'var(--gray-400)', fontSize: '0.72rem', fontWeight: 600,
+              color: 'var(--gray-400)', fontSize: 'var(--t-caption)', fontWeight: 600,
             }}
           >
             <span>Navegar...</span>
-            <span style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 4, padding: '1px 5px', fontSize: '0.65rem' }}>⌘K</span>
+            <span style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 4, padding: '1px 5px', fontSize: 'var(--t-caption)' }}>⌘K</span>
           </button>
         )}
         <button
@@ -789,10 +945,10 @@ export default function App() {
             margin: settings?.sidebarCompact ? '0 10px 6px' : '0 10px 10px',
             padding: settings?.sidebarCompact ? '10px 0' : '9px 10px',
             background: 'var(--rose-400)', border: 'none',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+            borderRadius: 'var(--r)', cursor: 'pointer', fontFamily: 'inherit',
             display: 'flex', alignItems: 'center',
             justifyContent: settings?.sidebarCompact ? 'center' : 'flex-start',
-            gap: 8, color: '#fff', fontSize: '0.82rem', fontWeight: 700,
+            gap: 8, color: '#fff', fontSize: 'var(--t-body)', fontWeight: 700,
             width: 'calc(100% - 20px)',
           }}
           title="Registar sessão de estudo"
@@ -805,16 +961,44 @@ export default function App() {
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`nav-btn ${tab === t.id ? "active" : ""}`}
-              onClick={() => setTab(t.id)}
+              className={`nav-btn ${tab === t.id && !selectedCadeira ? "active" : ""}`}
+              onClick={() => { setTab(t.id); setSelectedCadeira(null) }}
               title={settings?.sidebarCompact ? t.label : undefined}
               style={settings?.sidebarCompact ? { justifyContent: 'center', padding: '10px 0' } : undefined}
             >
-              <span className="nav-icon">{smartEmoji(t.emoji)}</span>
+              <t.icon size={16} strokeWidth={1.5} style={{ flexShrink: 0 }} />
               {!settings?.sidebarCompact && t.label}
             </button>
           ))}
         </nav>
+
+        {/* ── Cadeiras ── */}
+        {(settings?.subjects || []).length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            {!settings?.sidebarCompact && (
+              <p className="sidebar-section" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <GraduationCap size={11} strokeWidth={2} /> Cadeiras
+              </p>
+            )}
+            {(settings?.subjects || []).map(s => (
+              <button
+                key={s.key}
+                className={`nav-btn ${selectedCadeira === s.key ? 'active' : ''}`}
+                onClick={() => setSelectedCadeira(s.key)}
+                title={settings?.sidebarCompact ? s.name : undefined}
+                style={{
+                  ...(settings?.sidebarCompact ? { justifyContent: 'center', padding: '10px 0' } : {}),
+                  borderLeft: selectedCadeira === s.key ? `3px solid ${s.color || 'var(--rose-400)'}` : '3px solid transparent',
+                }}
+              >
+                <span style={{ fontSize: '0.95rem', lineHeight: 1, flexShrink: 0 }}>{s.emoji}</span>
+                {!settings?.sidebarCompact && (
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
 
         {pomodoroTick && (() => {
           const isStopwatch = pomodoroTick.isStopwatch
@@ -826,18 +1010,18 @@ export default function App() {
               onClick={() => setTab('hours')}
               style={{
                 margin: '8px 10px', padding: '8px 12px',
-                background: '#fdf2f4', border: '1.5px solid var(--rose-300)',
-                borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                background: 'var(--accent-50)', border: '1.5px solid var(--rose-300)',
+                borderRadius: 'var(--r)', cursor: 'pointer', fontFamily: 'inherit',
                 display: 'flex', alignItems: 'center', gap: 8, width: 'calc(100% - 20px)',
               }}
             >
               <span style={{ fontSize: '1rem' }}>🍅</span>
               {!settings?.sidebarCompact && (
                 <div style={{ textAlign: 'left' }}>
-                  <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--rose-400)', margin: 0, letterSpacing: -0.5 }}>
+                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--rose-400)', margin: 0, letterSpacing: -0.5 }}>
                     {mm}:{ss}
                   </p>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
                     {isStopwatch ? 'A contar' : 'Pomodoro a correr'}
                   </p>
                 </div>
@@ -852,20 +1036,45 @@ export default function App() {
             style={{
               margin: '4px 10px', padding: '8px 12px',
               background: 'var(--pink-50)', border: '1.5px solid var(--pink-100)',
-              borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+              borderRadius: 'var(--r)', cursor: 'pointer', fontFamily: 'inherit',
               display: 'flex', alignItems: 'center', gap: 8, width: 'calc(100% - 20px)',
             }}
           >
-            <span style={{ fontSize: '1rem' }}>⏱️</span>
+            <Timer size={16} strokeWidth={1.5} style={{ color: 'var(--purple-dark)', flexShrink: 0 }} />
             <div style={{ textAlign: 'left' }}>
-              <p style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--purple-dark)', margin: 0 }}>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--purple-dark)', margin: 0 }}>
                 {todayHours}h hoje
               </p>
-              <p style={{ fontSize: '0.65rem', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0, fontWeight: 600 }}>
                 horas estudadas
               </p>
             </div>
           </button>
+        )}
+
+        {quickLinks.length > 0 && !settings?.sidebarCompact && (
+          <div style={{ margin: '4px 10px 0', borderTop: '1px solid var(--gray-100)', paddingTop: 8 }}>
+            <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', margin: '0 0 4px 2px', letterSpacing: '0.04em' }}>Links</p>
+            {quickLinks.map((link, i) => (
+              <a
+                key={i}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '5px 8px', borderRadius: 7, marginBottom: 2,
+                  color: 'var(--gray-600)', fontSize: 'var(--t-caption)', fontWeight: 600,
+                  textDecoration: 'none', transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{ fontSize: '0.9rem', flexShrink: 0 }}>{link.emoji || '🔗'}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.label}</span>
+              </a>
+            ))}
+          </div>
         )}
 
         <div
@@ -877,11 +1086,11 @@ export default function App() {
         >
           <p
             style={{
-              fontSize: "0.68rem",
+              fontSize: "var(--t-caption)",
               color: "var(--gray-400)",
               marginBottom: 6,
               fontWeight: 600,
-              textTransform: "uppercase",
+              
               letterSpacing: 0.4,
               padding: "0 10px",
             }}
@@ -892,44 +1101,79 @@ export default function App() {
           <button
             className="nav-btn"
             onClick={() => setSettings(s => ({ ...s, sidebarCompact: !s.sidebarCompact }))}
-            style={{ color: "var(--gray-400)", fontSize: "0.78rem" }}
+            style={{ color: "var(--gray-400)", fontSize: "var(--t-caption)" }}
             title={settings?.sidebarCompact ? 'Expandir sidebar' : 'Compactar sidebar'}
           >
-            <span className="nav-icon">{settings?.sidebarCompact ? '→' : '←'}</span> {!settings?.sidebarCompact && 'Compactar'}
+            {settings?.sidebarCompact
+              ? <ChevronRight size={16} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+              : <ChevronLeft  size={16} strokeWidth={1.5} style={{ flexShrink: 0 }} />}
+            {!settings?.sidebarCompact && 'Compactar'}
           </button>
           {!isElectron && (
             <button
               className="nav-btn"
               onClick={signOut}
-              style={{ color: "var(--gray-400)", fontSize: "0.78rem" }}
+              style={{ color: "var(--gray-400)", fontSize: "var(--t-caption)" }}
               title="Sair"
             >
-              <span className="nav-icon">🚪</span> {!settings?.sidebarCompact && 'Sair'}
+              <LogOut size={16} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+              {!settings?.sidebarCompact && 'Sair'}
+            </button>
+          )}
+          {!settings?.sidebarCompact && (
+            <button
+              onClick={() => setShortcutsOpen(true)}
+              style={{
+                margin: '6px 10px 2px', padding: '5px 10px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit', textAlign: 'center', width: 'calc(100% - 20px)',
+              }}
+            >
+              <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-300)', fontWeight: 600 }}>
+                Pressiona <kbd style={{ fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, background: 'var(--gray-100)', border: '1px solid var(--gray-200)', borderRadius: 4, padding: '1px 5px', color: 'var(--gray-500)' }}>?</kbd> para atalhos
+              </span>
             </button>
           )}
         </div>
       </aside>
 
-      <main className="main-content fade-in" key={tab}>
-        <ErrorBoundary key={tab}>
-          {tab === "dashboard" && <Dashboard onNavigate={setTab} settings={settings} />}
-          {tab === "today" && <DailyView settings={settings} />}
-          {tab === "schedule" && (
-            <SchedulePage
+      <main className="main-content fade-in" key={selectedCadeira || tab}>
+        <ErrorBoundary key={selectedCadeira || tab}>
+          <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--gray-100)', borderTopColor: 'var(--rose-400)', animation: 'spin 0.7s linear infinite' }} />
+            </div>
+          }>
+          {selectedCadeira ? (
+            <CadeiraPage
+              subjectKey={selectedCadeira}
               settings={settings}
-              setSettings={setSettings}
-              onNavigate={setTab}
-              onStartPomodoro={({ subjectKey, title }) => {
-                localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey, title }))
-              }}
+              onBack={() => setSelectedCadeira(null)}
+              onNavigate={(t) => { setTab(t); setSelectedCadeira(null) }}
             />
+          ) : (
+            <>
+              {tab === "dashboard" && <Dashboard onNavigate={(t) => { setTab(t); setSelectedCadeira(null) }} settings={settings} onOpenCadeira={setSelectedCadeira} />}
+              {tab === "today" && <DailyView settings={settings} />}
+              {tab === "schedule" && (
+                <SchedulePage
+                  settings={settings}
+                  setSettings={setSettings}
+                  onNavigate={(t) => { setTab(t); setSelectedCadeira(null) }}
+                  onStartPomodoro={({ subjectKey, title }) => {
+                    localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey, title }))
+                  }}
+                />
+              )}
+              {tab === "projects" && <ProjectsPage settings={settings} />}
+              {tab === "exams" && <ExamsView settings={settings} />}
+              {tab === "hours" && <StudyHours settings={settings} />}
+              {tab === "diary" && <StudyDiary />}
+              {tab === "stats" && <StatsPage settings={settings} onOpenCadeira={setSelectedCadeira} />}
+              {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
+            </>
           )}
-          {tab === "projects" && <ProjectsPage settings={settings} />}
-          {tab === "exams" && <ExamsView settings={settings} />}
-          {tab === "hours" && <StudyHours settings={settings} />}
-          {tab === "diary" && <StudyDiary />}
-          {tab === "stats" && <StatsPage settings={settings} />}
-          {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
+          </Suspense>
         </ErrorBoundary>
       </main>
     </div>

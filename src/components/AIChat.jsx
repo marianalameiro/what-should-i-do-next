@@ -159,7 +159,7 @@ export default function AIChat() {
           <p className="subtitle">A tua assistente de estudo pessoal — powered by Groq (gratuito)</p>
         </div>
         {messages.length > 1 && (
-          <button className="btn btn-ghost" style={{ fontSize: '0.75rem', marginTop: 4 }} onClick={clearChat} title="Limpar conversa">
+          <button className="btn btn-ghost" style={{ fontSize: 'var(--t-caption)', marginTop: 4 }} onClick={clearChat} title="Limpar conversa">
             <Trash2 size={13} /> Limpar
           </button>
         )}
@@ -179,7 +179,7 @@ export default function AIChat() {
               onKeyDown={e => e.key === 'Enter' && saveKey()}
             />
             <button className="btn btn-primary" onClick={saveKey}>Guardar</button>
-            <span style={{ fontSize: '0.8rem', color: 'var(--purple-dark)', fontWeight: 700 }}>
+            <span style={{ fontSize: 'var(--t-body)', color: 'var(--purple-dark)', fontWeight: 700 }}>
               Obtém a tua key em console.groq.com/keys
             </span>
           </div>
@@ -187,16 +187,16 @@ export default function AIChat() {
 
         {apiKey && (
           <div style={{ padding: '8px 16px', background: 'var(--rose-50)', borderBottom: '1.5px solid var(--rose-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: 700 }}>Groq conectado 🌸</span>
-            <button className="btn btn-ghost" style={{ fontSize: '0.78rem' }} onClick={removeKey}>Mudar key</button>
+            <span style={{ fontSize: 'var(--t-body)', color: 'var(--text-light)', fontWeight: 700 }}>Groq conectado 🌸</span>
+            <button className="btn btn-ghost" style={{ fontSize: 'var(--t-caption)' }} onClick={removeKey}>Mudar key</button>
           </div>
         )}
 
         {pdfCtx && (
           <div style={{ padding: '8px 16px', background: 'var(--purple-50)', borderBottom: '1.5px solid var(--purple-200)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Sparkles size={14} color="var(--purple-dark)" />
-            <span style={{ fontSize: '0.8rem', color: 'var(--purple-dark)', fontWeight: 700, flex: 1 }}>Contexto de PDF carregado</span>
-            <button className="btn btn-ghost" style={{ fontSize: '0.75rem', padding: '2px 8px' }} onClick={removePdfCtx}>
+            <span style={{ fontSize: 'var(--t-body)', color: 'var(--purple-dark)', fontWeight: 700, flex: 1 }}>Contexto de PDF carregado</span>
+            <button className="btn btn-ghost" style={{ fontSize: 'var(--t-caption)', padding: '2px 8px' }} onClick={removePdfCtx}>
               <X size={12} /> Remover
             </button>
           </div>
@@ -207,7 +207,7 @@ export default function AIChat() {
             <button
               key={qp.label}
               className="btn btn-ghost"
-              style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 20 }}
+              style={{ fontSize: 'var(--t-caption)', padding: '4px 10px', borderRadius: 'var(--r-pill)' }}
               disabled={!apiKey || loading}
               onClick={() => send(qp.msg)}
             >
