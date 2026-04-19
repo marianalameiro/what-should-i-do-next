@@ -2,15 +2,21 @@ const { app, BrowserWindow, ipcMain, session, Tray, nativeImage } = require('ele
 const path = require('path')
 const fs = require('fs')
 
+// Garante uma única instância — se já existir uma, foca a janela existente e sai
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+}
+
 let mainWindow
 let trayWindow
 let tray
 
 function createTray() {
   try {
-    // Ícone template (preto sobre transparente) — macOS inverte automaticamente
-    // no dark mode. Ficheiro nomeado *Template* para ser detetado pelo sistema.
-    const iconPath = path.join(__dirname, 'trayTemplate.png')
+    // Ícone da app (versão @1x + @2x para Retina) — Electron carrega automaticamente
+    // o @2x em displays de alta densidade.
+    const iconPath = path.join(__dirname, 'trayIcon.png')
     const icon = nativeImage.createFromPath(iconPath)
     if (icon.isEmpty()) throw new Error(`Ícone do tray não encontrado: ${iconPath}`)
 
@@ -125,6 +131,9 @@ function createWindow() {
     return { action: 'allow' }
   })
 
+  // Limpa a referência ao fechar para que o activate a recrie corretamente
+  mainWindow.on('closed', () => { mainWindow = null })
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
   } else {
@@ -132,6 +141,17 @@ function createWindow() {
     mainWindow.loadFile(distPath)
   }
 }
+
+// Segunda instância → foca a janela da primeira em vez de abrir outra
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  } else {
+    createWindow()
+  }
+})
 
 app.whenReady().then(() => {
   // ── Block all plaintext HTTP to external hosts (HTTPS only) ────────────────
