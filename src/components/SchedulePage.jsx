@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Zap, Plus, X, Check, Settings2, Pencil, Trash2 } from 'lucide-react'
+import { syncAllCalendars } from '../utils/gcalSync'
 import { getTasksForDay } from '../data/schedule'
 import { MONTHS, DAY_NAMES_FULL as DAY_FULL, DAY_NAMES_SHORT as DAY_SHORT } from '../constants'
 import { getMondayOfWeek as getMondayOf } from '../utils/dates'
@@ -87,6 +88,20 @@ function autoClassify(id='', label='') {
   const s=(id+' '+label).toLowerCase()
   for (const r of TASK_RULES) if (r.match.some(k=>s.includes(k))) return r.quadrant
   return 'Q2'
+}
+function inferCreatedDate(t) {
+  if (t.createdDate) return t.createdDate
+  try {
+    const ts = parseInt(t.id.replace('extra-', ''), 10)
+    if (!isNaN(ts) && ts > 1e12) return new Date(ts).toDateString()
+  } catch {}
+  return null
+}
+function isExtraVisibleOnDate(t, dateStr) {
+  if (t.recurrence === 'daily') return true
+  if (t.recurrence === 'weekly') return t.createdDow === new Date(dateStr + 'T12:00:00').getDay()
+  const eff = inferCreatedDate(t)
+  return eff ? eff === new Date(dateStr + 'T12:00:00').toDateString() : true
 }
 function detectConflicts(blocks) {
   const ids=new Set()
@@ -241,7 +256,10 @@ function autoScheduleDay(dateStr, settings, household, dailyTargets={}) {
         bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border,type:'study',duration:task.duration||estimateDuration(task.label,q),subjectKey:group.subjectKey})
     })
   })
-  loadExtra().filter(t=>!done[t.id]&&!elsewhere.has(t.label)).forEach(t=>{
+  loadExtra().filter(t=>{
+    if(done[t.id]||elsewhere.has(t.label)) return false
+    return isExtraVisibleOnDate(t, dateStr)
+  }).forEach(t=>{
     const q=matOvr[t.id]||autoClassify(t.id,t.label)
     const qe=q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪'
     byQ[q].push({label:t.label,emoji:qe,color:'#71717a',bg:'#fafafa',border:'#d4d4d8',type:'manual',duration:estimateDuration(t.label,q)})
@@ -365,7 +383,10 @@ async function aiSchedule(dateStr, settings, household, apiKey) {
       tasks.push({id:task.id,label:task.label,quadrant:q,subject:subj?.name||'',emoji:subj?.emoji||'📚',color:subj?.color||STYLES.study.color,bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border})
     })
   })
-  loadExtra().filter(t=>!done[t.id]&&!elsewhere.has(t.label)).forEach(t=>{
+  loadExtra().filter(t=>{
+    if(done[t.id]||elsewhere.has(t.label)) return false
+    return isExtraVisibleOnDate(t, dateStr)
+  }).forEach(t=>{
     const q=matOvr[t.id]||autoClassify(t.id,t.label)
     tasks.push({id:t.id,label:t.label,quadrant:q,subject:'',emoji:q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪',color:'#71717a',bg:'#fafafa',border:'#d4d4d8'})
   })
@@ -680,6 +701,7 @@ function FocusOverlay({ block, currentMins, onClose, onStartPomodoro }) {
 // ══════════════════════════════════════════════════════════════════════════════
 export default function SchedulePage({ settings, setSettings, onNavigate, onStartPomodoro }) {
   const today = new Date(); today.setHours(0,0,0,0)
+  const [gcalRev, setGcalRev]             = useState(0)
   const [selDate, setSelDate]             = useState(today)
   const dateStr                           = toDateStr(selDate)
   const [blocks, setBlocksRaw]            = useState([])
@@ -710,6 +732,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
   const [weekPanelDragTask, setWeekPanelDragTask] = useState(null)
   const [dragOverWeekDay, setDragOverWeekDay]     = useState(null)
   const [weekBlockRev, setWeekBlockRev]           = useState(0)
+  const [fillPromptDismissed, setFillPromptDismissed] = useState(false)
   const history    = useRef([])
   const redoStack  = useRef([])
   const dragState  = useRef(null)
@@ -734,11 +757,22 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
 
   const setHousehold = h => { setHouseholdRaw(h); saveHousehold(h) }
 
+  // When blocks change, clear scheduledTo on extra tasks that no longer have a block here
+  useEffect(() => {
+    const blockTitles = new Set(blocks.map(b => b.title).filter(Boolean))
+    const extras = loadExtra()
+    if (!extras.some(t => t.scheduledTo === dateStr && !blockTitles.has(t.label))) return
+    ls.set('extra-tasks', extras.map(t =>
+      t.scheduledTo === dateStr && !blockTitles.has(t.label) ? { ...t, scheduledTo: null } : t
+    ))
+  }, [blocks, dateStr])
+
   // Load on date change
   useEffect(() => {
     setBlocksRaw(loadBlocks(dateStr))
     setDoneBlocksRaw(loadDoneBlocks(dateStr))
     setAiError(null); setDragBlocks(null); setDraggingId(null)
+    setFillPromptDismissed(false)
     history.current=[]; redoStack.current=[]; setCanUndo(false); setCanRedo(false)
     try { setSummary(localStorage.getItem(`schedule-summary-${dateStr}`)||'') } catch { setSummary('') }
     notified.current=new Set()
@@ -750,6 +784,15 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     return ()=>clearInterval(id)
   }, [])
 
+  // Auto-sync Google Calendar on mount so deleted events are removed
+  useEffect(() => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('gcal-config') || '{"urls":[]}')
+      if (!cfg.urls?.length) return
+      syncAllCalendars(cfg.urls).then(() => setGcalRev(v => v + 1)).catch(() => {})
+    } catch {}
+  }, [])
+
   // Notification permission
   useEffect(() => {
     if (typeof Notification!=='undefined'&&Notification.permission!=='granted') Notification.requestPermission()
@@ -757,8 +800,8 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
 
   // Block notifications
   const classBlocks  = useMemo(()=>getClassBlocks(dateStr,settings),[dateStr,settings])
-  const gcalTimed    = useMemo(()=>getTimedGCal(dateStr,settings),[dateStr,settings])
-  const allDayEvents = useMemo(()=>getAllDayEvents(dateStr),[dateStr])
+  const gcalTimed    = useMemo(()=>getTimedGCal(dateStr,settings),[dateStr,settings,gcalRev]) // eslint-disable-line
+  const allDayEvents = useMemo(()=>getAllDayEvents(dateStr),[dateStr,gcalRev]) // eslint-disable-line
 
   const allBlocks = useMemo(()=>{
     const classRanges=classBlocks.map(b=>({start:b.startMins,end:b.endMins}))
@@ -788,14 +831,15 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       const z=e.key==='z'||e.key==='Z', y=e.key==='y'||e.key==='Y'
       if(!(e.ctrlKey||e.metaKey))return
       if(z&&!e.shiftKey){
+        e.preventDefault()
         const prev=history.current.pop(); if(!prev)return
-        setBlocksRaw(cur=>{redoStack.current.push(cur);setCanRedo(true);return cur})
-        setBlocksRaw(prev); saveBlocks(dateStr,prev)
+        setBlocksRaw(cur=>{ redoStack.current.push(cur); setCanRedo(true); saveBlocks(dateStr,prev); return prev })
         setCanUndo(history.current.length>0)
       } else if(y||(z&&e.shiftKey)){
+        e.preventDefault()
         const next=redoStack.current.pop(); if(!next)return
-        history.current.push(next); setBlocksRaw(next); saveBlocks(dateStr,next)
-        setCanUndo(true); setCanRedo(redoStack.current.length>0)
+        setBlocksRaw(cur=>{ history.current.push(cur); setCanUndo(true); saveBlocks(dateStr,next); return next })
+        setCanRedo(redoStack.current.length>0)
       }
     }
     window.addEventListener('keydown',handler)
@@ -823,13 +867,13 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     const ds=toDateStr(d)
     const has=loadBlocks(ds).length>0||getClassBlocks(ds,settings).length>0||getTimedGCal(ds,settings).length>0
     return {date:d,dateStr:ds,hasBlocks:has,label:DAY_SHORT[(i+1)%7]}
-  }),[selDate,settings,gcalTimed]) // eslint-disable-line
+  }),[selDate,settings,gcalRev]) // eslint-disable-line
   const weekStats = useMemo(()=>weekDays.map((d,i)=>{
     const ds=toDateStr(d)
     const all=[...getClassBlocks(ds,settings),...loadBlocks(ds),...getTimedGCal(ds,settings)]
     const mins=all.filter(b=>b.startMins!=null).reduce((s,b)=>s+(b.endMins-b.startMins),0)
     return {label:DAY_SHORT[(i+1)%7],mins}
-  }),[weekDays,settings])
+  }),[weekDays,settings,gcalRev]) // eslint-disable-line
   const weekDayBlocks = useMemo(()=>{
     if(!weekView)return{}
     return Object.fromEntries(weekDays.map(d=>{
@@ -838,7 +882,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       const fg=gc.filter(g=>!cr.some(r=>g.startMins<r.end&&g.endMins>r.start))
       return [ds,[...cb,...fg,...sb].sort((a,b)=>(a.startMins||0)-(b.startMins||0))]
     }))
-  },[weekView,weekDays,settings,weekBlockRev])
+  },[weekView,weekDays,settings,weekBlockRev,gcalRev]) // eslint-disable-line
 
   // Unscheduled tasks for sidebar drag
   const unscheduledTasks = useMemo(()=>{
@@ -854,9 +898,13 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         tasks.push({id:task.id,label:task.label,quadrant:q,emoji:subj?.emoji||'📚',color:subj?.color||STYLES.study.color,bg:subj?.color?`${subj.color}1a`:STYLES.study.bg,border:subj?.color?`${subj.color}66`:STYLES.study.border,type:'study',duration:task.duration||estimateDuration(task.label,q),subjectKey:group.subjectKey})
       })
     })
-    loadExtra().filter(t=>!done[t.id]&&!scheduledTitles.has(t.label)).forEach(t=>{
+    loadExtra().filter(t=>{
+      if(done[t.id]||scheduledTitles.has(t.label)) return false
+      if(t.scheduledTo&&t.scheduledTo!==dateStr) return false
+      return isExtraVisibleOnDate(t, dateStr)
+    }).forEach(t=>{
       const q=matOvr[t.id]||autoClassify(t.id,t.label)
-      tasks.push({id:t.id,label:t.label,quadrant:q,emoji:q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪',color:'#71717a',bg:'#fafafa',border:'#d4d4d8',type:'manual',duration:estimateDuration(t.label,q)})
+      tasks.push({id:t.id,label:t.label,quadrant:q,emoji:q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪',color:'#71717a',bg:'#fafafa',border:'#d4d4d8',type:'manual',isExtra:true,duration:estimateDuration(t.label,q)})
     })
     return tasks.sort((a,b)=>a.quadrant.localeCompare(b.quadrant))
   },[dow,settings,blocks,dateStr])
@@ -906,7 +954,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         setBlocks([...kept,...filtered])
       }finally{setAiLoading(false)}
     }else{
-      const gen=autoScheduleDay(dateStr,settings,household)
+      const gen=autoScheduleDay(dateStr,settings,household,dailyTargets)
       const existing = fillOnly ? blocks.filter(b=>b.startMins!=null) : []
       const filtered = fillOnly ? gen.filter(g=>!existing.some(e=>g.startMins<e.endMins&&g.endMins>e.startMins)) : gen
       setBlocks([...kept,...filtered])
@@ -1065,6 +1113,10 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     }
     if (sidebarDragTask.color) { b.color = sidebarDragTask.color; b.bg = sidebarDragTask.bg; b.border = sidebarDragTask.border }
     setBlocks([...blocks, b])
+    if (sidebarDragTask.isExtra) {
+      const extras = ls.get('extra-tasks', [])
+      ls.set('extra-tasks', extras.map(t => t.id === sidebarDragTask.id ? { ...t, scheduledTo: dateStr } : t))
+    }
     setSidebarDragTask(null); setDragOverMins(null)
   }
 
@@ -1090,6 +1142,11 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
     const updated = [...existing, newBlock]
     saveBlocks(ds, updated)
     if (ds === dateStr) setBlocks(updated)
+    // Mark extra task as scheduled so it stops floating in the extras panel
+    if (task.id?.startsWith('extra-') || task.isExtra) {
+      const extras = ls.get('extra-tasks', [])
+      ls.set('extra-tasks', extras.map(t => t.id === task.id ? { ...t, scheduledTo: ds } : t))
+    }
     setWeekBlockRev(r => r + 1)
   }, [settings, wakeMin, sleepMin, dateStr, setBlocks])
 
@@ -1152,6 +1209,20 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
         <div style={{background:'var(--red-50)',border:'1px solid #fca5a5',borderRadius:'var(--r)',padding:'8px 14px',marginBottom:12,fontSize:'var(--t-caption)',color:'#dc2626',display:'flex',alignItems:'center',gap:8}}>
           ⚠️ {aiError}
           <button onClick={()=>setAiError(null)} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'#dc2626',fontSize:'1rem'}}>✕</button>
+        </div>
+      )}
+
+      {/* ─── Fill prompt: unscheduled tasks exist while schedule already has blocks ─── */}
+      {!fillPromptDismissed && unscheduledTasks.length > 0 && blocks.length > 0 && !weekView && (
+        <div style={{background:'#fdf2f7',border:'1.5px solid #fbcfe8',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span style={{fontSize:'var(--t-body)'}}>📋</span>
+          <span style={{fontSize:'var(--t-caption)',fontWeight:600,color:'#be185d',flex:1}}>
+            {unscheduledTasks.length} tarefa{unscheduledTasks.length!==1?'s':''} adicionada{unscheduledTasks.length!==1?'s':''} em Hoje ainda não {unscheduledTasks.length!==1?'estão':'está'} no horário.
+          </span>
+          <Btn onClick={()=>{ handleAutoSchedule(true); setFillPromptDismissed(true) }} solid color="#db2777" bg="#fdf2f7" style={{padding:'5px 12px'}}>
+            <Zap size={12}/> Preencher espaços livres
+          </Btn>
+          <button onClick={()=>setFillPromptDismissed(true)} style={{background:'none',border:'none',cursor:'pointer',color:'#db2777',opacity:0.5,padding:2,fontSize:'1rem',lineHeight:1}}>✕</button>
         </div>
       )}
 
@@ -1271,6 +1342,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:14}}>
             {weekDays.map(d=>{
               const ds=toDateStr(d)
+              const isToday=ds===toDateStr(today)
               const scheduledTitles=new Set((weekDayBlocks[ds]||[]).map(b=>b.title))
               const done=loadDone(ds)
               const groups=getTasksForDay(d.getDay(),settings)
@@ -1292,8 +1364,33 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                   }
                 })
               })
-              const pending=tasks.filter(t=>!t.isDone&&!t.isScheduled)
-              if(tasks.length===0)return null
+              // Include extras: today gets unscheduled extras; other days get extras scheduledTo that day
+              const allExtras=loadExtra()
+              const extraTasks=allExtras
+                .filter(t=>{
+                  if(done[t.id]||scheduledTitles.has(t.label)) return false
+                  if(!isExtraVisibleOnDate(t, ds)) return false
+                  if(isToday) return !t.scheduledTo  // today: show floating extras
+                  return t.scheduledTo===ds           // other days: show extras assigned here
+                })
+                .map(t=>{
+                  const q=matOvr[t.id]||autoClassify(t.id,t.label)
+                  const subj=t.subjectKey?subjects.find(s=>s.key===t.subjectKey):null
+                  const byEmoji=!subj&&t.emoji?subjects.find(s=>s.emoji===t.emoji):null
+                  const resolvedSubj=subj||byEmoji
+                  return {
+                    id:t.id, label:t.label, isExtra:true,
+                    emoji:t.emoji||resolvedSubj?.emoji||'📌',
+                    color:resolvedSubj?.color||STYLES.manual.color,
+                    bg:resolvedSubj?.color?`${resolvedSubj.color}1a`:STYLES.manual.bg,
+                    border:resolvedSubj?.color?`${resolvedSubj.color}44`:STYLES.manual.border,
+                    type:'manual', subjectKey:resolvedSubj?.key||null,
+                    duration:t.duration||estimateDuration(t.label,q),
+                    isDone:false, isScheduled:false,
+                  }
+                })
+              const pending=[...tasks.filter(t=>!t.isDone&&!t.isScheduled), ...extraTasks]
+              if(tasks.length===0&&extraTasks.length===0)return null
               const isT=ds===toDateStr(today)
               return (
                 <div key={ds}>

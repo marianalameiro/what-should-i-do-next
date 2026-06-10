@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, session, Tray, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, session, Tray, nativeImage, shell } = require('electron')
+const nodemailer = require('nodemailer')
 const path = require('path')
 const fs = require('fs')
 
@@ -11,6 +12,8 @@ if (!gotTheLock) {
 let mainWindow
 let trayWindow
 let tray
+let lastWidgetWriteLogKey = null
+let lastDoneQueueLogKey = null
 
 function createTray() {
   try {
@@ -19,13 +22,14 @@ function createTray() {
     const iconPath = path.join(__dirname, 'trayIcon.png')
     const icon = nativeImage.createFromPath(iconPath)
     if (icon.isEmpty()) throw new Error(`Ícone do tray não encontrado: ${iconPath}`)
+    icon.setTemplateImage(true)
 
     tray = new Tray(icon)
     tray.setToolTip('What Should I Do Next')
 
     trayWindow = new BrowserWindow({
-      width: 260,
-      height: 380,
+      width: 280,
+      height: 420,
       show: false,
       frame: false,
       fullscreenable: false,
@@ -192,9 +196,11 @@ app.whenReady().then(() => {
   try {
     fs.watch(app.getPath('home'), (event, filename) => {
       if (filename !== '.wsidnext-done-queue.json') return
+      console.log('[Electron] fs.watch detetou mudança na done-queue:', { event, filename })
       clearTimeout(watchDebounce)
       watchDebounce = setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
+          console.log('[Electron] A enviar done-queue-changed para o renderer')
           mainWindow.webContents.send('done-queue-changed')
         }
       }, 100)
@@ -238,6 +244,20 @@ app.whenReady().then(() => {
   ipcMain.handle('export-widget-data', (event, data) => {
     try {
       fs.writeFileSync(getWidgetDataPath(), JSON.stringify(data, null, 2), 'utf8')
+      const logKey = JSON.stringify({
+        date: data?.date,
+        totalCount: data?.totalCount,
+        doneCount: data?.doneCount,
+      })
+      if (logKey !== lastWidgetWriteLogKey) {
+        console.log('[Electron] Widget data gravada:', {
+          path: getWidgetDataPath(),
+          date: data?.date,
+          totalCount: data?.totalCount,
+          doneCount: data?.doneCount,
+        })
+        lastWidgetWriteLogKey = logKey
+      }
       return true
     } catch {
       return false
@@ -248,16 +268,48 @@ app.whenReady().then(() => {
     try {
       const qf = path.join(app.getPath('home'), '.wsidnext-done-queue.json')
       if (!fs.existsSync(qf)) return []
-      return JSON.parse(fs.readFileSync(qf, 'utf8'))
-    } catch { return [] }
+      const queue = JSON.parse(fs.readFileSync(qf, 'utf8'))
+      const logKey = JSON.stringify(queue || [])
+      if (logKey !== lastDoneQueueLogKey) {
+        console.log('[Electron] Done queue lida:', { path: qf, items: queue.length })
+        lastDoneQueueLogKey = logKey
+      }
+      return queue
+    } catch (error) {
+      console.log('[Electron] Erro a ler done-queue:', error?.message)
+      return []
+    }
+  })
+
+  ipcMain.handle('open-external', (event, url) => {
+    shell.openExternal(url)
+  })
+
+  ipcMain.handle('send-email', async (event, { to, subject, body, smtpUser, smtpPass }) => {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: { user: smtpUser, pass: smtpPass },
+    })
+    await transporter.sendMail({
+      from: smtpUser,
+      to,
+      subject,
+      text: body,
+    })
   })
 
   ipcMain.handle('clear-done-queue', () => {
     try {
       const qf = path.join(app.getPath('home'), '.wsidnext-done-queue.json')
       fs.writeFileSync(qf, '[]', 'utf8')
+      console.log('[Electron] Done queue limpa:', { path: qf })
       return true
-    } catch { return false }
+    } catch (error) {
+      console.log('[Electron] Erro a limpar done-queue:', error?.message)
+      return false
+    }
   })
 
   ipcMain.handle('export-pomodoro-state', (event, data) => {

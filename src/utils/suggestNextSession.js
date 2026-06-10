@@ -18,7 +18,8 @@ import { getMondayOfWeek, daysUntil } from './dates'
  * @param {number}  opts.weeksRemaining
  */
 export function suggestNextSession({ subjects, sessions, exams, weeklyTargets, mood, todaySchedule, done, getWeeklyGoal, weeksRemaining }) {
-  if (!subjects || subjects.length === 0) return []
+  subjects = (subjects || []).filter(s => !s.closed)
+  if (subjects.length === 0) return []
 
   const monday  = getMondayOfWeek(new Date())
   const todayDow = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d })()
@@ -44,9 +45,10 @@ export function suggestNextSession({ subjects, sessions, exams, weeklyTargets, m
 
     const deficit = Math.max(0, expectedNow - weekHrs)
 
-    // ── Nearest exam for this subject ─────────────────────────────────────
+    // ── Nearest exam for this subject (presentations excluded) ────────────
+    const EXAM_TYPES = ['Exame', 'Teste', 'Mini-teste']
     const nextExam = exams
-      .filter(e => e.date && daysUntil(e.date) >= 0 &&
+      .filter(e => e.date && EXAM_TYPES.includes(e.type) && daysUntil(e.date) > 0 &&
         (e.subject?.toLowerCase() === s.name?.toLowerCase() || e.subject === s.key))
       .map(e => ({ ...e, days: daysUntil(e.date) }))
       .sort((a, b) => a.days - b.days)[0]

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Clock, Flame, ChevronRight, Target, TrendingUp, TrendingDown, Minus, RotateCcw } from 'lucide-react'
 import { getTasksForDay } from '../data/schedule'
 import { getMondayOfWeek, daysUntil } from '../utils/dates'
 import { suggestNextSession } from '../utils/suggestNextSession'
 import { computeWeeklyStreak } from '../utils/streak'
+import { withoutClosedSubjects } from '../utils/subjects'
 import { SundayPlanning } from './SundayPlanning'
 
 const TODAY = new Date()
@@ -14,6 +15,39 @@ function loadDone()          { try { return JSON.parse(localStorage.getItem(`tas
 function loadTargets()       { try { return JSON.parse(localStorage.getItem('subject-targets')) || {} } catch { return {} } }
 function loadWeeklyTargets() { try { return JSON.parse(localStorage.getItem('weekly-targets')) || {} } catch { return {} } }
 function loadExtra()         { try { return JSON.parse(localStorage.getItem('extra-tasks')) || [] } catch { return [] } }
+function loadMatrix()        { try { return JSON.parse(localStorage.getItem('eisenhower-overrides')) || {} } catch { return {} } }
+
+const QUADRANT_PRIORITY = { Q1: 0, Q2: 1, Q3: 2, Q4: 3 }
+
+function rankTasks(todayGroups, extra, done, matrix, subjects) {
+  const candidates = []
+  for (const g of todayGroups) {
+    const subj = subjects.find(s => s.key === g.subjectKey)
+    for (const t of g.tasks) {
+      if (!done[t.id]) candidates.push({ ...t, subjectKey: g.subjectKey, subjectName: subj?.name, subjectEmoji: subj?.emoji, subjectColor: subj?.color })
+    }
+  }
+  for (const t of extra) {
+    if (!done[t.id]) {
+      let subj = null
+      if (t.subjectKey) subj = subjects.find(s => s.key === t.subjectKey)
+      if (!subj && t.emoji) subj = subjects.find(s => s.emoji === t.emoji)
+      candidates.push({
+        ...t,
+        subjectKey:   subj?.key   ?? null,
+        subjectName:  subj?.name  ?? null,
+        subjectEmoji: subj?.emoji ?? t.emoji ?? null,
+        subjectColor: subj?.color ?? null,
+      })
+    }
+  }
+  candidates.sort((a, b) => {
+    const qa = QUADRANT_PRIORITY[matrix[a.id]] ?? 4
+    const qb = QUADRANT_PRIORITY[matrix[b.id]] ?? 4
+    return qa - qb
+  })
+  return candidates
+}
 
 const MOODS = [
   { emoji: '😴', label: 'Cansada' },
@@ -57,11 +91,13 @@ function greetingText() {
   return 'Boa noite'
 }
 
+const EXAM_TYPES = ['Exame', 'Teste', 'Mini-teste']
+
 function scoreSubject(s, sessions, exams, weeklyGoal) {
   const hrs  = hoursForSubjectThisWeek(sessions, s.key)
   const tNow = weeklyGoal * (weekDayNumber() / 7)
   const status = trackStatus(hrs, tNow)
-  const nextE  = exams.find(e => e.date && daysUntil(e.date) >= 0 &&
+  const nextE  = exams.find(e => e.date && EXAM_TYPES.includes(e.type) && daysUntil(e.date) >= 0 &&
     (e.subject?.toLowerCase() === s.name?.toLowerCase() || e.subject === s.key))
   const examDays = nextE ? daysUntil(nextE.date) : 999
   let score = 0
@@ -75,9 +111,10 @@ function scoreSubject(s, sessions, exams, weeklyGoal) {
 
 
 export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
-  const subjects = settings?.subjects || []
+  const subjects = (settings?.subjects || []).filter(s => !s.closed)
   const [mood, setMood] = useState('😊')
   const [suggIdx, setSuggIdx] = useState(0)
+  const [topTaskIdx, setTopTaskIdx] = useState(0)
   const [weeklyTargets, setWeeklyTargets] = useState(loadWeeklyTargets)
   const [editTarget, setEditTarget] = useState(null)
   const [targetDraft, setTargetDraft] = useState('')
@@ -97,8 +134,17 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
     return settings?.hoursGoal / Math.max(1, subjects.length) || 110
   }
 
-  const sessions = loadSessions()
-  const exams    = loadExams()
+  const [sessions, setSessions] = useState(loadSessions)
+
+  useEffect(() => {
+    const refresh = () => setSessions(loadSessions())
+    const handler = (e) => { if (e.key === 'study-sessions') refresh() }
+    window.addEventListener('storage', handler)
+    const id = setInterval(refresh, 3000)
+    return () => { window.removeEventListener('storage', handler); clearInterval(id) }
+  }, [])
+
+  const exams    = withoutClosedSubjects(loadExams(), settings)
   const done     = loadDone()
 
   const weekHrs  = hoursThisWeek(sessions)
@@ -121,15 +167,26 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
     tasks: g.tasks.map(t => ({ ...t, done: !!done[t.id] })),
   }))
   const allExtra      = loadExtra()
-  const pendingExtra  = allExtra.filter(t => !done[t.id])
-  const allTodayCount = todaySchedule.flatMap(g => g.tasks).length + allExtra.length
+  // Filter extras to only those relevant for today (same logic as DailyView)
+  const inferExtraDate = (t) => {
+    if (t.createdDate) return t.createdDate
+    try { const ts = parseInt(t.id.replace('extra-', ''), 10); if (!isNaN(ts) && ts > 1e12) return new Date(ts).toDateString() } catch {}
+    return null
+  }
+  const todayExtraTasks = allExtra.filter(t => {
+    if (t.recurrence === 'daily') return true
+    if (t.recurrence === 'weekly') return TODAY.getDay() === t.createdDow
+    const eff = inferExtraDate(t)
+    return eff ? TODAY.toDateString() === eff : true
+  })
+  const pendingExtra  = todayExtraTasks.filter(t => !done[t.id])
+  const allTodayCount = todaySchedule.flatMap(g => g.tasks).length + todayExtraTasks.length
   const allDoneCount  = todaySchedule.flatMap(g => g.tasks).filter(t => done[t.id]).length +
-                        (allExtra.length - pendingExtra.length)
+                        (todayExtraTasks.length - pendingExtra.length)
   const todayPct      = allTodayCount === 0 ? 100 : Math.round(allDoneCount / allTodayCount * 100)
 
   // Next exam
-  const REAL_EXAM_TYPES = ['Exame', 'Teste', 'Mini-teste']
-  const nextExam = exams.filter(e => daysUntil(e.date) >= 0 && REAL_EXAM_TYPES.includes(e.type))
+  const nextExam = exams.filter(e => daysUntil(e.date) > 0 && EXAM_TYPES.includes(e.type))
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0]
   const urgency = nextExam ? (() => {
     const d = daysUntil(nextExam.date)
@@ -138,11 +195,67 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
     return { color: 'var(--green-500)', label: 'Com tempo' }
   })() : null
 
-  // On-track (top 3 by urgency)
   const onTrackRows = subjects.length > 0 ? subjects.map(s => {
     const wGoal = weeklyTargets[s.key] !== undefined ? parseFloat(weeklyTargets[s.key]) : getTarget(s.key) / WEEKS_REMAINING
     return scoreSubject(s, sessions, exams, wGoal)
-  }).sort((a, b) => b.score - a.score).slice(0, 3) : []
+  }).sort((a, b) => b.score - a.score) : []
+
+  const matrix    = loadMatrix()
+  const allTasks  = rankTasks(todayGroups, todayExtraTasks, done, matrix, subjects)
+  const topTask   = allTasks.length > 0 ? allTasks[topTaskIdx % allTasks.length] : null
+
+  // Daily study suggestion per subject — weekly-based
+  // Distributes the weekly deficit over the remaining days of the week
+  const DAYS_LEFT_IN_WEEK = (() => {
+    const dow = TODAY.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
+    return dow === 0 ? 1 : (8 - dow)
+  })()
+
+  const dailySuggestions = (() => {
+    if (subjects.length === 0) return []
+    const monday = getMondayOfWeek(TODAY)
+    const todayStr = TODAY.toDateString()
+    return subjects.map(s => {
+      const weeklyGoal = weeklyTargets[s.key] !== undefined
+        ? parseFloat(weeklyTargets[s.key])
+        : getTarget(s.key) / WEEKS_REMAINING
+      if (!weeklyGoal || weeklyGoal <= 0) return null
+      const subSessions = sessions.filter(x => x.subject === s.key)
+      const doneThisWeekBeforeToday = subSessions
+        .filter(x => new Date(x.date) >= monday && x.date !== todayStr)
+        .reduce((a, b) => a + (b.hours || 0), 0)
+      const doneToday = subSessions.filter(x => x.date === todayStr).reduce((a, b) => a + (b.hours || 0), 0)
+      // Remaining weekly hours (deficit included), distributed over days left in the week
+      const weeklyRemaining = Math.max(0, weeklyGoal - doneThisWeekBeforeToday)
+      const dailyQuota = weeklyRemaining / DAYS_LEFT_IN_WEEK
+      const rawStillNeeded = Math.max(0, dailyQuota - doneToday)
+      const stillNeeded = parseFloat(rawStillNeeded.toFixed(1))
+      return { ...s, doneToday: parseFloat(doneToday.toFixed(1)), dailyQuota: parseFloat(dailyQuota.toFixed(1)), stillNeeded, rawStillNeeded }
+    }).filter(s => s && s.rawStillNeeded > 0.05).sort((a, b) => b.stillNeeded - a.stillNeeded)
+  })()
+
+  // Spaced repetition: topics due for review today
+  const reviewDue = useMemo(() => {
+    if (subjects.length === 0) return []
+    try {
+      const topicsMap = JSON.parse(localStorage.getItem('topics') || '{}')
+      const INTERVALS = { unknown: 1, little: 3, good: 7, great: 14 }
+      const todayD = new Date(); todayD.setHours(0, 0, 0, 0)
+      const due = []
+      subjects.forEach(s => {
+        const subTopics = topicsMap[s.key] || topicsMap[s.name] || []
+        subTopics.forEach(t => {
+          if (!t.lastReviewed) return // never reviewed yet — not due
+          const last = new Date(t.lastReviewed); last.setHours(0, 0, 0, 0)
+          const daysSince = Math.round((todayD - last) / 86400000)
+          if (daysSince >= (INTERVALS[t.confidence || 'unknown'])) {
+            due.push({ ...t, subjectName: s.name, subjectEmoji: s.emoji, subjectColor: s.color })
+          }
+        })
+      })
+      return due
+    } catch { return [] }
+  }, [subjects])
 
   // Hero suggestions (ranked list from utility)
   const suggestions = suggestNextSession({
@@ -191,44 +304,52 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
           marginBottom: 14,
         }}>
           {/* Label row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ marginBottom: 16 }}>
             <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 700, letterSpacing: '0.04em' }}>
               PRÓXIMOS 90 MIN
             </p>
-            {/* Energy picker — inline, compact */}
-            <div style={{ display: 'flex', gap: 3 }}>
-              {MOODS.map(m => (
-                <button key={m.emoji} onClick={() => { setMood(m.emoji); setSuggIdx(0) }} title={m.label} style={{
-                  width: 28, height: 28, borderRadius: 'var(--r-pill)', cursor: 'pointer', fontSize: '0.85rem',
-                  border: `1.5px solid ${mood === m.emoji ? heroColor : 'transparent'}`,
-                  background: mood === m.emoji ? heroColor + '22' : 'transparent',
-                  opacity: mood === m.emoji ? 1 : 0.5,
-                }}>{m.emoji}</button>
-              ))}
-            </div>
           </div>
 
-          {/* Subject */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-            <span style={{ fontSize: '2.2rem', lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{suggestion.emoji}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p
-                onClick={() => onOpenCadeira?.(suggestion.key)}
-                style={{ fontSize: 'var(--t-heading)', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -0.5, lineHeight: 1.1, marginBottom: 8, cursor: onOpenCadeira ? 'pointer' : 'default' }}
-              >
-                {suggestion.name}
-              </p>
-              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-500)', lineHeight: 1.55, margin: 0 }}>
-                {suggestion.reason}
-              </p>
+          {/* Main content: task (if exists) or subject suggestion */}
+          {topTask ? (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+              <span style={{ fontSize: '2.2rem', lineHeight: 1, flexShrink: 0, marginTop: 2 }}>
+                {topTask.subjectEmoji || suggestion.emoji}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 'var(--t-heading)', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -0.5, lineHeight: 1.2, marginBottom: 6 }}>
+                  {topTask.label}
+                </p>
+                <p style={{ fontSize: 'var(--t-body)', color: topTask.subjectColor || heroColor, fontWeight: 600, margin: 0 }}>
+                  {topTask.subjectName || suggestion?.name}
+                  {matrix[topTask.id] && <span style={{ marginLeft: 6, opacity: 0.6, fontWeight: 500 }}>· {matrix[topTask.id]}</span>}
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+              <span style={{ fontSize: '2.2rem', lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{suggestion.emoji}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p
+                  onClick={() => onOpenCadeira?.(suggestion.key)}
+                  style={{ fontSize: 'var(--t-heading)', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -0.5, lineHeight: 1.1, marginBottom: 8, cursor: onOpenCadeira ? 'pointer' : 'default' }}
+                >
+                  {suggestion.name}
+                </p>
+                <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-500)', lineHeight: 1.55, margin: 0 }}>
+                  {suggestion.reason}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
               onClick={() => {
-                localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey: suggestion.key, title: suggestion.name }))
+                const prefillKey = topTask ? topTask.subjectKey : suggestion.key
+                const prefillTitle = topTask ? topTask.label : suggestion.name
+                localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey: prefillKey, title: prefillTitle }))
                 onNavigate('hours')
               }}
               style={{
@@ -239,9 +360,15 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
             >
               Começar Pomodoro
             </button>
-            {suggestions.length > 1 && (
+            {(allTasks.length > 1 || suggestions.length > 1) && (
               <button
-                onClick={() => setSuggIdx(i => (i + 1) % suggestions.length)}
+                onClick={() => {
+                  if (allTasks.length > 1) {
+                    setTopTaskIdx(i => (i + 1) % allTasks.length)
+                  } else {
+                    setSuggIdx(i => (i + 1) % suggestions.length)
+                  }
+                }}
                 style={{
                   padding: '10px 16px', borderRadius: 'var(--r)',
                   border: `1.5px solid ${heroColorBorder}`,
@@ -289,7 +416,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
               </div>
               <div className="stat-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {totalHrs.toFixed(0)}h no total
-                {trendPct !== null && (
+                {trendPct !== null && [0, 6].includes(TODAY.getDay()) && (
                   <span style={{
                     fontSize: 'var(--t-caption)', fontWeight: 700, padding: '1px 6px', borderRadius: 50,
                     background: trendPct >= 0 ? 'var(--green-50)' : 'var(--red-50)',
@@ -444,64 +571,61 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
         </div>
       )}
 
-      {/* ── 5. HOJE ────────────────────────────────────────────────── */}
-      <div className="card dashboard-full" style={{ marginBottom: 14 }}>
-        <div className="card-header">
-          <span className="card-title">Hoje</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {allTodayCount > 0 && (
-              <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: todayPct === 100 ? 'var(--green-500)' : 'var(--gray-400)' }}>
-                {allDoneCount}/{allTodayCount}{todayPct === 100 ? ' 🎉' : ''}
-              </span>
-            )}
-            <button onClick={() => onNavigate('today')} style={{ fontSize: 'var(--t-caption)', color: 'var(--rose-400)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
-              Ver tudo
+      {/* ── 4b. SUGESTÃO DIÁRIA ────────────────────────────────────── */}
+      {dailySuggestions.length > 0 && (
+        <div className="card dashboard-full" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <span className="card-title">🎯 Para estar no ritmo hoje</span>
+            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{DAYS_LEFT_IN_WEEK} {DAYS_LEFT_IN_WEEK === 1 ? 'dia restante' : 'dias restantes'} na semana</span>
+          </div>
+          <div className="card-body" style={{ padding: '8px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {dailySuggestions.slice(0, 4).map(s => (
+              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{s.emoji}</span>
+                <span style={{ flex: 1, fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)' }}>{s.name}</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: s.stillNeeded >= 3 ? '#dc2626' : s.stillNeeded >= 1.5 ? '#d97706' : '#16a34a' }}>
+                    {s.stillNeeded}h
+                  </span>
+                  {s.doneToday > 0 && (
+                    <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', display: 'block', lineHeight: 1 }}>
+                      {s.doneToday}h feitas hoje
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── 4c. REVISÕES ─────────────────────────────────────────── */}
+      {reviewDue.length > 0 && (
+        <div className="card dashboard-full" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <span className="card-title">📖 Rever hoje</span>
+            <button onClick={() => onNavigate('exams')} style={{ fontSize: 'var(--t-caption)', color: 'var(--rose-400)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+              Ver tópicos →
             </button>
           </div>
-        </div>
-
-        {allTodayCount > 0 && (
-          <div style={{ height: 3, background: 'var(--gray-100)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${todayPct}%`, background: todayPct === 100 ? 'var(--green-400)' : 'var(--accent-300)', transition: 'width 0.4s' }} />
+          <div className="card-body" style={{ padding: '8px 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {reviewDue.slice(0, 5).map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '1rem', flexShrink: 0 }}>{t.subjectEmoji}</span>
+                <span style={{ flex: 1, fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)' }}>{t.name}</span>
+                <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: (t.subjectColor || '#e5e7eb') + '22', color: t.subjectColor || 'var(--gray-500)' }}>
+                  {t.subjectName}
+                </span>
+              </div>
+            ))}
+            {reviewDue.length > 5 && (
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '2px 0 0' }}>
+                +{reviewDue.length - 5} mais para rever
+              </p>
+            )}
           </div>
-        )}
-
-        <div className="card-body" style={{ padding: '8px 20px' }}>
-          {allTodayCount === 0 ? (
-            <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', padding: '8px 0' }}>
-              Sem tarefas agendadas para hoje 🎉
-            </p>
-          ) : (
-            <>
-              {todayGroups.filter(g => g.tasks.length > 0).slice(0, 3).map(g => (
-                <div key={g.subjectKey} style={{ marginBottom: 10 }}>
-                  {g.subject && (
-                    <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: g.subject.color || 'var(--gray-400)', marginBottom: 4 }}>
-                      {g.subject.emoji} {g.subject.name}
-                    </p>
-                  )}
-                  {g.tasks.slice(0, 3).map(t => (
-                    <div key={t.id} className="today-task-row" style={{ padding: '5px 0' }}>
-                      <div className={`today-task-check${t.done ? ' done' : ''}`}>
-                        {t.done && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      </div>
-                      <span className={`today-task-label${t.done ? ' done' : ''}`}>{t.label}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              {pendingExtra.slice(0, 2).map(t => (
-                <div key={t.id} className="today-task-row" style={{ padding: '5px 0' }}>
-                  <div className="today-task-check">
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><circle cx="4" cy="4" r="3" stroke="var(--gray-300)" strokeWidth="1.5"/></svg>
-                  </div>
-                  <span className="today-task-label">{t.label}</span>
-                </div>
-              ))}
-            </>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Weekly planning — always accessible */}
       <button onClick={() => setShowSundayPlanning(true)} className="btn btn-ghost"

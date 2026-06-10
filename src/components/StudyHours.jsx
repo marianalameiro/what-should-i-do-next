@@ -192,7 +192,7 @@ function statusIcon(done, target) {
 }
 
 export default function StudyHours({ settings }) {
-  const subjects = settings?.subjects || []
+  const subjects = (settings?.subjects || []).filter(s => !s.closed)
 
   const periodEnd     = settings?.periodEnd ? new Date(settings.periodEnd) : new Date(Date.now() + 120 * 86400000)
   const DAYS_REMAINING  = Math.max(0, Math.round((periodEnd - TODAY) / 86400000))

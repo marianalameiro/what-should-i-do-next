@@ -18,17 +18,18 @@ class ErrorBoundary extends Component {
     return this.props.children
   }
 }
-import { BookOpen, ListTodo, CalendarDays, FolderKanban, Target, Timer, NotebookPen, BarChart3, Settings, LogOut, ChevronLeft, ChevronRight, GraduationCap } from 'lucide-react'
+import { BookOpen, ListTodo, CalendarDays, FolderKanban, Target, Timer, NotebookPen, BarChart3, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from "./lib/supabase"
 import { useUserSettings } from "./hooks/useUserSettings"
 import { getTasksForDay, getSubjectsMap } from "./data/schedule"
+import { CalendarEmoji } from "./components/CalendarEmoji"
 
 import LoginPage from "./components/LoginPage"
 import Onboarding from "./components/Onboarding"
 
 const SettingsPage  = lazy(() => import("./components/SettingsPage"))
-const Dashboard     = lazy(() => import("./components/Dashboard"))
 const CadeiraPage   = lazy(() => import("./components/CadeiraPage"))
+const Dashboard     = lazy(() => import("./components/Dashboard"))
 const DailyView     = lazy(() => import("./components/DailyView"))
 const ExamsView     = lazy(() => import("./components/ExamsView"))
 const StudyHours    = lazy(() => import("./components/StudyHours"))
@@ -38,19 +39,48 @@ const StatsPage     = lazy(() => import("./components/StatsPage"))
 const SchedulePage  = lazy(() => import("./components/SchedulePage"))
 
 const TABS = [
-  { id: "dashboard", icon: BookOpen,     label: "Diário de Bordo" },
-  { id: "today",     icon: ListTodo,     label: "Hoje" },
-  { id: "schedule",  icon: CalendarDays, label: "Horário" },
-  { id: "projects",  icon: FolderKanban, label: "Projetos" },
-  { id: "exams",     icon: Target,       label: "Exames" },
-  { id: "hours",     icon: Timer,        label: "Horas & Metas" },
-  { id: "diary",     icon: NotebookPen,  label: "Reflexões" },
-  { id: "stats",     icon: BarChart3,    label: "Estatísticas" },
-  { id: "settings",  icon: Settings,     label: "Definições" },
+  { id: "dashboard", icon: BookOpen,     label: "Diário de Bordo", emoji: "🏠" },
+  { id: "today",     icon: ListTodo,     label: "Hoje",            emoji: "📋" },
+  { id: "schedule",  icon: CalendarDays, label: "Horário",         emoji: <CalendarEmoji /> },
+  { id: "projects",  icon: FolderKanban, label: "Projetos",        emoji: "🗂️" },
+  { id: "exams",     icon: Target,       label: "Exames",          emoji: "🎯" },
+  { id: "hours",     icon: Timer,        label: "Horas & Metas",   emoji: "⏱️" },
+  { id: "diary",     icon: NotebookPen,  label: "Reflexões",       emoji: "✏️" },
+  { id: "stats",     icon: BarChart3,    label: "Estatísticas",    emoji: "📊" },
+  { id: "settings",  icon: Settings,     label: "Definições",      emoji: "⚙️" },
 ]
 
+function readLSArray(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch {
+    return []
+  }
+}
+
+function readLSObject(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '{}')
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+function readLSValue(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw == null) return fallback
+    const parsed = JSON.parse(raw)
+    return parsed ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
 function QuickLogModal({ onClose, settings }) {
-  const subjects = settings?.subjects || []
+  const subjects = (settings?.subjects || []).filter(s => !s.closed)
   const [subject, setSubject] = useState(subjects[0]?.key || '')
   const [hours, setHours]     = useState('')
   const [mins, setMins]       = useState('0')
@@ -63,7 +93,7 @@ function QuickLogModal({ onClose, settings }) {
     const total = parseFloat((h + m / 60).toFixed(2))
     if (total <= 0 || !subject) return
     try {
-      const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+      const sessions = readLSArray('study-sessions')
       sessions.unshift({ id: Date.now(), subject, hours: total, notes, mood: '😊', date: new Date().toDateString(), startTime: null })
       localStorage.setItem('study-sessions', JSON.stringify(sessions))
     } catch {}
@@ -132,7 +162,7 @@ function CommandPalette({ onClose, onNavigate }) {
     const q = query.toLowerCase()
     const results = []
     try {
-      const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+      const sessions = readLSArray('study-sessions')
       sessions.filter(s => (s.subject || '').toLowerCase().includes(q) || (s.notes || '').toLowerCase().includes(q))
         .slice(0, 4).forEach(s => results.push({
           id: `session-${s.id}`, emoji: '⏱️', type: 'session',
@@ -141,7 +171,8 @@ function CommandPalette({ onClose, onNavigate }) {
         }))
     } catch {}
     try {
-      const exams = JSON.parse(localStorage.getItem('exams') || '[]')
+      const closedNames = new Set((readLSObject('user-settings').subjects || []).filter(s => s.closed).map(s => s.name))
+      const exams = readLSArray('exams').filter(e => !closedNames.has(e.subject))
       exams.filter(e => (e.subject || '').toLowerCase().includes(q) || (e.type || '').toLowerCase().includes(q))
         .slice(0, 3).forEach(e => results.push({
           id: `exam-${e.id}`, emoji: '🎯', type: 'exam',
@@ -150,7 +181,7 @@ function CommandPalette({ onClose, onNavigate }) {
         }))
     } catch {}
     try {
-      const diary = JSON.parse(localStorage.getItem('diary-entries') || '[]')
+      const diary = readLSArray('diary-entries')
       diary.filter(e => (e.text || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q))
         .slice(0, 3).forEach(e => results.push({
           id: `diary-${e.id}`, emoji: '📓', type: 'diary',
@@ -246,21 +277,64 @@ function CommandPalette({ onClose, onNavigate }) {
   )
 }
 
+function PomodoroSubjectPicker({ subjects, onClose, onSelect }) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: 'var(--white)', borderRadius: 'var(--r)', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: 360, maxWidth: '90vw' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--gray-100)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <p style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--gray-900)', margin: 0 }}>⏱ Começar Pomodoro</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', fontSize: '1.1rem', lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {subjects.map(s => (
+            <button
+              key={s.key}
+              onClick={() => onSelect(s)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '11px 14px', borderRadius: 'var(--r)',
+                border: `1.5px solid ${s.color || 'var(--gray-200)'}22`,
+                background: (s.color || '#f43f5e') + '0f',
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = (s.color || '#f43f5e') + '22'}
+              onMouseLeave={e => e.currentTarget.style.background = (s.color || '#f43f5e') + '0f'}
+            >
+              <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{s.emoji}</span>
+              <span style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-900)' }}>{s.name}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ padding: '10px 22px', borderTop: '1px solid var(--gray-100)', fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
+          Pressiona <kbd style={{ fontFamily: 'monospace', fontSize: '0.68rem', fontWeight: 700, background: 'var(--gray-100)', border: '1px solid var(--gray-300)', borderRadius: 4, padding: '1px 5px' }}>ESC</kbd> para fechar
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ShortcutsModal({ onClose }) {
   const GROUPS = [
     {
       title: 'Navegação',
       items: [
         { keys: ['1–9'],    desc: 'Ir para página' },
-        { keys: ['J'],      desc: 'Descer na lista' },
-        { keys: ['K'],      desc: 'Subir na lista' },
+        { keys: ['D'],      desc: 'Descer na página' },
+        { keys: ['U'],      desc: 'Subir na página' },
         { keys: ['ESC'],    desc: 'Fechar / voltar' },
       ],
     },
     {
       title: 'Sessões & Timer',
       items: [
-        { keys: ['N'],      desc: 'Nova sessão de estudo' },
+        { keys: ['S'],      desc: 'Iniciar Pomodoro (escolher cadeira)' },
         { keys: ['Space'],  desc: 'Pausar / retomar Pomodoro' },
       ],
     },
@@ -315,7 +389,7 @@ const isElectron = typeof window !== "undefined" && window.electronAPI
 
 export default function App() {
   const [tab, setTab] = useState("dashboard")
-  const [selectedCadeira, setSelectedCadeira] = useState(null)
+  const [activeSubjectKey, setActiveSubjectKey] = useState(null)
   const [session, setSession] = useState(undefined)
   const [dragging, setDragging] = useState(false)
   const [pomodoroTick, setPomodoroTick] = useState(null)
@@ -393,6 +467,7 @@ export default function App() {
   // ───────── Keyboard navigation + shortcuts
   const [cmdOpen, setCmdOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [pomodoroPickerOpen, setPomodoroPickerOpen] = useState(false)
   const scrollPositions = useRef({})
 
   useEffect(() => {
@@ -403,9 +478,9 @@ export default function App() {
         return
       }
       if (e.key === 'Escape') {
+        if (activeSubjectKey) { setActiveSubjectKey(null); return }
         setCmdOpen(false)
         setShortcutsOpen(false)
-        setSelectedCadeira(null)
         return
       }
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
@@ -413,23 +488,23 @@ export default function App() {
 
       // 1-9 navigation
       const map = { '1':'dashboard','2':'today','3':'schedule','4':'projects','5':'exams','6':'hours','7':'diary','8':'stats','9':'settings' }
-      if (map[e.key]) { e.preventDefault(); setTab(map[e.key]); setSelectedCadeira(null); return }
+      if (map[e.key]) { e.preventDefault(); setTab(map[e.key]); return }
 
-      // N — nova sessão
-      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setQuickLog(true); return }
+      // S — iniciar Pomodoro (selecionar cadeira)
+      if (e.key === 's' || e.key === 'S') { e.preventDefault(); setPomodoroPickerOpen(true); return }
 
       // ? — shortcuts sheet
       if (e.key === '?') { e.preventDefault(); setShortcutsOpen(v => !v); return }
 
-      // J / K — scroll main content
-      if (e.key === 'j' || e.key === 'J') { e.preventDefault(); document.querySelector('.main-content')?.scrollBy({ top: 80, behavior: 'smooth' }); return }
-      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); document.querySelector('.main-content')?.scrollBy({ top: -80, behavior: 'smooth' }); return }
+      // D / U — scroll main content
+      if (e.key === 'd' || e.key === 'D') { e.preventDefault(); document.querySelector('.main-content')?.scrollBy({ top: 80, behavior: 'smooth' }); return }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); document.querySelector('.main-content')?.scrollBy({ top: -80, behavior: 'smooth' }); return }
 
       // Space — toggle Pomodoro
       if (e.key === ' ') {
         e.preventDefault()
         try {
-          const state = JSON.parse(localStorage.getItem('pomodoro-timer-state') || 'null')
+          const state = readLSValue('pomodoro-timer-state', null)
           if (state) {
             const now = Date.now()
             let updated
@@ -445,26 +520,27 @@ export default function App() {
             window.dispatchEvent(new StorageEvent('storage', { key: 'pomodoro-timer-state', newValue: JSON.stringify(updated) }))
           } else {
             setTab('hours')
-            setSelectedCadeira(null)
           }
         } catch {}
       }
     }
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
-  }, [])
+  }, [activeSubjectKey])
+
+  // ───────── Clear subject detail view on tab change
+  useEffect(() => { setActiveSubjectKey(null) }, [tab])
 
   // ───────── Scroll position preservation
   useEffect(() => {
-    const key = selectedCadeira || tab
     const el = document.querySelector('.main-content')
     if (!el) return
-    const saved = scrollPositions.current[key]
+    const saved = scrollPositions.current[tab]
     if (saved != null) requestAnimationFrame(() => { const e = document.querySelector('.main-content'); if (e) e.scrollTop = saved })
-    const onScroll = () => { scrollPositions.current[key] = document.querySelector('.main-content')?.scrollTop || 0 }
+    const onScroll = () => { scrollPositions.current[tab] = document.querySelector('.main-content')?.scrollTop || 0 }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [tab, selectedCadeira])
+  }, [tab])
 
   // ───────── Broadcast channel listeners
   useEffect(() => {
@@ -483,14 +559,14 @@ export default function App() {
   useEffect(() => {
     function readTodayHours() {
       try {
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const sessions = readLSArray('study-sessions')
         const todayStr = new Date().toDateString()
         return parseFloat(sessions.filter(s => s.date === todayStr).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
       } catch { return 0 }
     }
     const interval = setInterval(() => {
       try {
-        const raw = JSON.parse(localStorage.getItem('pomodoro-timer-state'))
+        const raw = readLSValue('pomodoro-timer-state', null)
         if (raw?.running) {
           const elapsed = raw.savedAt ? Math.floor((Date.now() - raw.savedAt) / 1000) : 0
           const live = raw.isStopwatch
@@ -515,7 +591,7 @@ export default function App() {
     // ── Helpers ──────────────────────────────────────────────────────────────
     function getNotifSettings() {
       try {
-        const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+        const s = readLSObject('user-settings')
         return { wakeHour: parseInt((s.wakeTime || '08:00').split(':')[0], 10),
                  sleepHour: parseInt((s.sleepTime || '23:00').split(':')[0], 10),
                  n: { studyProgress: true, streakRisk: true, weeklyReview: true, longBreak: true, examDay: true,
@@ -526,7 +602,7 @@ export default function App() {
 
     function getTodayStats() {
       try {
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const sessions = readLSArray('study-sessions')
         const todayStr = new Date().toDateString()
         const hours = parseFloat(sessions.filter(s => s.date === todayStr).reduce((a, b) => a + (b.hours || 0), 0).toFixed(2))
         const days = new Set(sessions.map(s => s.date))
@@ -541,6 +617,19 @@ export default function App() {
 
     function notify(title, body) {
       try { new Notification(title, { body, silent: false }) } catch {}
+    }
+
+    function getWeeklyGoalTotal() {
+      try {
+        const weeklyTargets = readLSObject('weekly-targets')
+        const perSubject = Object.values(weeklyTargets).reduce((a, b) => a + Number(b || 0), 0)
+        if (perSubject > 0) return perSubject
+        const s = readLSObject('user-settings')
+        if (!s.hoursGoal) return 0
+        const end = s.periodEnd ? new Date(s.periodEnd) : null
+        const weeksLeft = end ? Math.max(1, (end - new Date()) / (7 * 86400000)) : 17
+        return s.hoursGoal / weeksLeft
+      } catch { return 0 }
     }
 
     // ── Study progress (hourly) ───────────────────────────────────────────────
@@ -583,7 +672,7 @@ export default function App() {
       if (localStorage.getItem(key)) return
       localStorage.setItem(key, '1')
       try {
-        const reviews = JSON.parse(localStorage.getItem('weekly-reviews') || '[]')
+        const reviews = readLSArray('weekly-reviews')
         const thisMonday = new Date(); thisMonday.setHours(0,0,0,0); thisMonday.setDate(thisMonday.getDate() - thisMonday.getDay() + 1)
         const doneThisWeek = reviews.some(r => r.generatedOn && new Date(r.generatedOn) >= thisMonday)
         if (!doneThisWeek) notify('📓 Review semanal', 'Ainda não fizeste a review desta semana. Dedica 5 minutos antes de dormir!')
@@ -591,19 +680,26 @@ export default function App() {
     }
 
     // ── Exam notifications: countdown days + on the day itself ───────────────
+    const EXAM_TYPES = ['Exame', 'Teste', 'Mini-teste']
     function checkExams(todayStr) {
       const key = `exam-notified-${todayStr}`
       if (localStorage.getItem(key)) return
       localStorage.setItem(key, '1')
       try {
-        const exams = JSON.parse(localStorage.getItem('exams') || '[]')
+        const closedNames = new Set((readLSObject('user-settings').subjects || []).filter(s => s.closed).map(s => s.name))
+        const exams = readLSArray('exams').filter(e => !closedNames.has(e.subject))
         const today = new Date(); today.setHours(0, 0, 0, 0)
         exams.forEach(exam => {
           if (!exam.date) return
           const d = new Date(exam.date + 'T12:00:00')
           const days = Math.round((d - today) / 86400000)
-          if (days === 0) notify(`🎯 Hoje tens ${exam.type || 'exame'}!`, `${exam.subject} — bom trabalho, vai confiante!`)
-          else if ([1, 3, 7].includes(days)) notify(`📅 ${exam.subject}`, days === 1 ? `Amanhã tens ${exam.type}!` : `${exam.type} daqui a ${days} dias`)
+          if (EXAM_TYPES.includes(exam.type)) {
+            if (days === 0) notify(`🎯 Hoje tens ${exam.type}!`, `${exam.subject} — bom trabalho, vai confiante!`)
+            else if ([1, 3, 7].includes(days)) notify(`📅 ${exam.subject}`, days === 1 ? `Amanhã tens ${exam.type}!` : `${exam.type} daqui a ${days} dias`)
+          } else if (exam.type === 'Apresentação') {
+            if (days === 0) notify(`🎤 Hoje tens apresentação!`, `${exam.subject} — boa sorte!`)
+            else if (days === 1) notify(`🎤 ${exam.subject}`, `Amanhã tens apresentação!`)
+          }
         })
       } catch {}
     }
@@ -611,7 +707,7 @@ export default function App() {
     // ── Long break after 4 pomodoros ────────────────────────────────────────
     function checkLongBreak(todayStr) {
       try {
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const sessions = readLSArray('study-sessions')
         const today = new Date().toDateString()
         const key = `long-break-notif-count-${todayStr}`
         const lastCount = parseInt(localStorage.getItem(key) || '0', 10)
@@ -631,7 +727,7 @@ export default function App() {
     // ── Long session (3h+ today without 30min gap) ───────────────────────────
     function checkLongSession(todayStr) {
       try {
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const sessions = readLSArray('study-sessions')
         const today = new Date().toDateString()
         const todaySessions = sessions.filter(s => s.date === today && s.startTime)
           .sort((a, b) => a.startTime - b.startTime)
@@ -656,7 +752,8 @@ export default function App() {
       if (localStorage.getItem(key)) return
       localStorage.setItem(key, '1')
       try {
-        const exams = JSON.parse(localStorage.getItem('exams') || '[]')
+        const closedNames = new Set((readLSObject('user-settings').subjects || []).filter(s => s.closed).map(s => s.name))
+        const exams = readLSArray('exams').filter(e => !closedNames.has(e.subject))
         const today = new Date(); today.setHours(0, 0, 0, 0)
         const soon = exams
           .filter(e => { if (!e.date) return false; const d = new Date(e.date + 'T12:00:00'); const days = Math.round((d - today) / 86400000); return days >= 0 && days <= 3 })
@@ -677,8 +774,8 @@ export default function App() {
       const key = `daily-goal-reached-${todayStr}`
       if (localStorage.getItem(key)) return
       try {
-        const targets = JSON.parse(localStorage.getItem('daily-study-targets') || '{}')
-        const total = Object.values(targets).reduce((a, b) => a + Number(b || 0), 0)
+        const weeklyTotal = getWeeklyGoalTotal()
+        const total = weeklyTotal / 7
         if (total <= 0 || hours < total) return
         localStorage.setItem(key, '1')
         notify('🎯 Meta do dia atingida!', `Estudaste ${hours.toFixed(1)}h hoje — objetivo cumprido! Mereces descansar.`)
@@ -692,10 +789,10 @@ export default function App() {
       if (localStorage.getItem(key)) return
       localStorage.setItem(key, '1')
       try {
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
-        const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+        const sessions = readLSArray('study-sessions')
+        const s = readLSObject('user-settings')
         const today = new Date(); today.setHours(0, 0, 0, 0)
-        const neglected = (s.subjects || []).find(sub => {
+        const neglected = (s.subjects || []).filter(sub => !sub.closed).find(sub => {
           const last = sessions.filter(ses => ses.subject === sub.name || ses.subject === sub.key).sort((a, b) => new Date(b.date) - new Date(a.date))[0]
           if (!last) return false
           return Math.round((today - new Date(last.date)) / 86400000) >= 5
@@ -711,11 +808,9 @@ export default function App() {
       if (localStorage.getItem(key)) return
       localStorage.setItem(key, '1')
       try {
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
-        const targets = JSON.parse(localStorage.getItem('daily-study-targets') || '{}')
-        const totalDaily = Object.values(targets).reduce((a, b) => a + Number(b || 0), 0)
-        if (totalDaily <= 0) return
-        const weeklyTarget = totalDaily * 5
+        const weeklyTarget = getWeeklyGoalTotal()
+        if (weeklyTarget <= 0) return
+        const sessions = readLSArray('study-sessions')
         const monday = new Date(); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - monday.getDay() + 1)
         const weekHours = sessions.filter(s => new Date(s.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
         const pct = Math.round((weekHours / weeklyTarget) * 100)
@@ -766,15 +861,17 @@ export default function App() {
   // ───────── Widget ↔ task list sync (always active, regardless of page)
   useEffect(() => {
     if (!window.electronAPI) return
+    let lastExportLogKey = null
+    let lastQueueLogKey = null
 
     function buildWidgetData() {
       try {
-        const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
+        const s = readLSObject('user-settings')
         const today = new Date(); today.setHours(0, 0, 0, 0)
         const todayStr = today.toDateString()
         const todayISO = today.toISOString().split('T')[0]
-        const todayDone = JSON.parse(localStorage.getItem(`tasks-${todayStr}`) || '{}')
-        const extraTasks = JSON.parse(localStorage.getItem('extra-tasks') || '[]')
+        const todayDone = readLSObject(`tasks-${todayStr}`)
+        const extraTasks = readLSArray('extra-tasks')
         const subjectsMap = getSubjectsMap()
         const taskGroups = getTasksForDay(today.getDay())
         const todayDow = today.getDay()
@@ -787,16 +884,24 @@ export default function App() {
             done: !!todayDone[t.id], isExtra: false,
           }))),
           ...extraTasks
-            .filter(t => !t.recurrence || t.recurrence === 'daily' || (t.recurrence === 'weekly' && t.createdDow === todayDow))
+            .filter(t => {
+              if (t.recurrence === 'daily') return true
+              if (t.recurrence === 'weekly') return t.createdDow === todayDow
+              const eff = t.createdDate || (() => {
+                try { const ts = parseInt(t.id.replace('extra-', ''), 10); return !isNaN(ts) && ts > 1e12 ? new Date(ts).toDateString() : null } catch { return null }
+              })()
+              return eff ? eff === todayStr : true
+            })
             .map(t => ({ id: t.id, label: t.label, subjectKey: null, subjectName: 'Extra', subjectColor: '#e5e7eb', subjectEmoji: '📌', done: !!todayDone[t.id], isExtra: true })),
         ]
-        const rawExams = JSON.parse(localStorage.getItem('exams') || '[]')
+        const closedNames = new Set((s.subjects || []).filter(sub => sub.closed).map(sub => sub.name))
+        const rawExams = readLSArray('exams').filter(e => !closedNames.has(e.subject))
         const subsByName = Object.fromEntries((s.subjects || []).map(sub => [sub.name, sub]))
         const upcomingExams = rawExams
           .filter(e => e.date >= todayISO && e.actualGrade == null)
           .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
           .map(e => { const sub = subsByName[e.subject] || {}; const days = Math.round((new Date(e.date + 'T12:00:00') - today) / 86400000); return { subject: e.subject, type: e.type || 'Exame', date: e.date, days, color: sub.color || '#e5e7eb', emoji: sub.emoji || '📝' } })
-        const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+        const sessions = readLSArray('study-sessions')
         const todayHours = parseFloat(sessions.filter(s => s.date === todayStr).reduce((sum, s) => sum + (parseFloat(s.hours) || 0), 0).toFixed(1))
         return { date: todayStr, tasks: allTasks, doneCount: allTasks.filter(t => t.done).length, totalCount: allTasks.length, upcomingExams, todayHours }
       } catch { return null }
@@ -804,37 +909,81 @@ export default function App() {
 
     // Widget → app: process done-queue, write to localStorage, notify DailyView
     const processQueue = async () => {
+      console.log('[WidgetSync] processQueue() chamado')
       const queue = await window.electronAPI.readDoneQueue().catch(() => [])
+      const queueLogKey = JSON.stringify(queue || [])
+      if (queueLogKey !== lastQueueLogKey) {
+        console.log('[WidgetSync] Queue lida da widget:', queue)
+        lastQueueLogKey = queueLogKey
+      }
       if (!queue?.length) return
-      const today = new Date().toDateString()
-      const ids = queue.filter(e => e.date === today).map(e => e.id)
-      if (!ids.length) return
+      const todayDate = new Date()
+      const today = todayDate.toDateString()
+      const sameDay = (raw) => {
+        if (!raw) return false
+        if (raw === today) return true
+        const parsed = new Date(raw)
+        return !Number.isNaN(parsed.getTime()) && parsed.toDateString() === today
+      }
+      let ids = queue.filter(e => sameDay(e.date)).map(e => e.id)
+      if (!ids.length) ids = queue.map(e => e.id).filter(Boolean)
+      console.log('[WidgetSync] IDs da queue para hoje:', ids)
+      if (!ids.length) {
+        console.log('[WidgetSync] Queue sem IDs validos, a limpar')
+        await window.electronAPI.clearDoneQueue().catch(() => {})
+        return
+      }
       const key = `tasks-${today}`
       try {
-        const existing = JSON.parse(localStorage.getItem(key) || '{}')
+        const existing = readLSObject(key)
         ids.forEach(id => { existing[id] = true })
         localStorage.setItem(key, JSON.stringify(existing))
+        console.log('[WidgetSync] localStorage atualizado a partir da widget:', key, existing)
         window.dispatchEvent(new StorageEvent('storage', { key, newValue: JSON.stringify(existing) }))
+        window.dispatchEvent(new CustomEvent('wsidnext-tasks-updated', {
+          detail: { key, tasks: existing },
+        }))
       } catch {}
       await window.electronAPI.clearDoneQueue().catch(() => {})
       // Export updated data to widget immediately
       const data = buildWidgetData()
-      if (data) window.electronAPI.exportWidgetData(data).catch(() => {})
+      if (data) {
+        console.log('[WidgetSync] Re-export after queue:', {
+          date: data.date,
+          totalCount: data.totalCount,
+          doneCount: data.doneCount,
+        })
+        window.electronAPI.exportWidgetData(data).catch(() => {})
+      }
     }
 
     // App → widget: export periodically (catches changes on any page)
     const exportWidget = () => {
       const data = buildWidgetData()
-      if (data) window.electronAPI.exportWidgetData(data).catch(() => {})
+      if (data) {
+        const exportLogKey = JSON.stringify({
+          date: data.date,
+          totalCount: data.totalCount,
+          doneCount: data.doneCount,
+        })
+        if (exportLogKey !== lastExportLogKey) {
+          console.log('[WidgetSync] Export app -> widget:', {
+            date: data.date,
+            totalCount: data.totalCount,
+            doneCount: data.doneCount,
+          })
+          lastExportLogKey = exportLogKey
+        }
+        window.electronAPI.exportWidgetData(data).catch(() => {})
+      }
     }
 
     processQueue()
     exportWidget()
+    console.log('[WidgetSync] Listener onDoneQueueChanged registado')
     window.electronAPI.onDoneQueueChanged(processQueue)
 
-    // Re-exporta dados a cada 30s — garante que horas de estudo, exames, etc.
-    // ficam atualizados na widget mesmo que o utilizador esteja noutras páginas
-    const exportInterval = setInterval(exportWidget, 30_000)
+    const exportInterval = setInterval(exportWidget, 5_000)
 
     // Polling da queue a cada 8s como fallback — apanha escritas que o fs.watch
     // possa ter perdido (ex: substituição atómica em algumas versões do macOS)
@@ -850,7 +999,7 @@ export default function App() {
   // ───────── Quick links (sidebar footer)
   useEffect(() => {
     const load = () => {
-      try { setQuickLinks(JSON.parse(localStorage.getItem('quick-links') || '[]')) } catch {}
+      try { setQuickLinks(readLSArray('quick-links')) } catch {}
     }
     load()
     window.addEventListener('storage', load)
@@ -909,6 +1058,17 @@ export default function App() {
       {quickLog && (
         <QuickLogModal onClose={() => setQuickLog(false)} settings={settings} />
       )}
+      {pomodoroPickerOpen && (
+        <PomodoroSubjectPicker
+          subjects={(settings?.subjects || []).filter(s => !s.closed)}
+          onClose={() => setPomodoroPickerOpen(false)}
+          onSelect={s => {
+            localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey: s.key, title: s.name }))
+            setTab('hours')
+            setPomodoroPickerOpen(false)
+          }}
+        />
+      )}
       <aside
         className="sidebar"
         onMouseDown={onSidebarMouseDown}
@@ -961,44 +1121,16 @@ export default function App() {
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`nav-btn ${tab === t.id && !selectedCadeira ? "active" : ""}`}
-              onClick={() => { setTab(t.id); setSelectedCadeira(null) }}
+              className={`nav-btn ${tab === t.id ? "active" : ""}`}
+              onClick={() => setTab(t.id)}
               title={settings?.sidebarCompact ? t.label : undefined}
               style={settings?.sidebarCompact ? { justifyContent: 'center', padding: '10px 0' } : undefined}
             >
-              <t.icon size={16} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>{t.emoji}</span>
               {!settings?.sidebarCompact && t.label}
             </button>
           ))}
         </nav>
-
-        {/* ── Cadeiras ── */}
-        {(settings?.subjects || []).length > 0 && (
-          <div style={{ marginTop: 4 }}>
-            {!settings?.sidebarCompact && (
-              <p className="sidebar-section" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <GraduationCap size={11} strokeWidth={2} /> Cadeiras
-              </p>
-            )}
-            {(settings?.subjects || []).map(s => (
-              <button
-                key={s.key}
-                className={`nav-btn ${selectedCadeira === s.key ? 'active' : ''}`}
-                onClick={() => setSelectedCadeira(s.key)}
-                title={settings?.sidebarCompact ? s.name : undefined}
-                style={{
-                  ...(settings?.sidebarCompact ? { justifyContent: 'center', padding: '10px 0' } : {}),
-                  borderLeft: selectedCadeira === s.key ? `3px solid ${s.color || 'var(--rose-400)'}` : '3px solid transparent',
-                }}
-              >
-                <span style={{ fontSize: '0.95rem', lineHeight: 1, flexShrink: 0 }}>{s.emoji}</span>
-                {!settings?.sidebarCompact && (
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
 
         {pomodoroTick && (() => {
           const isStopwatch = pomodoroTick.isStopwatch
@@ -1137,42 +1269,45 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main-content fade-in" key={selectedCadeira || tab}>
-        <ErrorBoundary key={selectedCadeira || tab}>
+      <main className="main-content fade-in" key={tab}>
+        <ErrorBoundary key={tab}>
           <Suspense fallback={
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--gray-100)', borderTopColor: 'var(--rose-400)', animation: 'spin 0.7s linear infinite' }} />
             </div>
           }>
-          {selectedCadeira ? (
-            <CadeiraPage
-              subjectKey={selectedCadeira}
-              settings={settings}
-              onBack={() => setSelectedCadeira(null)}
-              onNavigate={(t) => { setTab(t); setSelectedCadeira(null) }}
-            />
-          ) : (
             <>
-              {tab === "dashboard" && <Dashboard onNavigate={(t) => { setTab(t); setSelectedCadeira(null) }} settings={settings} onOpenCadeira={setSelectedCadeira} />}
-              {tab === "today" && <DailyView settings={settings} />}
-              {tab === "schedule" && (
-                <SchedulePage
+              {activeSubjectKey ? (
+                <CadeiraPage
+                  subjectKey={activeSubjectKey}
                   settings={settings}
                   setSettings={setSettings}
-                  onNavigate={(t) => { setTab(t); setSelectedCadeira(null) }}
-                  onStartPomodoro={({ subjectKey, title }) => {
-                    localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey, title }))
-                  }}
+                  onBack={() => setActiveSubjectKey(null)}
+                  onNavigate={setTab}
                 />
+              ) : (
+                <>
+                  {tab === "dashboard" && <Dashboard onNavigate={setTab} settings={settings} onOpenCadeira={setActiveSubjectKey} />}
+                  {tab === "today" && <DailyView settings={settings} />}
+                  {tab === "schedule" && (
+                    <SchedulePage
+                      settings={settings}
+                      setSettings={setSettings}
+                      onNavigate={setTab}
+                      onStartPomodoro={({ subjectKey, title }) => {
+                        localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey, title }))
+                      }}
+                    />
+                  )}
+                  {tab === "projects" && <ProjectsPage settings={settings} />}
+                  {tab === "exams" && <ExamsView settings={settings} />}
+                  {tab === "hours" && <StudyHours settings={settings} />}
+                  {tab === "diary" && <StudyDiary />}
+                  {tab === "stats" && <StatsPage settings={settings} onOpenCadeira={setActiveSubjectKey} />}
+                  {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
+                </>
               )}
-              {tab === "projects" && <ProjectsPage settings={settings} />}
-              {tab === "exams" && <ExamsView settings={settings} />}
-              {tab === "hours" && <StudyHours settings={settings} />}
-              {tab === "diary" && <StudyDiary />}
-              {tab === "stats" && <StatsPage settings={settings} onOpenCadeira={setSelectedCadeira} />}
-              {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
             </>
-          )}
           </Suspense>
         </ErrorBoundary>
       </main>

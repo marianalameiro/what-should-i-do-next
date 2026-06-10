@@ -14,85 +14,13 @@ const EVENT_TYPES = {
   google:       { label: 'Google Cal',     color: '#1a73e8', bg: '#e8f0fe', emoji: '📆' },
 }
 
+import { syncAllCalendars } from '../utils/gcalSync'
+
 // ── Google Calendar ICS ───────────────────────────────────────────────────────
 function loadGCalConfig() { try { return JSON.parse(localStorage.getItem('gcal-config')) || { urls: [] } } catch { return { urls: [] } } }
 function saveGCalConfig(c) { localStorage.setItem('gcal-config', JSON.stringify(c)) }
 function loadGCalEvents() { try { return JSON.parse(localStorage.getItem('gcal-events')) || [] } catch { return [] } }
 function saveGCalEvents(e) { localStorage.setItem('gcal-events', JSON.stringify(e)) }
-
-function parseICSDate(val) {
-  // Handles: 20260321T100000Z  20260321T100000  20260321
-  const str = val.replace(/Z$/, '')
-  const parts = str.split('T')
-  const datePart = parts[0]
-  if (datePart.length !== 8) return { date: null, time: null }
-  const date = `${datePart.slice(0,4)}-${datePart.slice(4,6)}-${datePart.slice(6,8)}`
-  let time = null
-  if (parts[1]) {
-    const t = parts[1]
-    time = `${t.slice(0,2)}:${t.slice(2,4)}`
-  }
-  return { date, time }
-}
-
-function parseICS(text) {
-  const events = []
-  // Unfold lines (continuation lines start with space/tab)
-  const unfolded = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n[ \t]/g, '')
-  const lines = unfolded.split('\n')
-  let inEvent = false
-  let cur = {}
-  for (const line of lines) {
-    if (line.trim() === 'BEGIN:VEVENT') { inEvent = true; cur = {}; continue }
-    if (line.trim() === 'END:VEVENT') {
-      if (cur.date && cur.title) events.push(cur)
-      inEvent = false; continue
-    }
-    if (!inEvent) continue
-    const colonIdx = line.indexOf(':')
-    if (colonIdx === -1) continue
-    const rawKey = line.slice(0, colonIdx).toUpperCase()
-    const val    = line.slice(colonIdx + 1).trim()
-    if (rawKey === 'SUMMARY')                      cur.title       = val.replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\')
-    if (rawKey.startsWith('DTSTART'))            { const p = parseICSDate(val); cur.date = p.date; cur.startTime = p.time }
-    if (rawKey.startsWith('DTEND'))              { const p = parseICSDate(val); cur.endTime = p.time }
-    if (rawKey === 'DESCRIPTION')                  cur.description = val.replace(/\\n/g, ' ').replace(/\\,/g, ',')
-    if (rawKey === 'LOCATION')                     cur.location    = val
-    if (rawKey === 'UID')                          cur.uid         = val
-  }
-  return events
-}
-
-async function fetchICSUrl(url) {
-  // Google's ICS URLs need webcal:// → https://
-  const normalized = url.replace(/^webcal:\/\//i, 'https://')
-  const res = await fetch(normalized)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.text()
-}
-
-async function syncAllCalendars(urls) {
-  const allEvents = []
-  for (const { url, label } of urls) {
-    try {
-      const text   = await fetchICSUrl(url)
-      const parsed = parseICS(text)
-      parsed.forEach(e => allEvents.push({
-        id:        `gcal-${e.uid || Math.random()}`,
-        date:      e.date,
-        title:     e.title,
-        subtitle:  label || 'Google Calendar',
-        notes:     [e.description, e.location].filter(Boolean).join(' · '),
-        type:      'google',
-        source:    'google',
-        startTime: e.startTime || null,
-        endTime:   e.endTime   || null,
-      }))
-    } catch {}
-  }
-  saveGCalEvents(allEvents)
-  return allEvents
-}
 
 const DAY_NAMES = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -106,14 +34,20 @@ function loadSessions() { try { return JSON.parse(localStorage.getItem('study-se
 function loadManualEvents() { try { return JSON.parse(localStorage.getItem('calendar-events')) || [] } catch { return [] } }
 function saveManualEvents(e) { localStorage.setItem('calendar-events', JSON.stringify(e)) }
 
-function toDateStr(date) { return date.toISOString().split('T')[0] }
+function toDateStr(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+}
 
 function getAllEvents(googleEvents = []) {
   const events = [...googleEvents]
 
-  // Exams
+  // Exams — closed subjects must not appear anywhere
+  const closedNames = (() => {
+    try { return new Set((JSON.parse(localStorage.getItem('user-settings') || '{}').subjects || []).filter(s => s.closed).map(s => s.name)) }
+    catch { return new Set() }
+  })()
   loadExams().forEach(e => {
-    if (!e.date) return
+    if (!e.date || closedNames.has(e.subject)) return
     events.push({
       id: `exam-${e.id}`,
       date: e.date,

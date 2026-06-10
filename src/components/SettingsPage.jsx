@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, ArchiveRestore } from 'lucide-react'
 import { smartEmoji } from './CalendarEmoji'
 
 const COLORS = [
@@ -56,8 +56,27 @@ export default function SettingsPage({ settings, setSettings }) {
   const [showSubjectForm, setShowSubjectForm] = useState(false)
   const [editingSubject, setEditingSubject]   = useState(null)
   const [newSubject, setNewSubject]    = useState({ name: '', emoji: '📚', color: COLORS[0].color, textColor: COLORS[0].textColor, methods: '' })
+  const [archivedSemesters, setArchivedSemesters] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('archived-semesters') || '[]') } catch { return [] }
+  })
 
   const update = (key, val) => setSettings(p => ({ ...p, [key]: val }))
+
+  const handleArchiveSemester = () => {
+    try {
+      const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
+      const name = settings?.periodStart
+        ? `${settings.periodStart} – ${settings.periodEnd || new Date().toISOString().split('T')[0]}`
+        : new Date().toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })
+      const totalHours = parseFloat(sessions.reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
+      const bySubject = {}
+      sessions.forEach(s => { bySubject[s.subject] = parseFloat(((bySubject[s.subject] || 0) + (s.hours || 0)).toFixed(1)) })
+      const archive = { id: Date.now(), name, archivedAt: new Date().toISOString(), periodStart: settings?.periodStart, periodEnd: settings?.periodEnd, totalHours, bySubject, sessionCount: sessions.length }
+      const updated = [archive, ...archivedSemesters].slice(0, 10)
+      localStorage.setItem('archived-semesters', JSON.stringify(updated))
+      setArchivedSemesters(updated)
+    } catch {}
+  }
 
   const addSubject = () => {
     if (!newSubject.name.trim()) return
@@ -94,6 +113,10 @@ export default function SettingsPage({ settings, setSettings }) {
       const methods = normalizeMethods(s.methods).filter((_, i) => i !== idx)
       return { ...s, methods: methods.map(m => ({ label: m.label, ...(m.duration ? { duration: Number(m.duration) } : {}) })) }
     }))
+  }
+
+  const updateSubjectColor = (key, color, textColor) => {
+    update('subjects', settings.subjects.map(s => s.key === key ? { ...s, color, textColor } : s))
   }
 
   const updateSubjectNotes = (key, notes) => {
@@ -306,7 +329,7 @@ export default function SettingsPage({ settings, setSettings }) {
   const periodPct = totalDays && daysElapsed !== null ? Math.min(100, Math.round(daysElapsed / totalDays * 100)) : 0
   const totalHours = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
   const hoursPct = settings.hoursGoal > 0 ? Math.min(100, Math.round(totalHours / settings.hoursGoal * 100)) : 0
-  const totalTarget = settings.subjects?.reduce((a, s) => a + getTarget(s.key), 0) || 0
+  const totalTarget = settings.subjects?.filter(s => !s.closed).reduce((a, s) => a + getTarget(s.key), 0) || 0
 
   return (
     <div className="fade-in">
@@ -362,24 +385,48 @@ export default function SettingsPage({ settings, setSettings }) {
           <div>
             <p style={subHeadStyle}>CADEIRAS</p>
             {settings.subjects.map((s, idx) => (
-              <div key={s.key} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', marginBottom: 10, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderLeft: `4px solid ${s.color}` }}>
+              <div key={s.key} style={{ background: s.closed ? 'var(--gray-50)' : 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', marginBottom: 10, overflow: 'hidden', opacity: s.closed ? 0.75 : 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderLeft: `4px solid ${s.closed ? 'var(--gray-200)' : s.color}` }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <button onClick={() => moveSubject(s.key, -1)} disabled={idx === 0} style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: 'var(--t-caption)', padding: 0, lineHeight: 1 }}>▲</button>
                     <button onClick={() => moveSubject(s.key, 1)} disabled={idx === settings.subjects.length - 1} style={{ background: 'none', border: 'none', cursor: idx === settings.subjects.length - 1 ? 'default' : 'pointer', color: 'var(--gray-300)', fontSize: 'var(--t-caption)', padding: 0, lineHeight: 1 }}>▼</button>
                   </div>
-                  <span style={{ fontSize: '1.2rem' }}>{s.emoji}</span>
+                  <span style={{ fontSize: '1.2rem', filter: s.closed ? 'grayscale(1)' : 'none' }}>{s.emoji}</span>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: s.textColor }}>{s.name}</p>
-                    <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{s.methods?.length || 0} métodos · {(s.resources || []).length} recursos</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: s.closed ? 'var(--gray-400)' : s.textColor, margin: 0 }}>{s.name}</p>
+                      {s.closed && (
+                        <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'var(--gray-200)', color: 'var(--gray-500)' }}>
+                          fechada
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>{s.methods?.length || 0} métodos · {(s.resources || []).length} recursos</p>
                   </div>
-                  <button onClick={() => setEditingSubject(editingSubject === s.key ? null : s.key)} style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                    {editingSubject === s.key ? 'Fechar' : 'Editar'}
-                  </button>
+                  {s.closed ? (
+                    <button
+                      onClick={() => update('subjects', settings.subjects.map(sub => sub.key === s.key ? { ...sub, closed: false } : sub))}
+                      style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-500)', background: 'none', border: '1px solid var(--gray-300)', borderRadius: 'var(--r)', padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <ArchiveRestore size={12} /> Reabrir
+                    </button>
+                  ) : (
+                    <button onClick={() => setEditingSubject(editingSubject === s.key ? null : s.key)} style={{ fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                      {editingSubject === s.key ? 'Fechar' : 'Editar'}
+                    </button>
+                  )}
                   <button className="btn btn-ghost" onClick={() => removeSubject(s.key)}><Trash2 size={13} /></button>
                 </div>
                 {editingSubject === s.key && (
                   <div style={{ padding: '12px 16px', borderTop: '1px solid var(--gray-100)', background: 'var(--gray-50)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div>
+                      <label style={labelStyle}>Cor</label>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {COLORS.map(c => (
+                          <button key={c.color} onClick={() => updateSubjectColor(s.key, c.color, c.textColor)} style={{ width: 28, height: 28, borderRadius: '50%', background: c.color, border: `3px solid ${s.color === c.color ? 'var(--gray-800)' : 'transparent'}`, cursor: 'pointer' }} />
+                        ))}
+                      </div>
+                    </div>
                     <div>
                       <label style={labelStyle}>Métodos de estudo</label>
                       {normalizeMethods(s.methods).map((m, i) => (
@@ -504,7 +551,7 @@ export default function SettingsPage({ settings, setSettings }) {
                     <div key={day}>
                       <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>{DAY_NAMES[day]}</p>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {settings.subjects.map(s => {
+                        {settings.subjects.filter(s => !s.closed).map(s => {
                           const active = (settings.schedule[day] || []).includes(s.key)
                           return (
                             <button key={s.key} onClick={() => toggleSchedule(day, s.key)} style={{
@@ -515,7 +562,7 @@ export default function SettingsPage({ settings, setSettings }) {
                             }}>{s.emoji} {s.name}</button>
                           )
                         })}
-                        {settings.subjects.length === 0 && <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)' }}>Adiciona cadeiras primeiro</p>}
+                        {settings.subjects.filter(s => !s.closed).length === 0 && <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)' }}>Adiciona cadeiras primeiro</p>}
                       </div>
                     </div>
                   ))}
@@ -581,14 +628,14 @@ export default function SettingsPage({ settings, setSettings }) {
               </div>
 
               {/* Per-subject targets */}
-              {settings.subjects?.length > 0 && (
+              {settings.subjects?.filter(s => !s.closed).length > 0 && (
                 <div className="card">
                   <div className="card-body">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                       <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4 }}>📚 Metas por cadeira</p>
                       <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>Total: {totalTarget.toFixed(0)}h</span>
                     </div>
-                    {settings.subjects.map(s => {
+                    {settings.subjects.filter(s => !s.closed).map(s => {
                       const target = getTarget(s.key)
                       const weeklyNeeded = (target / weeksRemaining).toFixed(1)
                       const done = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).filter(x => x.subject === s.key).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
@@ -755,12 +802,29 @@ export default function SettingsPage({ settings, setSettings }) {
                 })}
                 <div style={{ marginTop: 8, paddingTop: 18, borderTop: '1px solid var(--gray-100)' }}>
                   <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Email para a weekly review</p>
-                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>Usado no botão "Enviar por email" na página de weekly review</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>O relatório é enviado automaticamente para este endereço</p>
                   <input
                     type="email"
                     placeholder="o-teu@email.com"
                     value={settings.reviewEmail || ''}
                     onChange={e => update('reviewEmail', e.target.value)}
+                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box', marginBottom: 10 }}
+                  />
+                  <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Gmail remetente</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>Conta Gmail usada para enviar (precisa de uma app password — gera em myaccount.google.com/apppasswords)</p>
+                  <input
+                    type="email"
+                    placeholder="remetente@gmail.com"
+                    value={settings.smtpUser || ''}
+                    onChange={e => update('smtpUser', e.target.value)}
+                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box', marginBottom: 10 }}
+                  />
+                  <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>App password do Gmail</p>
+                  <input
+                    type="password"
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    value={settings.smtpPass || ''}
+                    onChange={e => update('smtpPass', e.target.value)}
                     style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box' }}
                   />
                 </div>
@@ -909,6 +973,22 @@ export default function SettingsPage({ settings, setSettings }) {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-body">
+              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Arquivar semestre</p>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>
+                Guarda um resumo deste semestre para comparar com os próximos em Estatísticas.
+              </p>
+              <button className="btn btn-secondary" onClick={handleArchiveSemester}>
+                📦 Arquivar semestre atual
+              </button>
+              {archivedSemesters.length > 0 && (
+                <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 8 }}>
+                  {archivedSemesters.length} semestre{archivedSemesters.length !== 1 ? 's' : ''} arquivado{archivedSemesters.length !== 1 ? 's' : ''}
+                </p>
               )}
             </div>
           </div>

@@ -30,6 +30,26 @@ const isElectron = typeof window !== 'undefined' && window.electronAPI
 function lsGet() { try { return JSON.parse(localStorage.getItem(LS_KEY)) } catch { return null } }
 function lsSet(v) { localStorage.setItem(LS_KEY, JSON.stringify(v)) }
 
+function normalizeSettings(raw) {
+  const next = { ...DEFAULT_SETTINGS, ...(raw || {}) }
+  next.subjects = Array.isArray(raw?.subjects) ? raw.subjects : DEFAULT_SETTINGS.subjects
+  next.classTimes = Array.isArray(raw?.classTimes) ? raw.classTimes : DEFAULT_SETTINGS.classTimes
+  next.schedule = {
+    0: Array.isArray(raw?.schedule?.[0]) ? raw.schedule[0] : [],
+    1: Array.isArray(raw?.schedule?.[1]) ? raw.schedule[1] : [],
+    2: Array.isArray(raw?.schedule?.[2]) ? raw.schedule[2] : [],
+    3: Array.isArray(raw?.schedule?.[3]) ? raw.schedule[3] : [],
+    4: Array.isArray(raw?.schedule?.[4]) ? raw.schedule[4] : [],
+    5: Array.isArray(raw?.schedule?.[5]) ? raw.schedule[5] : [],
+    6: Array.isArray(raw?.schedule?.[6]) ? raw.schedule[6] : [],
+  }
+  next.notifications = {
+    ...DEFAULT_SETTINGS.notifications,
+    ...(raw?.notifications || {}),
+  }
+  return next
+}
+
 export function useUserSettings() {
   const [settings, setSettingsState] = useState(null)
   const [loading, setLoading]        = useState(true)
@@ -41,8 +61,9 @@ export function useUserSettings() {
         try {
           const fromDisk = await window.electronAPI.loadSettings()
           if (fromDisk) {
-            setSettingsState(fromDisk)
-            lsSet(fromDisk) // sync to localStorage too
+            const normalized = normalizeSettings(fromDisk)
+            setSettingsState(normalized)
+            lsSet(normalized) // sync to localStorage too
             setLoading(false)
             return
           }
@@ -52,10 +73,11 @@ export function useUserSettings() {
       // 2. Try localStorage
       const cached = lsGet()
       if (cached) {
-        setSettingsState(cached)
+        const normalized = normalizeSettings(cached)
+        setSettingsState(normalized)
         // Save to disk if in Electron
         if (isElectron) {
-          try { await window.electronAPI.saveSettings(cached) } catch {}
+          try { await window.electronAPI.saveSettings(normalized) } catch {}
         }
         setLoading(false)
         return
@@ -80,11 +102,12 @@ export function useUserSettings() {
   const setSettings = async (updater) => {
     setSettingsState(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
-      lsSet(next)
+      const normalized = normalizeSettings(next)
+      lsSet(normalized)
       if (isElectron) {
-        window.electronAPI.saveSettings(next).catch(() => {})
+        window.electronAPI.saveSettings(normalized).catch(() => {})
       }
-      return next
+      return normalized
     })
   }
 

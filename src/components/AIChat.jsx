@@ -25,7 +25,8 @@ function buildSystemPrompt() {
   try {
     const settings = JSON.parse(localStorage.getItem('user-settings') || '{}')
     const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
-    const exams = JSON.parse(localStorage.getItem('exams') || '[]')
+    const closedNames = new Set((settings.subjects || []).filter(s => s.closed).map(s => s.name))
+    const exams = JSON.parse(localStorage.getItem('exams') || '[]').filter(e => !closedNames.has(e.subject))
     const pdfContext = localStorage.getItem('ai-pdf-context') || ''
 
     const todayStr = new Date().toDateString()
@@ -46,8 +47,9 @@ function buildSystemPrompt() {
     }).sort((a,b) => new Date(a.date)-new Date(b.date)).slice(0,3)
       .map(e => `${e.subject} (${e.type} em ${new Date(e.date+'T12:00:00').toLocaleDateString('pt-PT', {day:'numeric',month:'short'})})`).join(', ')
 
-    const subjectList = (settings.subjects || []).map(s => s.name).join(', ')
-    const methodLines = (settings.subjects || []).filter(s => s.methods?.length).map(s => `${s.name}: ${s.methods.join(', ')}`).join('; ')
+    const openSubjects = (settings.subjects || []).filter(s => !s.closed)
+    const subjectList = openSubjects.map(s => s.name).join(', ')
+    const methodLines = openSubjects.filter(s => s.methods?.length).map(s => `${s.name}: ${s.methods.join(', ')}`).join('; ')
     const name = settings.name ? `O nome da estudante é ${settings.name}.` : ''
 
     let prompt = `És uma assistente de estudo pessoal calorosa, prática e encorajadora para uma estudante universitária. ${name}

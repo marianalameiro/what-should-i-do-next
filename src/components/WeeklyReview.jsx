@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Sparkles, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, RotateCcw, Mail } from 'lucide-react'
 import { getMondayOfWeek } from '../utils/dates'
 
 const QUESTIONS = [
@@ -15,10 +15,40 @@ function loadReviews()  { try { return JSON.parse(localStorage.getItem('weekly-r
 function saveReviews(r) { localStorage.setItem('weekly-reviews', JSON.stringify(r)) }
 function loadSessions() { try { return JSON.parse(localStorage.getItem('study-sessions')) || [] } catch { return [] } }
 function loadDiary()    { try { return JSON.parse(localStorage.getItem('diary-entries')) || [] } catch { return [] } }
+function loadPlans()    { try { return JSON.parse(localStorage.getItem('weekly-plans')) || [] } catch { return [] } }
+function loadSettings() { try { return JSON.parse(localStorage.getItem('user-settings')) || {} } catch { return {} } }
+
+function loadDoubtsContext() {
+  try {
+    const settings = loadSettings()
+    const subjects = settings.subjects || []
+    const topics = JSON.parse(localStorage.getItem('topics') || '{}')
+    const lines = []
+    for (const s of subjects) {
+      const subTopics = topics[s.key] || topics[s.name] || []
+      const withDoubts = subTopics.filter(t => {
+        const d = t.doubts
+        if (!d) return false
+        if (typeof d === 'string') return d.trim().length > 0
+        return d.length > 0
+      })
+      if (withDoubts.length === 0) continue
+      lines.push(`${s.emoji || ''} ${s.name}:`)
+      for (const t of withDoubts) {
+        const doubts = typeof t.doubts === 'string'
+          ? [t.doubts]
+          : t.doubts.map(d => d.text || d)
+        lines.push(`  Tópico "${t.name}": ${doubts.map(d => `"${d}"`).join(', ')}`)
+      }
+    }
+    if (lines.length === 0) return ''
+    return `\nDÚVIDAS EM ABERTO POR TÓPICO:\n${lines.join('\n')}`
+  } catch { return '' }
+}
 
 function getWeekNumber() {
   try {
-    const settings = JSON.parse(localStorage.getItem('user-settings'))
+    const settings = loadSettings()
     const start = settings?.periodStart ? new Date(settings.periodStart) : new Date('2026-02-03')
     return Math.max(1, Math.ceil((new Date() - start) / (7 * 86400000)))
   } catch {
@@ -26,16 +56,30 @@ function getWeekNumber() {
   }
 }
 
-function hoursThisWeek() {
+function getWeeklyStats() {
   const monday = getMondayOfWeek(new Date())
-  return loadSessions()
-    .filter(s => new Date(s.date) >= monday)
-    .reduce((a, b) => a + b.hours, 0)
-    .toFixed(1)
+  const sessions = loadSessions()
+  const weekSessions = sessions.filter(s => new Date(s.date) >= monday)
+  const totalHours = weekSessions.reduce((a, b) => a + (b.hours || 0), 0).toFixed(1)
+  const bySubject = {}
+  for (const s of weekSessions) {
+    bySubject[s.subject] = (bySubject[s.subject] || 0) + (s.hours || 0)
+  }
+  return { totalHours, bySubject }
 }
 
 function getDiaryThisWeek() {
-  return loadDiary().slice(0, 14)
+  const monday = getMondayOfWeek(new Date())
+  return loadDiary().filter(e => new Date(e.date || e.createdAt) >= monday).slice(0, 20)
+}
+
+function getSessionNotesThisWeek() {
+  const monday = getMondayOfWeek(new Date())
+  const notes = loadSessions()
+    .filter(s => new Date(s.date) >= monday && s.notes?.trim())
+    .map(s => `[${s.subject} · ${s.hours}h] ${s.notes.trim()}`)
+  if (notes.length === 0) return ''
+  return `\nNOTAS DAS SESSÕES DESTA SEMANA:\n${notes.join('\n')}`
 }
 
 function todayKey() {
@@ -44,6 +88,15 @@ function todayKey() {
 
 function alreadyGeneratedToday(reviews) {
   return reviews.some(r => r.generatedOn === todayKey())
+}
+
+function openEmail(to, subject, body) {
+  const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  if (window.electronAPI?.openExternal) {
+    window.electronAPI.openExternal(url)
+  } else {
+    window.location.href = url
+  }
 }
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile'
@@ -57,7 +110,7 @@ async function callGroq(prompt) {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: GROQ_MODEL,
-      max_tokens: 1000,
+      max_tokens: 1200,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
@@ -66,25 +119,52 @@ async function callGroq(prompt) {
   return data.choices?.[0]?.message?.content || ''
 }
 
-async function generateAutoReview(weekNum, weekHours, diaryEntries) {
+function buildPlanContext(plan) {
+  if (!plan) return ''
+  return `
+PLANO DA SEMANA (feito no domingo):
+🔍 Retrospetiva: ${plan.answers?.lookback || '—'}
+🎯 Prioridades: ${plan.answers?.priority || '—'}
+📅 Distribuição: ${plan.answers?.schedule || '—'}
+🚧 Obstáculos: ${plan.answers?.obstacle || '—'}
+✨ Intenção: ${plan.answers?.intention || '—'}`
+}
+
+async function generateAutoReview(weekNum, weekStats, diaryEntries, latestPlan) {
   const diaryText = diaryEntries.length > 0
-    ? diaryEntries.map(e => `[${e.subject || ''}] ${e.text}`).join('\n')
+    ? diaryEntries.map(e => `[${e.subject || 'geral'}] ${e.text}`).join('\n')
     : 'Sem entradas no diário esta semana.'
 
-  const prompt = `És um coach de estudo caloroso e direto. Com base nas entradas do diário de estudo desta semana, gera uma review diária das 16h.
+  const subjectStats = Object.entries(weekStats.bySubject)
+    .map(([k, h]) => `${k}: ${h.toFixed(1)}h`)
+    .join(', ') || 'Sem registos por cadeira'
+
+  const planContext = buildPlanContext(latestPlan)
+  const doubtsCtx = loadDoubtsContext()
+  const sessionNotes = getSessionNotesThisWeek()
+
+  const prompt = `És um coach de estudo caloroso e direto. Com base no plano semanal e no diário de estudo, gera uma review de fim de dia.
 
 Semana número: ${weekNum}
-Horas estudadas esta semana: ${weekHours}h
+Horas estudadas esta semana: ${weekStats.totalHours}h
+Por cadeira: ${subjectStats}
+${planContext}
+
 Entradas do diário desta semana:
 ${diaryText}
+${sessionNotes}
+${doubtsCtx}
+
+${latestPlan ? 'Compara o que foi planeado com o que foi realmente feito.' : ''}
+${doubtsCtx ? 'Considera as dúvidas em aberto por tópico ao dar conselhos — menciona-as se forem relevantes para a ação prioritária ou área a melhorar.' : ''}
 
 Gera uma review com EXATAMENTE esta estrutura em português:
 
 💡 DICA PARA HOJE
-[Uma dica concreta e específica para o resto do dia de hoje, com base no que foi estudado]
+[Uma dica concreta e específica para o resto do dia de hoje]
 
 📅 FOCO DA SEMANA
-[Uma orientação para os próximos dias desta semana]
+[Uma orientação para os próximos dias, considerando o plano]
 
 ✅ O QUE ESTÁ A CORRER BEM
 [Um ponto positivo específico]
@@ -95,24 +175,90 @@ Gera uma review com EXATAMENTE esta estrutura em português:
 🎯 AÇÃO PRIORITÁRIA
 [A tarefa mais importante para fazer a seguir]
 
-Sê específica, prática e encorajadora. Máx 2 frases por secção. Usa os emojis indicados.`
+Sê específica, prática e encorajadora. Máx 2 frases por secção.`
+
+  return callGroq(prompt)
+}
+
+async function generateEmailReport(weekNum, weekStats, diaryEntries, latestPlan, manualAnswers) {
+  const diaryBySubject = {}
+  for (const e of diaryEntries) {
+    const key = e.subject || 'Geral'
+    if (!diaryBySubject[key]) diaryBySubject[key] = []
+    diaryBySubject[key].push(e.text)
+  }
+  const diaryText = Object.entries(diaryBySubject)
+    .map(([subj, entries]) => `${subj}:\n${entries.map(t => `  - ${t}`).join('\n')}`)
+    .join('\n\n') || 'Sem entradas no diário.'
+
+  const subjectStats = Object.entries(weekStats.bySubject)
+    .map(([k, h]) => `${k}: ${h.toFixed(1)}h`)
+    .join(', ') || 'Sem registos'
+
+  const planContext = buildPlanContext(latestPlan)
+  const doubtsCtx = loadDoubtsContext()
+  const sessionNotes = getSessionNotesThisWeek()
+
+  const reviewAnswers = manualAnswers
+    ? QUESTIONS.map(q => `${q.label}\n"${manualAnswers[q.id] || '—'}"`).join('\n\n')
+    : ''
+
+  const prompt = `És um coach de estudo. Gera um relatório semanal completo e detalhado em português.
+
+Semana ${weekNum} · ${weekStats.totalHours}h estudadas
+Por cadeira: ${subjectStats}
+${planContext}
+
+Entradas do diário por cadeira:
+${diaryText}
+${sessionNotes}
+${doubtsCtx}
+
+${reviewAnswers ? `Reflexão da estudante:\n${reviewAnswers}` : ''}
+${doubtsCtx ? 'Inclui as dúvidas em aberto na análise por cadeira e nas ações para a próxima semana.' : ''}
+
+Gera um relatório com EXATAMENTE esta estrutura (em português, sem markdown extra):
+
+📊 RESUMO DA SEMANA ${weekNum}
+[2-3 frases a resumir a semana com dados concretos de horas e cadeiras]
+
+🎯 PLANO VS REALIDADE
+[Compara as prioridades planeadas com o que foi feito. Sê honesta e específica.]
+
+✅ CONQUISTAS
+[2-3 pontos positivos concretos desta semana]
+
+⚠️ ÁREAS DE MELHORIA
+[2-3 pontos de melhoria específicos e acionáveis]
+
+📈 ANÁLISE POR CADEIRA
+[Para cada cadeira com horas registadas: progresso, tendência, recomendação]
+
+🎯 PLANO PARA A PRÓXIMA SEMANA
+[3-4 ações concretas baseadas na análise]
+
+✨ MENSAGEM DE ENCORAJAMENTO
+[Uma frase inspiradora personalizada]
+
+Sê específica, usa os dados reais, e dá conselhos acionáveis.`
 
   return callGroq(prompt)
 }
 
 export function WeeklyReview() {
-  const [reviews, setReviews]         = useState(loadReviews)
-  const [autoLoading, setAutoLoading] = useState(false)
-  const [autoError, setAutoError]     = useState(null)
-  const [showHistory, setShowHistory] = useState(false)
-  const [showManual, setShowManual]   = useState(false)
-  const [step, setStep]               = useState(0)
-  const [answers, setAnswers]         = useState({})
+  const [reviews, setReviews]             = useState(loadReviews)
+  const [autoLoading, setAutoLoading]     = useState(false)
+  const [autoError, setAutoError]         = useState(null)
+  const [showHistory, setShowHistory]     = useState(false)
+  const [showManual, setShowManual]       = useState(false)
+  const [step, setStep]                   = useState(0)
+  const [answers, setAnswers]             = useState({})
   const [manualLoading, setManualLoading] = useState(false)
-  const [manualError, setManualError] = useState(null)
+  const [manualError, setManualError]     = useState(null)
+  const [emailLoading, setEmailLoading]   = useState(null)
 
-  const weekNum   = getWeekNumber()
-  const weekHours = hoursThisWeek()
+  const weekNum    = getWeekNumber()
+  const weekStats  = getWeeklyStats()
   const todayReview = reviews.find(r => r.generatedOn === todayKey())
   const now = new Date()
   const isAfter4pm = now.getHours() >= 16
@@ -128,7 +274,8 @@ export function WeeklyReview() {
       setAutoLoading(true)
       try {
         const diary = getDiaryThisWeek()
-        const feedback = await generateAutoReview(weekNum, weekHours, diary)
+        const latestPlan = loadPlans()[0] || null
+        const feedback = await generateAutoReview(weekNum, weekStats, diary, latestPlan)
         const review = {
           id: Date.now(),
           week: weekNum,
@@ -136,7 +283,7 @@ export function WeeklyReview() {
           feedback,
           generatedOn: todayKey(),
           date: new Date().toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' }),
-          hoursThisWeek: weekHours,
+          hoursThisWeek: weekStats.totalHours,
         }
         setReviews(prev => [review, ...prev])
         setAutoError(null)
@@ -153,12 +300,24 @@ export function WeeklyReview() {
     if (!allAnswered) return
     setManualLoading(true)
 
+    const latestPlan = loadPlans()[0] || null
+    const planContext = buildPlanContext(latestPlan)
     const answersText = QUESTIONS.map(q => `${q.label}\n"${answers[q.id]}"`).join('\n\n')
+    const doubtsCtx = loadDoubtsContext()
+    const sessionNotes = getSessionNotesThisWeek()
+
     const prompt = `És um coach de estudo caloroso. Uma estudante preencheu a sua weekly review.
 
-Semana ${weekNum} · ${weekHours}h estudadas
+Semana ${weekNum} · ${weekStats.totalHours}h estudadas
+${planContext}
 
+Reflexão da estudante:
 ${answersText}
+${sessionNotes}
+${doubtsCtx}
+
+${latestPlan ? 'Compara as prioridades planeadas no domingo com as respostas da estudante.' : ''}
+${doubtsCtx ? 'Considera as dúvidas em aberto por tópico — se forem relevantes para a ação prioritária ou área a melhorar, menciona-as explicitamente.' : ''}
 
 Gera uma review com EXATAMENTE esta estrutura em português:
 
@@ -166,7 +325,7 @@ Gera uma review com EXATAMENTE esta estrutura em português:
 [Uma dica concreta para o resto do dia]
 
 📅 FOCO DA SEMANA
-[Orientação para os próximos dias]
+[Orientação para os próximos dias, considerando o plano e as respostas]
 
 ✅ O QUE ESTÁ A CORRER BEM
 [Um ponto positivo específico das respostas dela]
@@ -177,7 +336,7 @@ Gera uma review com EXATAMENTE esta estrutura em português:
 🎯 AÇÃO PRIORITÁRIA
 [A tarefa mais importante para fazer a seguir]
 
-Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela especificamente.`
+Máx 2 frases por secção. Refere as respostas dela especificamente.`
 
     try {
       const feedback = await callGroq(prompt)
@@ -189,7 +348,7 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
         feedback,
         generatedOn: todayKey(),
         date: new Date().toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' }),
-        hoursThisWeek: weekHours,
+        hoursThisWeek: weekStats.totalHours,
       }
       setReviews(prev => [review, ...prev])
       setShowManual(false)
@@ -199,6 +358,37 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
     } catch (e) {
       setManualError(e.message === 'NO_API_KEY' ? 'Configura a tua chave API Groq nas Definições.' : `Erro: ${e.message}`)
     } finally { setManualLoading(false) }
+  }
+
+  const handleSendEmail = async (review) => {
+    const settings = loadSettings()
+    const { reviewEmail = '', smtpUser = '', smtpPass = '' } = settings
+    if (!reviewEmail) { alert('Configura o email de destino nas Definições.'); return }
+
+    setEmailLoading(review.id)
+    try {
+      const diary = getDiaryThisWeek()
+      const latestPlan = loadPlans()[0] || null
+      const report = await generateEmailReport(weekNum, weekStats, diary, latestPlan, review.answers)
+      const subject = `Weekly Review — Semana ${review.week} (${review.date})`
+
+      if (window.electronAPI?.sendEmail && smtpUser && smtpPass) {
+        await window.electronAPI.sendEmail({ to: reviewEmail, subject, body: report, smtpUser, smtpPass })
+        alert('Email enviado!')
+      } else {
+        openEmail(reviewEmail, subject, report)
+      }
+    } catch (e) {
+      const isSmtpError = smtpUser && smtpPass
+      if (isSmtpError) {
+        alert(`Erro ao enviar email: ${e.message}\n\nVerifica as credenciais nas Definições.`)
+      } else {
+        const fallbackBody = `Weekly Review — Semana ${review.week}\n${review.date} · ${review.hoursThisWeek}h estudadas\n\n${review.feedback}`
+        openEmail(reviewEmail, `Weekly Review — Semana ${review.week}`, fallbackBody)
+      }
+    } finally {
+      setEmailLoading(null)
+    }
   }
 
   const renderFeedback = (feedback) => {
@@ -234,7 +424,7 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
         <h1>🔁 Weekly Review</h1>
         <p className="subtitle">
           {isAfter4pm
-            ? 'Review automática gerada com base no teu diário de estudo'
+            ? 'Review automática gerada com base no teu plano e diário de estudo'
             : `Review automática disponível às 16h · agora são ${now.getHours()}h${String(now.getMinutes()).padStart(2,'0')}`}
         </p>
       </div>
@@ -263,15 +453,12 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
             </div>
             <button
               className="btn btn-secondary"
-              style={{ flexShrink: 0, fontSize: 'var(--t-caption)' }}
-              onClick={() => {
-                const reviewEmail = (() => { try { return JSON.parse(localStorage.getItem('user-settings') || '{}').reviewEmail || '' } catch { return '' } })()
-                const subject = encodeURIComponent(`Weekly Review — Semana ${todayReview.week}`)
-                const body = encodeURIComponent(`Weekly Review — Semana ${todayReview.week}\n${todayReview.date} · ${todayReview.hoursThisWeek}h estudadas\n\n${todayReview.feedback}`)
-                window.location.href = `mailto:${reviewEmail}?subject=${subject}&body=${body}`
-              }}
+              style={{ flexShrink: 0, fontSize: 'var(--t-caption)', display: 'flex', alignItems: 'center', gap: 5 }}
+              onClick={() => handleSendEmail(todayReview)}
+              disabled={emailLoading === todayReview.id}
             >
-              📧 Enviar por email
+              <Mail size={13} />
+              {emailLoading === todayReview.id ? 'A enviar...' : 'Enviar relatório'}
             </button>
           </div>
           {renderFeedback(todayReview.feedback)}
@@ -351,8 +538,21 @@ Máx 2 frases por secção. Usa os emojis indicados. Refere as respostas dela es
           </button>
           {showHistory && reviews.filter(r => r.generatedOn !== todayKey()).map(review => (
             <div key={review.id} style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '16px 20px', marginBottom: 12, boxShadow: 'var(--shadow)' }}>
-              <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', marginBottom: 2 }}>Semana {review.week} · {review.type === 'auto' ? '⚡ automática' : '✍️ manual'}</p>
-              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>{review.date} · {review.hoursThisWeek}h</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)', marginBottom: 2 }}>Semana {review.week} · {review.type === 'auto' ? '⚡ automática' : '✍️ manual'}</p>
+                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{review.date} · {review.hoursThisWeek}h</p>
+                </div>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 'var(--t-caption)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+                  onClick={() => handleSendEmail(review)}
+                  disabled={emailLoading === review.id}
+                >
+                  <Mail size={12} />
+                  {emailLoading === review.id ? 'A gerar...' : 'Enviar'}
+                </button>
+              </div>
               {renderFeedback(review.feedback)}
             </div>
           ))}

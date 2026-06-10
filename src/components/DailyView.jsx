@@ -63,6 +63,24 @@ function getCompletionPct(date) {
   return Math.round(ids.filter(id => done[id]).length / ids.length * 100)
 }
 
+function hasPendingExtrasForDate(date) {
+  const dateStr = date.toDateString()
+  const dow = date.getDay()
+  const doneMap = loadDone(date)
+  return loadExtra().some(t => {
+    if (doneMap[t.id]) return false
+    if (t.recurrence === 'daily') return false  // daily applies to every day — skip to avoid noise
+    if (t.recurrence === 'weekly') return t.createdDow === dow
+    const eff = t.createdDate || (() => {
+      try {
+        const ts = parseInt(t.id.replace('extra-', ''), 10)
+        return (!isNaN(ts) && ts > 1e12) ? new Date(ts).toDateString() : null
+      } catch { return null }
+    })()
+    return eff === dateStr
+  })
+}
+
 function getIncompletePastDays(todayMonday) {
   const result = []
   for (let w = 1; w <= 4; w++) {
@@ -74,7 +92,7 @@ function getIncompletePastDays(todayMonday) {
       const schedule = getTasksForDay(dow)
       const hasRealTasks = schedule.some(g => g.tasks.length > 0)
       const pct = getCompletionPct(date)
-      if (hasRealTasks && pct < 100 && pct > 0) result.push(date)
+      if ((hasRealTasks && pct < 100 && pct > 0) || hasPendingExtrasForDate(date)) result.push(date)
     })
   }
   return result
@@ -102,10 +120,11 @@ export default function DailyView() {
   const [editingId, setEditingId]       = useState(null)
   const [energyLevels, setEnergyLevels] = useState(loadEnergy)
   const [activePeriod, setActivePeriod] = useState(getCurrentPeriod)
+  const [widgetSyncVersion, setWidgetSyncVersion] = useState(0)
   const { toasts, toast, dismiss } = useToast()
 
   const dateStr   = selectedDate.toDateString()
-  const isoDateStr = selectedDate.toISOString().split('T')[0]
+  const isoDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}`
   const schedule  = getTasksForDay(selectedDate.getDay())
 
   // Labels de tarefas já com bloco no horário deste dia
@@ -121,7 +140,16 @@ export default function DailyView() {
   const energyKey     = `${dateStr}-${activePeriod}`
   const currentEnergy = ENERGY_LEVELS.find(e => e.id === energyLevels[energyKey]) || null
 
-  useEffect(() => { setDone(loadDone(selectedDate)) }, [dateStr])
+  useEffect(() => {
+    const loaded = loadDone(selectedDate)
+    const scheduleIds = new Set(
+      getTasksForDay(selectedDate.getDay()).flatMap(g => g.tasks.map(t => t.id))
+    )
+    const sanitized = Object.fromEntries(
+      Object.entries(loaded).filter(([id]) => id.startsWith('extra-') || scheduleIds.has(id))
+    )
+    setDone(sanitized)
+  }, [dateStr])
 
   // Aplica tarefas marcadas como feitas na widget — reage ao evento de storage disparado pelo App.jsx
   useEffect(() => {
@@ -129,12 +157,39 @@ export default function DailyView() {
     const handler = (e) => {
       if (e.key !== `tasks-${todayStr}`) return
       if (dateStr !== todayStr) return // a utilizadora está a ver outro dia
-      try { setDone(JSON.parse(e.newValue || '{}')) } catch {}
+      try {
+        const nextDone = JSON.parse(e.newValue || '{}')
+        console.log('[DailyView] Storage event recebido da widget/app:', {
+          key: e.key,
+          doneCount: Object.values(nextDone).filter(Boolean).length,
+        })
+        setDone(nextDone)
+        setWidgetSyncVersion(v => v + 1)
+      } catch {}
     }
+    const widgetSyncHandler = (e) => {
+      const key = e.detail?.key
+      if (key !== `tasks-${todayStr}`) return
+      if (dateStr !== todayStr) return
+      const nextDone = loadDone(new Date())
+      console.log('[DailyView] Evento interno de sync recebido:', {
+        key,
+        doneCount: Object.values(nextDone).filter(Boolean).length,
+      })
+      setDone(nextDone)
+      setWidgetSyncVersion(v => v + 1)
+    }
+    console.log('[DailyView] Listeners de sync registados para:', todayStr)
     window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
+    window.addEventListener('wsidnext-tasks-updated', widgetSyncHandler)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener('wsidnext-tasks-updated', widgetSyncHandler)
+    }
   }, [dateStr])
-  useEffect(() => { localStorage.setItem(`tasks-${dateStr}`, JSON.stringify(done)) }, [done, dateStr])
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { localStorage.setItem(`tasks-${dateStr}`, JSON.stringify(done)) }, [done])
   useEffect(() => { saveExtra(extraTasks) }, [extraTasks])
   useEffect(() => { saveMatrix(matrixOverrides) }, [matrixOverrides])
   useEffect(() => { saveEnergy(energyLevels) }, [energyLevels])
@@ -165,10 +220,12 @@ export default function DailyView() {
         })),
     ]
     // Próximos exames (sem nota final, ordenados por data)
-    const todayISO = todayDate.toISOString().split('T')[0]
-    const rawExams = (() => { try { return JSON.parse(localStorage.getItem('exams')) || [] } catch { return [] } })()
+    const todayISO = `${todayDate.getFullYear()}-${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`
+    const allRawExams = (() => { try { return JSON.parse(localStorage.getItem('exams')) || [] } catch { return [] } })()
     const settings = (() => { try { return JSON.parse(localStorage.getItem('user-settings')) || {} } catch { return {} } })()
     const subjectsByName = Object.fromEntries((settings.subjects || []).map(s => [s.name, s]))
+    const closedNames = new Set((settings.subjects || []).filter(s => s.closed).map(s => s.name))
+    const rawExams = allRawExams.filter(e => !closedNames.has(e.subject))
     const upcomingExams = rawExams
       .filter(e => e.date >= todayISO && e.actualGrade == null)
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -190,6 +247,11 @@ export default function DailyView() {
       .filter(s => s.date === todayDate.toDateString())
       .reduce((sum, s) => sum + (parseFloat(s.hours) || 0), 0)
       .toFixed(1))
+    console.log('[DailyView] Export da pagina Hoje para widget:', {
+      date: todayDate.toDateString(),
+      totalCount: allTasks.length,
+      doneCount: allTasks.filter(t => t.done).length,
+    })
     window.electronAPI.exportWidgetData({
       date: todayDate.toDateString(),
       tasks: allTasks,
@@ -237,7 +299,8 @@ export default function DailyView() {
       emoji: newTaskEmoji.trim() || null,
       mins: newTaskMins ? parseInt(newTaskMins, 10) : null,
       recurrence: newTaskRecurrence !== 'none' ? newTaskRecurrence : null,
-      createdDow: newTaskRecurrence !== 'none' ? new Date().getDay() : null,
+      createdDow: selectedDate.getDay(),
+      createdDate: selectedDate.toDateString(),
     }
     const updated = [...extraTasks, task]
     setExtraTasks(updated)
@@ -251,36 +314,29 @@ export default function DailyView() {
     setTimeout(() => setAddedTask(''), 2000)
   }
 
-  // Carry-forward: import incomplete extra tasks from a past day into today
-  const carryForwardPastExtras = (pastDate) => {
-    const pastDoneMap = loadDone(pastDate)
-    const pastSchedule = getTasksForDay(pastDate.getDay())
-    const incompleteSched = pastSchedule.flatMap(g =>
-      g.tasks.filter(t => !pastDoneMap[t.id]).map(t => ({ ...t, subjectKey: g.subjectKey }))
-    )
-    if (incompleteSched.length === 0) return
-    incompleteSched.forEach(t => {
-      const alreadyAdded = extraTasks.some(e => e.label === t.label)
-      if (!alreadyAdded) {
-        const id = `extra-${Date.now()}-${t.id}`
-        const emoji = SUBJECTS[t.subjectKey]?.emoji || null
-        const newT = { id, label: t.label, emoji, isExtra: true, carriedFrom: pastDate.toDateString() }
-        setExtraTasks(prev => { const u = [...prev, newT]; saveExtra(u); return u })
-        setOverrides(prev => ({ ...prev, [id]: autoClassify(id, t.label) }))
-      }
-    })
-  }
-
   const snoozeTask = (task) => {
+    const tomorrow = new Date(selectedDate)
+    tomorrow.setDate(tomorrow.getDate() + 1)
     if (task.isExtra) {
-      // Extra tasks: mark done today → reappears tomorrow (done is per-day)
-      setDone(prev => ({ ...prev, [task.id]: true }))
+      if (task.recurrence) {
+        // Recurring extra: mark today done + add a one-time copy for tomorrow
+        // (preserves the original recurring task unchanged)
+        setDone(prev => ({ ...prev, [task.id]: true }))
+        const id = `extra-${Date.now()}-snoozed`
+        const newT = { ...task, id, recurrence: null, createdDate: tomorrow.toDateString(), createdDow: tomorrow.getDay() }
+        setExtraTasks(prev => { const u = [...prev, newT]; saveExtra(u); return u })
+      } else {
+        // Non-recurring: just move to tomorrow
+        const newT = { ...task, id: `extra-${Date.now()}-snoozed`, createdDate: tomorrow.toDateString(), createdDow: tomorrow.getDay() }
+        setExtraTasks(prev => { const u = [...prev.filter(t => t.id !== task.id), newT]; saveExtra(u); return u })
+      }
     } else {
       // Scheduled tasks: mark done today + add as extra so it shows tomorrow
+      snoozedIds.current.add(task.id)
       check(task.id)
       const id = `extra-${Date.now()}-snoozed`
       const emoji = task.subjectKey ? SUBJECTS[task.subjectKey]?.emoji || null : null
-      const newT = { id, label: task.label, emoji, isExtra: true }
+      const newT = { id, label: task.label, emoji, isExtra: true, createdDate: tomorrow.toDateString(), createdDow: tomorrow.getDay() }
       setExtraTasks(prev => { const u = [...prev, newT]; saveExtra(u); return u })
     }
   }
@@ -315,16 +371,46 @@ export default function DailyView() {
   const allScheduledTasks = schedule.flatMap(g =>
     g.tasks.map(t => ({ ...t, subjectKey: g.subjectKey, isExtra: false }))
   )
-  // Filter recurring extra tasks: daily shows every day, weekly only on same day of week
+  // Infer creation date from ID timestamp for old tasks that predate the createdDate field
+  const inferCreatedDate = (t) => {
+    if (t.createdDate) return t.createdDate
+    try {
+      const ts = parseInt(t.id.replace('extra-', ''), 10)
+      if (!isNaN(ts) && ts > 1e12) return new Date(ts).toDateString()
+    } catch {}
+    return null
+  }
+  // Filter extra tasks: non-recurring only show on their creation day; recurring follow their rule
   const visibleExtraTasks = extraTasks.filter(t => {
-    if (!t.recurrence) return true
     if (t.recurrence === 'daily') return true
     if (t.recurrence === 'weekly') return selectedDate.getDay() === t.createdDow
-    return true
+    const eff = inferCreatedDate(t)
+    return eff ? selectedDate.toDateString() === eff : true
   })
-  const allExtraTasks = visibleExtraTasks.map(t => ({ ...t, subjectKey: null, isExtra: true }))
+  const emojiToSubjectKey = Object.entries(SUBJECTS).reduce((acc, [key, s]) => {
+    if (s.emoji) acc[s.emoji] = key
+    return acc
+  }, {})
+  const resolvedExtraTasks = visibleExtraTasks.map(t => ({
+    ...t,
+    subjectKey: t.subjectKey || (t.emoji ? emojiToSubjectKey[t.emoji] : null) || null,
+    isExtra: true,
+  }))
+  const subjectLinkedExtras = resolvedExtraTasks.filter(t => t.subjectKey)
+  const trueExtraTasks      = resolvedExtraTasks.filter(t => !t.subjectKey)
+  const allExtraTasks = resolvedExtraTasks
   const allTasks     = [...allScheduledTasks, ...allExtraTasks]
   const pendingTasks = allTasks.filter(t => !done[t.id])
+
+  useEffect(() => {
+    if (dateStr !== today.toDateString()) return
+    console.log('[DailyView] Estado atual da pagina Hoje:', {
+      dateStr,
+      allTaskIdsSample: allTasks.slice(0, 12).map(t => t.id),
+      pendingTaskIdsSample: pendingTasks.slice(0, 12).map(t => t.id),
+      doneIdsSample: Object.keys(done).filter(id => done[id]).slice(0, 12),
+    })
+  }, [dateStr, allTasks, pendingTasks, done, today])
 
   const byQuadrant = {}
   Object.keys(QUADRANTS).forEach(q => { byQuadrant[q] = [] })
@@ -341,14 +427,23 @@ export default function DailyView() {
   const doneCount = allIds.filter(id => done[id]).length
   const allCount  = allIds.length
   const pct       = allCount === 0 ? 0 : Math.round((doneCount / allCount) * 100)
+  const pendingMins = pendingTasks.filter(t => t.mins).reduce((a, t) => a + t.mins, 0)
 
   const [confetti, setConfetti] = useState([])
-  const confettiShown = useRef(false)
+  const confettiShownDates = useRef(new Set())
+  const snoozedIds = useRef(new Set())
   const COLORS = ['#f9a8d4','#c4b5fd','#fdba74','#86efac','#93c5fd','#fde68a','#f87171']
 
+  useEffect(() => { snoozedIds.current = new Set() }, [dateStr])
+
   useEffect(() => {
-    if (pct === 100 && allCount > 0 && !confettiShown.current) {
-      confettiShown.current = true
+    const snoozedInScope = allIds.filter(id => snoozedIds.current.has(id)).length
+    const realTotal = allCount - snoozedInScope
+    const realDone  = doneCount - snoozedInScope
+    const realPct   = realTotal === 0 ? 0 : Math.round((realDone / realTotal) * 100)
+
+    if (realPct === 100 && realTotal > 0 && !confettiShownDates.current.has(dateStr)) {
+      confettiShownDates.current.add(dateStr)
       const pieces = Array.from({ length: 25 }, (_, i) => ({
         id: i,
         left: Math.random() * 100,
@@ -360,8 +455,8 @@ export default function DailyView() {
       setConfetti(pieces)
       setTimeout(() => setConfetti([]), 4000)
     }
-    if (pct < 100) confettiShown.current = false
-  }, [pct, allCount])
+    if (realPct < 100) confettiShownDates.current.delete(dateStr)
+  }, [pct, allCount, doneCount, dateStr])
 
   const incompletePast = getIncompletePastDays(todayMonday)
   const thisWeekTabs = WEEK_DAYS
@@ -370,8 +465,8 @@ export default function DailyView() {
       const isT    = date.toDateString() === today.toDateString()
       const isPast = date < today
       if (isT) return true
-      if (isPast) return getCompletionPct(date) < 100
-      return getTasksForDay(date.getDay()).some(g => g.tasks.length > 0)
+      if (isPast) return getCompletionPct(date) < 100 || hasPendingExtrasForDate(date)
+      return getTasksForDay(date.getDay()).some(g => g.tasks.length > 0) || hasPendingExtrasForDate(date)
     })
 
   const allTabs = [
@@ -382,22 +477,19 @@ export default function DailyView() {
   function renderTask(task, q, qKey) {
     const subject = task.subjectKey ? SUBJECTS[task.subjectKey] : null
 
-    const handleClick = () => { check(task.id) }
-
     return (
       <div key={task.id} style={{ marginBottom: 3 }}>
         <div
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.75)', borderRadius: 'var(--r)',
-            padding: '7px 10px', cursor: 'pointer',
+            padding: '7px 10px',
           }}
-          onClick={handleClick}
         >
-          <div style={{
-            width: 16, height: 16, borderRadius: '50%',
-            border: `1.5px solid ${q.border}`, flexShrink: 0,
-          }} />
+          <div
+            style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${q.border}`, flexShrink: 0, cursor: 'pointer' }}
+            onClick={() => check(task.id)}
+          />
           {(subject?.emoji || task.emoji) && <span style={{ fontSize: 'var(--t-body)' }}>{subject?.emoji || task.emoji}</span>}
           <span style={{ fontSize: 'var(--t-caption)', fontWeight: 500, color: q.text, flex: 1, lineHeight: 1.3 }}>
             {task.label}
@@ -409,9 +501,16 @@ export default function DailyView() {
               📅
             </span>
           )}
-          {task.isExtra && (
+          {task.isExtra ? (
             <button
-              onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
+              onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: q.text, opacity: 0.4, padding: '0 2px', display: 'flex', alignItems: 'center' }}
+            >
+              <X size={11} />
+            </button>
+          ) : (
+            <button
+              onClick={e => { e.stopPropagation(); check(task.id) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: q.text, opacity: 0.4, padding: '0 2px', display: 'flex', alignItems: 'center' }}
             >
               <X size={11} />
@@ -473,10 +572,12 @@ export default function DailyView() {
       {/* Day tabs */}
       <div className="day-tabs">
         {allTabs.map(date => {
-          const dow    = date.getDay()
-          const isT    = date.toDateString() === today.toDateString()
-          const tabPct = getCompletionPct(date)
-          const isPast = date < today && !isT
+          const dow             = date.getDay()
+          const isT             = date.toDateString() === today.toDateString()
+          const tabPct          = getCompletionPct(date)
+          const hasPendingExtra = hasPendingExtrasForDate(date)
+          const isPast          = date < today && !isT
+          const allDone         = tabPct === 100 && !hasPendingExtra
           return (
             <button
               key={date.toDateString()}
@@ -487,9 +588,9 @@ export default function DailyView() {
                 {DAY_NAMES[dow]}
               </span>
               <span className="day-tab-num">{date.getDate()}</span>
-              {tabPct === 100
+              {allDone
                 ? <span className="day-tab-dot" style={{ background: '#16a34a' }} />
-                : tabPct > 0
+                : tabPct > 0 || hasPendingExtra
                   ? <span className="day-tab-dot" style={{ background: isPast ? '#ef4444' : 'var(--rose-300)' }} />
                   : null}
             </button>
@@ -507,7 +608,7 @@ export default function DailyView() {
             </span>
           </h1>
           <p className="subtitle">
-            {allCount === 0 ? 'Sem tarefas para este dia!' : `${doneCount} de ${allCount} tarefas concluídas`}
+            {allCount === 0 ? 'Sem tarefas para este dia!' : `${doneCount} de ${allCount} tarefas concluídas${pendingMins > 0 ? ` · ~${pendingMins}min pendentes` : ''}`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -641,35 +742,67 @@ export default function DailyView() {
 
       {/* Normal view */}
       {!showMatrix && (
-        schedule.map(({ subjectKey, tasks }) => {
-          const subject      = SUBJECTS[subjectKey]
-          const visibleTasks = tasks.filter(t => !done[t.id])
-          if (visibleTasks.length === 0) return null
-          const doneSub = tasks.filter(t => done[t.id]).length
-          return (
-            <div className="subject-group" key={subjectKey}>
-              <div className="subject-header" style={{ borderLeft: `4px solid ${subject.color}` }}>
-                <div className="subject-dot" style={{ background: subject.color }} />
-                <span className="subject-name" style={{ color: subject.textColor }}>{subject.emoji} {subject.name}</span>
-                <span className="subject-count">{doneSub}/{tasks.length}</span>
+        <div key={`today-normal-${dateStr}-${widgetSyncVersion}`}>
+        {(() => {
+          const scheduledKeys = new Set(schedule.map(g => g.subjectKey))
+          const orphanKeys = [...new Set(
+            subjectLinkedExtras.filter(t => !done[t.id] && !scheduledKeys.has(t.subjectKey)).map(t => t.subjectKey)
+          )]
+          const allGroups = [
+            ...schedule.map(g => ({ subjectKey: g.subjectKey, tasks: g.tasks, isScheduled: true })),
+            ...orphanKeys.map(key => ({ subjectKey: key, tasks: [], isScheduled: false })),
+          ]
+          return allGroups.map(({ subjectKey, tasks, isScheduled }) => {
+            const subject      = SUBJECTS[subjectKey]
+            if (!subject) return null
+            const visibleTasks = tasks.filter(t => !done[t.id])
+            const extraForSub  = subjectLinkedExtras.filter(t => t.subjectKey === subjectKey && !done[t.id])
+            if (visibleTasks.length === 0 && extraForSub.length === 0) return null
+            const doneSub = tasks.filter(t => done[t.id]).length
+            return (
+              <div className="subject-group" key={subjectKey}>
+                <div className="subject-header" style={{ borderLeft: `4px solid ${subject.color}` }}>
+                  <div className="subject-dot" style={{ background: subject.color }} />
+                  <span className="subject-name" style={{ color: subject.textColor }}>{subject.emoji} {subject.name}</span>
+                  {isScheduled && <span className="subject-count">{doneSub}/{tasks.length}</span>}
+                </div>
+                <div className="task-list">
+                  {visibleTasks.map(task => (
+                    <div key={task.id} className="task-item">
+                      <div className="task-checkbox" style={{ cursor: 'pointer' }} onClick={() => check(task.id)}><Check size={13} color="transparent" strokeWidth={3} /></div>
+                      <span className="task-label">{task.label}</span>
+                      {task.highlight && <span className="task-highlight">{isWeekend ? 'fim de semana' : 'última aula'}</span>}
+                      <button
+                        onClick={e => { e.stopPropagation(); snoozeTask({ ...task, subjectKey, isExtra: false }) }}
+                        title="Adiar para amanhã"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}
+                      >↪</button>
+                      <button onClick={e => { e.stopPropagation(); check(task.id) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {extraForSub.map(task => (
+                    <div key={task.id} className="task-item">
+                      <div className="task-checkbox" style={{ border: '1.5px solid var(--gray-300)', cursor: 'pointer' }} onClick={() => check(task.id)}><Check size={13} color="transparent" strokeWidth={3} /></div>
+                      <span className="task-label" style={{ color: 'var(--gray-700)' }}>{task.label}</span>
+                      {task.mins && <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', flexShrink: 0, marginLeft: 'auto' }}>{task.mins}min</span>}
+                      {task.recurrence && <span style={{ fontSize: 'var(--t-caption)', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
+                      <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}>↪</button>
+                      <button onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="task-list">
-                {visibleTasks.map(task => (
-                  <div key={task.id} className="task-item" onClick={() => check(task.id)}>
-                    <div className="task-checkbox"><Check size={13} color="transparent" strokeWidth={3} /></div>
-                    <span className="task-label">{task.label}</span>
-                    {task.highlight && <span className="task-highlight">{isWeekend ? 'fim de semana' : 'última aula'}</span>}
-                    <button
-                      onClick={e => { e.stopPropagation(); snoozeTask({ ...task, subjectKey, isExtra: false }) }}
-                      title="Adiar para amanhã"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}
-                    >↪</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        })
+            )
+          })
+        })()}
+        </div>
       )}
 
       {allCount > 0 && doneCount === allCount && (
@@ -729,9 +862,10 @@ export default function DailyView() {
           Tarefas extra
         </p>
 
-        {!showMatrix && extraTasks.filter(t => !done[t.id]).length > 0 && (
+        {!showMatrix && trueExtraTasks.filter(t => !done[t.id]).length > 0 && (
+          <div key={`today-extra-${dateStr}-${widgetSyncVersion}`}>
           <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {extraTasks.filter(t => !done[t.id]).map((task, i) => (
+            {trueExtraTasks.filter(t => !done[t.id]).map((task, i) => (
               <div
                 key={task.id}
                 draggable
@@ -740,12 +874,8 @@ export default function DailyView() {
                 onDragEnd={onExtraDragEnd}
                 className="task-item"
                 style={{ cursor: 'grab', opacity: dragIdx === i ? 0.4 : 1 }}
-                onClick={() => task.recurrence
-                  ? setDone(prev => ({ ...prev, [task.id]: true }))
-                  : removeExtra(task.id)
-                }
               >
-                <div className="task-checkbox" style={{ border: '1.5px solid var(--gray-300)' }}>
+                <div className="task-checkbox" style={{ border: '1.5px solid var(--gray-300)', cursor: 'pointer' }} onClick={() => check(task.id)}>
                   <Check size={13} color="transparent" strokeWidth={3} />
                 </div>
                 {task.emoji
@@ -757,12 +887,13 @@ export default function DailyView() {
                 {task.recurrence && <span style={{ fontSize: 'var(--t-caption)', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
                 <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 3px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}>↪</button>
-                <button onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
+                <button onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                   <X size={12} />
                 </button>
               </div>
             ))}
+          </div>
           </div>
         )}
 

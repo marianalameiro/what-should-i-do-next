@@ -27,7 +27,7 @@ export function daysUntil(dateStr) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const target = new Date(dateStr + 'T12:00:00')
-  return Math.round((target - today) / 86400000)
+  return Math.floor((target - today) / 86400000)
 }
 
 /**

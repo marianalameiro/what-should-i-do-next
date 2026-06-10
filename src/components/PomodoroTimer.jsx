@@ -223,7 +223,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
       notes: notes || (isStopwatch ? 'Contador livre' : `Pomodoro ${totalMinutes}min`),
       date: new Date().toDateString(),
       startTime: Date.now() - totalMinutes * 60 * 1000,
-      projectId: sessionProject || null,
+      projectId: null,
     }
     saveSessions([newSession, ...sessions])
     setCompleted(prev => prev + 1)
@@ -300,6 +300,15 @@ export function PomodoroTimer({ subjects: propSubjects }) {
           if (!v) requestNotifications()
           return !v
         })
+      }
+      if (event.data.type === 'SET_TIMER') {
+        const { mode: m, subject: s, secondsLeft: sl, secondsElapsed: se, running: r, isStopwatch: sw } = event.data
+        if (m) setMode(m)
+        if (s !== undefined) setSubject(s)
+        if (sl !== undefined) setSeconds(sl)
+        if (se !== undefined) setElapsed(se)
+        setRunning(!!r)
+        if (!!r) requestNotifications()
       }
     }
     return () => channel.close()

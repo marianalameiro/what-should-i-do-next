@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Clock, Target, Trophy, ChevronDown, ChevronUp, NotebookPen, BookOpen } from 'lucide-react'
+import { ArrowLeft, Clock, Target, Trophy, ChevronDown, ChevronUp, NotebookPen, BookOpen, ArchiveX, ArchiveRestore } from 'lucide-react'
 import { getMondayOfWeek } from '../utils/dates'
 import { CONFIDENCE } from '../constants'
 import { computeSubjectAchievements } from '../utils/subjectAchievements'
@@ -14,7 +14,7 @@ function daysUntil(dateStr) {
   return Math.round((new Date(dateStr + 'T12:00:00') - today) / 86400000)
 }
 
-export default function CadeiraPage({ subjectKey, settings, onBack, onNavigate }) {
+export default function CadeiraPage({ subjectKey, settings, setSettings, onBack, onNavigate }) {
   const subjects = settings?.subjects || []
   const subject = subjects.find(s => s.key === subjectKey)
 
@@ -70,8 +70,18 @@ export default function CadeiraPage({ subjectKey, settings, onBack, onNavigate }
   const upcomingExams = subjectExams.filter(e => e.date && daysUntil(e.date) >= 0)
   const pastExams     = subjectExams.filter(e => !e.date || daysUntil(e.date) < 0)
 
+  const handleClose = () => {
+    if (!window.confirm(`Fechar "${subject.name}"? Deixará de aparecer nas sugestões, horário e estatísticas. Podes reabrir a qualquer momento.`)) return
+    setSettings?.(prev => ({ ...prev, subjects: prev.subjects.map(s => s.key === subjectKey ? { ...s, closed: true } : s) }))
+    onBack?.()
+  }
+
+  const handleReopen = () => {
+    setSettings?.(prev => ({ ...prev, subjects: prev.subjects.map(s => s.key === subjectKey ? { ...s, closed: false } : s) }))
+  }
+
   return (
-    <div className="fade-in" style={{ maxWidth: 700 }}>
+    <div className="fade-in">
 
       {/* ── Back button ── */}
       <button onClick={onBack} style={{
@@ -83,11 +93,35 @@ export default function CadeiraPage({ subjectKey, settings, onBack, onNavigate }
         <ArrowLeft size={15} strokeWidth={2} /> Voltar
       </button>
 
+      {/* ── Closed banner ── */}
+      {subject.closed && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          padding: '10px 16px', borderRadius: 'var(--r)', marginBottom: 12,
+          background: 'var(--gray-50)', border: '1.5px solid var(--gray-200)',
+        }}>
+          <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-500)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ArchiveX size={15} /> Cadeira fechada — não aparece nas sugestões nem estatísticas
+          </span>
+          {setSettings && (
+            <button onClick={handleReopen} style={{
+              padding: '6px 14px', borderRadius: 'var(--r)', border: '1.5px solid var(--gray-300)',
+              background: 'var(--white)', fontFamily: 'inherit', fontWeight: 700,
+              fontSize: 'var(--t-caption)', cursor: 'pointer', color: 'var(--gray-600)',
+              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+            }}>
+              <ArchiveRestore size={13} /> Reabrir
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div style={{
         background: colorFaint, border: `2px solid ${colorBorder}`,
         borderRadius: 'var(--r)', padding: '22px 24px',
         display: 'flex', alignItems: 'center', gap: 18, marginBottom: 16,
+        opacity: subject.closed ? 0.7 : 1,
       }}>
         <span style={{ fontSize: '3rem', lineHeight: 1, flexShrink: 0 }}>{subject.emoji}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -107,20 +141,35 @@ export default function CadeiraPage({ subjectKey, settings, onBack, onNavigate }
               </span>
             )}
           </div>
-          <button
-            onClick={() => {
-              localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey: subject.key, title: subject.name }))
-              onNavigate?.('hours')
-            }}
-            style={{
-              padding: '8px 18px', borderRadius: 'var(--r)', border: 'none',
-              background: color, color: subject.textColor || '#fff',
-              fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            🍅 Estudar agora
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {!subject.closed && (
+              <button
+                onClick={() => {
+                  localStorage.setItem('pomodoro-prefill', JSON.stringify({ subjectKey: subject.key, title: subject.name }))
+                  onNavigate?.('hours')
+                }}
+                style={{
+                  padding: '8px 18px', borderRadius: 'var(--r)', border: 'none',
+                  background: color, color: subject.textColor || '#fff',
+                  fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                🍅 Estudar agora
+              </button>
+            )}
+            {setSettings && !subject.closed && (
+              <button onClick={handleClose} style={{
+                padding: '8px 14px', borderRadius: 'var(--r)',
+                border: '1.5px solid var(--gray-200)', background: 'var(--white)',
+                fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)',
+                cursor: 'pointer', color: 'var(--gray-400)',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}>
+                <ArchiveX size={14} /> Fechar cadeira
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

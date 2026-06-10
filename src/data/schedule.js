@@ -9,7 +9,7 @@ export function getTasksForDay(dayOfWeek, settingsOverride) {
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   return subjectKeys.map(key => {
     const subject = settings.subjects.find(s => s.key === key)
-    if (!subject) return null
+    if (!subject || subject.closed) return null
     const tasks = isWeekend
       ? [{ id: `${key}-sheet-weekend`, label: 'Ficha semanal da matéria', highlight: true }]
       : (subject.methods || []).map((method, i) => {

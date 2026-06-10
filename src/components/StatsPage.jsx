@@ -17,7 +17,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
   const [range, setRange] = useState('8w') // '8w' | '3m' | 'all'
   const [moodView, setMoodView] = useState('dist') // 'dist' | 'corr'
   const [showAch, setShowAch] = useState(false)
-  const subjects = settings?.subjects || []
+  const subjects = (settings?.subjects || []).filter(s => !s.closed)
   const [sessions] = useState(loadSessions)
 
   // ── Weekly bar chart data ──────────────────────────────────────────────
@@ -95,6 +95,16 @@ export default function StatsPage({ settings, onOpenCadeira }) {
   // Weekly streak
   const weeklyMin    = useMemo(() => loadWeeklyTarget(10), [])
   const weeklyStreak = useMemo(() => computeWeeklyStreak(sessions, weeklyMin), [sessions, weeklyMin])
+
+  // Daily streak
+  const streak = useMemo(() => {
+    const days = new Set(sessions.map(s => new Date(s.date).toDateString()))
+    let count = 0
+    const d = new Date(); d.setHours(0, 0, 0, 0)
+    if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1)
+    while (days.has(d.toDateString())) { count++; d.setDate(d.getDate() - 1) }
+    return count
+  }, [sessions])
 
   // Best day of week
   const dowTotals = useMemo(() => {
@@ -255,42 +265,123 @@ export default function StatsPage({ settings, onOpenCadeira }) {
 
   // ── Goal projection (per subject) ────────────────────────────────────
   const goalProjection = useMemo(() => {
-    const periodStart = settings?.periodStart ? new Date(settings.periodStart + 'T00:00:00') : null
-    const periodEnd   = settings?.periodEnd   ? new Date(settings.periodEnd   + 'T23:59:59') : null
-    if (!periodStart || !periodEnd) return null
-    let targets = {}
-    try { targets = JSON.parse(localStorage.getItem('daily-study-targets')) || {} } catch {}
+    if (subjects.length === 0 || sessions.length === 0) return null
+    let subjectTargets = {}
+    try { subjectTargets = JSON.parse(localStorage.getItem('subject-targets')) || {} } catch {}
+    let exams = []
+    try { exams = JSON.parse(localStorage.getItem('exams')) || [] } catch {}
+    const defaultPerSubject = (settings?.hoursGoal || 550) / Math.max(1, subjects.length)
     const now = new Date()
+    const periodStart = settings?.periodStart
+      ? new Date(settings.periodStart + 'T00:00:00')
+      : new Date(Math.min(...sessions.map(s => new Date(s.date).getTime())))
+    const periodEnd = settings?.periodEnd
+      ? new Date(settings.periodEnd + 'T23:59:59')
+      : new Date(now.getTime() + 60 * 86400000)
     const daysSinceStart = Math.max(1, (now - periodStart) / 86400000)
-    const daysRemaining  = Math.max(0, (periodEnd - now) / 86400000)
+    // Projection deadline per subject = the day of its furthest upcoming exam.
+    // Falls back to the semester end when no exam is marked for that subject.
+    const examDeadline = (s) => {
+      const upcoming = exams
+        .filter(e => e.date && (e.subject === s.name || e.subject === s.key))
+        .map(e => new Date(e.date + 'T23:59:59'))
+        .filter(d => d >= now)
+        .sort((a, b) => b - a)
+      return upcoming[0] || null
+    }
     const subjectData = subjects.map(s => {
-      const target = parseFloat(targets[s.key] || 0)
-      if (!target) return null
+      const t = parseFloat(subjectTargets[s.key])
+      const target = t > 0 ? t : parseFloat(defaultPerSubject.toFixed(0))
       const done = parseFloat(sessions.filter(x => x.subject === s.key).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
+      const deadline = examDeadline(s) || periodEnd
+      const hasExam = !!examDeadline(s)
+      const daysRemaining = Math.max(0, (deadline - now) / 86400000)
       const dailyPace = done / daysSinceStart
       const projected = parseFloat((done + dailyPace * daysRemaining).toFixed(0))
       const pct = Math.min(100, Math.round(done / target * 100))
-      return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, target, done, pct, projected, onTrack: projected >= target }
-    }).filter(Boolean)
-    if (subjectData.length === 0) return null
-    return { subjectData, daysRemaining: Math.round(daysRemaining) }
+      return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, target, done, pct, projected, onTrack: projected >= target, daysRemaining: Math.round(daysRemaining), deadline, hasExam }
+    })
+    return { subjectData }
   }, [sessions, settings, subjects])
 
-  // ── Radar chart data (balance across subjects) ────────────────────────
+  // ── Radar chart data (% of semester goal achieved per subject) ───────
   const radarData = useMemo(() => {
     if (subjects.length < 3) return null
-    const totalH = subjects.reduce((a, s) => a + subjectTotals.find(x => x.key === s.key)?.all || 0, 0)
-    if (totalH === 0) return null
+    let subjectTargets = {}
+    try { subjectTargets = JSON.parse(localStorage.getItem('subject-targets')) || {} } catch {}
+    const defaultPerSubject = (settings?.hoursGoal || 550) / Math.max(1, subjects.length)
+    const now = new Date()
+    const periodStart = settings?.periodStart
+      ? new Date(settings.periodStart + 'T00:00:00')
+      : sessions.length > 0 ? new Date(Math.min(...sessions.map(s => new Date(s.date).getTime()))) : null
+    const periodEnd = settings?.periodEnd
+      ? new Date(settings.periodEnd + 'T23:59:59')
+      : new Date(now.getTime() + 60 * 86400000)
+    if (!periodStart) return null
+    const totalDays = Math.max(1, (periodEnd - periodStart) / 86400000)
+    const elapsed   = Math.min(1, (now - periodStart) / (periodEnd - periodStart))
     return subjects.map(s => {
-      const st = subjectTotals.find(x => x.key === s.key)
-      const val = Math.round(((st?.all || 0) / totalH) * 100)
+      const t = parseFloat(subjectTargets[s.key])
+      const target = t > 0 ? t : defaultPerSubject
+      const expectedNow = target * elapsed
+      const done = subjectTotals.find(x => x.key === s.key)?.all || 0
+      const val = expectedNow > 0 ? Math.min(150, Math.round((done / expectedNow) * 100)) : 0
       return { subject: s.name.length > 10 ? s.name.slice(0, 9) + '…' : s.name, val, fullMark: 100 }
     })
-  }, [subjects, subjectTotals])
+  }, [subjects, subjectTotals, sessions, settings])
 
-  // ── Intraday timeline (sessions with startTime) ───────────────────────
+  // ── Confidence distribution per subject ──────────────────────────────
+  const confidenceData = useMemo(() => {
+    if (subjects.length === 0) return null
+    try {
+      const topicsMap = JSON.parse(localStorage.getItem('topics') || '{}')
+      const result = subjects.map(s => {
+        const subTopics = topicsMap[s.key] || topicsMap[s.name] || []
+        if (subTopics.length === 0) return null
+        const counts = { unknown: 0, little: 0, good: 0, great: 0 }
+        subTopics.forEach(t => { counts[t.confidence || 'unknown']++ })
+        return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, total: subTopics.length, counts }
+      }).filter(Boolean)
+      return result.length > 0 ? result : null
+    } catch { return null }
+  }, [subjects])
+
+  // ── Semester burndown (expected vs actual per subject) ───────────────
+  const semesterBurndown = useMemo(() => {
+    if (subjects.length === 0 || sessions.length === 0) return null
+    let subjectTargets = {}
+    try { subjectTargets = JSON.parse(localStorage.getItem('subject-targets')) || {} } catch {}
+    const defaultPerSubject = (settings?.hoursGoal || 550) / Math.max(1, subjects.length)
+    const now = new Date()
+    const periodStart = settings?.periodStart
+      ? new Date(settings.periodStart + 'T00:00:00')
+      : new Date(Math.min(...sessions.map(s => new Date(s.date).getTime())))
+    const periodEnd = settings?.periodEnd
+      ? new Date(settings.periodEnd + 'T23:59:59')
+      : new Date(now.getTime() + 60 * 86400000)
+    const totalDays = Math.max(1, (periodEnd - periodStart) / 86400000)
+    const elapsed = Math.min(1, Math.max(0, (now - periodStart) / (totalDays * 86400000)))
+    return subjects.map(s => {
+      const t = parseFloat(subjectTargets[s.key])
+      const target = t > 0 ? t : parseFloat(defaultPerSubject.toFixed(0))
+      const done = parseFloat(sessions.filter(x => x.subject === s.key).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
+      const expectedNow = parseFloat((target * elapsed).toFixed(1))
+      const delta = parseFloat((done - expectedNow).toFixed(1))
+      return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, target, done, expectedNow, delta, pct: Math.min(100, Math.round(done / target * 100)), pctExpected: Math.min(100, Math.round(expectedNow / target * 100)) }
+    })
+  }, [subjects, sessions, settings])
+
+  // ── Archived semesters comparison ────────────────────────────────────
+  const archivedSemesters = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('archived-semesters') || '[]') } catch { return [] }
+  }, [])
+
+  // ── Intraday timeline (last 25 sessions with startTime) ─────────────
   const intradayData = useMemo(() => {
-    const withTime = sessions.filter(s => s.startTime && s.hours > 0)
+    const withTime = sessions
+      .filter(s => s.startTime && s.hours > 0)
+      .sort((a, b) => b.startTime - a.startTime)
+      .slice(0, 25)
     if (withTime.length < 3) return null
     const slots = Array(24).fill(0)
     withTime.forEach(s => {
@@ -303,14 +394,21 @@ export default function StatsPage({ settings, onOpenCadeira }) {
 
   // ── Weekly goals history (last 8 weeks) ──────────────────────────────
   const weeklyGoalHistory = useMemo(() => {
-    const periodStart = settings?.periodStart ? new Date(settings.periodStart + 'T00:00:00') : null
-    const periodEnd   = settings?.periodEnd   ? new Date(settings.periodEnd   + 'T23:59:59') : null
-    if (!periodStart || !periodEnd) return null
-    // Sum per-subject targets to get total semester goal
-    let targets = {}
-    try { targets = JSON.parse(localStorage.getItem('daily-study-targets')) || {} } catch {}
-    const totalTarget = Object.values(targets).reduce((a, b) => a + parseFloat(b || 0), 0)
+    if (sessions.length === 0) return null
+    let subjectTargets = {}
+    try { subjectTargets = JSON.parse(localStorage.getItem('subject-targets')) || {} } catch {}
+    const defaultPerSubject = (settings?.hoursGoal || 550) / Math.max(1, subjects.length)
+    const totalTarget = subjects.reduce((a, s) => {
+      const t = parseFloat(subjectTargets[s.key])
+      return a + (t > 0 ? t : defaultPerSubject)
+    }, 0)
     if (totalTarget <= 0) return null
+    const periodStart = settings?.periodStart
+      ? new Date(settings.periodStart + 'T00:00:00')
+      : new Date(Math.min(...sessions.map(s => new Date(s.date).getTime())))
+    const periodEnd = settings?.periodEnd
+      ? new Date(settings.periodEnd + 'T23:59:59')
+      : new Date(Date.now() + 60 * 86400000)
     const totalWeeks = Math.max(1, (periodEnd - periodStart) / (7 * 86400000))
     const weeklyTarget = parseFloat((totalTarget / totalWeeks).toFixed(1))
     const result = []
@@ -475,39 +573,6 @@ export default function StatsPage({ settings, onOpenCadeira }) {
         </div>
       </div>
 
-      {/* Subject breakdown */}
-      {subjectTotals.length > 0 && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header">
-            <span className="card-title">Horas por cadeira</span>
-          </div>
-          <div className="card-body">
-            {subjectTotals.map(s => (
-              <div key={s.key} style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                  <button
-                    onClick={() => onOpenCadeira?.(s.key)}
-                    style={{ background: 'none', border: 'none', cursor: onOpenCadeira ? 'pointer' : 'default', fontFamily: 'inherit', padding: 0, fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-800)', display: 'flex', alignItems: 'center', gap: 4 }}
-                  >
-                    {s.emoji} {s.name}
-                  </button>
-                  <div style={{ display: 'flex', gap: 12, fontSize: 'var(--t-caption)', color: 'var(--gray-500)', fontWeight: 600 }}>
-                    <span>Esta semana: <strong style={{ color: 'var(--gray-800)' }}>{s.week}h</strong></span>
-                    <span>Total: <strong style={{ color: 'var(--gray-800)' }}>{s.all}h</strong></span>
-                  </div>
-                </div>
-                <div className="progress-wrap" style={{ height: 8 }}>
-                  <div className="progress-fill" style={{
-                    width: `${(s.all / maxSubject) * 100}%`,
-                    background: s.color || 'var(--rose-300)',
-                    height: '100%',
-                  }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Heatmap */}
       <div className="card" style={{ marginBottom: 20 }}>
@@ -664,7 +729,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
         <div className="card" style={{ marginBottom: 20 }}>
           <div className="card-header">
             <span className="card-title">🎯 Projeção da meta</span>
-            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>⏳ {goalProjection.daysRemaining} dias restantes</span>
+            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>até ao dia do exame</span>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {goalProjection.subjectData.map(s => (
@@ -682,12 +747,53 @@ export default function StatsPage({ settings, onOpenCadeira }) {
                   <div className="progress-fill" style={{ width: `${s.pct}%`, height: '100%', background: s.onTrack ? '#16a34a' : (s.color || 'var(--rose-400)') }} />
                 </div>
                 <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 4 }}>
+                  {s.hasExam
+                    ? `📅 Exame ${s.deadline.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })} · ${s.daysRemaining}d`
+                    : `⏳ Fim do semestre · ${s.daysRemaining}d`}
+                  {' — '}
                   {s.onTrack
-                    ? `Projeção: ${s.projected}h — no bom caminho`
-                    : `Projeção: ${s.projected}h — faltam ainda ${(s.target - s.done).toFixed(1)}h para atingir a meta`}
+                    ? `projeção ${s.projected}h, no bom caminho`
+                    : `projeção ${s.projected}h, faltam ${(s.target - s.done).toFixed(1)}h para a meta`}
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Semester burndown — expected vs actual pace */}
+      {semesterBurndown && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header">
+            <span className="card-title">📉 Ritmo do semestre</span>
+            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>esperado até hoje vs feito</span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {semesterBurndown.map(s => (
+              <div key={s.key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                  <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)' }}>{s.emoji} {s.name}</span>
+                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: s.delta >= 0 ? '#16a34a' : '#dc2626' }}>
+                    {s.delta >= 0 ? `+${s.delta}h adiantada` : `${s.delta}h em atraso`}
+                  </span>
+                </div>
+                <div style={{ position: 'relative', height: 10, borderRadius: 99, background: 'var(--gray-100)', overflow: 'visible' }}>
+                  {/* Actual done bar */}
+                  <div style={{ height: '100%', borderRadius: 99, background: s.delta >= 0 ? '#16a34a' : (s.color || 'var(--rose-400)'), width: `${s.pct}%`, transition: 'width 0.3s' }} />
+                  {/* Expected now marker */}
+                  {s.pctExpected > 0 && s.pctExpected <= 100 && (
+                    <div style={{ position: 'absolute', top: -2, left: `${s.pctExpected}%`, width: 2, height: 14, background: 'var(--gray-400)', borderRadius: 99, transform: 'translateX(-50%)' }} title={`Esperado: ${s.expectedNow}h`} />
+                  )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{s.done}h feitas</span>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>esperado: {s.expectedNow}h · meta: {s.target}h</span>
+                </div>
+              </div>
+            ))}
+            <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 2 }}>
+              A linha vertical indica o ritmo esperado a esta altura do semestre
+            </p>
           </div>
         </div>
       )}
@@ -732,12 +838,12 @@ export default function StatsPage({ settings, onOpenCadeira }) {
               <RadarChart data={radarData}>
                 <PolarGrid stroke="var(--gray-200)" />
                 <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: 'var(--gray-600)', fontWeight: 600 }} />
-                <Radar name="% do total" dataKey="val" stroke="var(--rose-400)" fill="var(--rose-400)" fillOpacity={0.25} />
-                <Tooltip formatter={(v) => [`${v}%`, '% do total']} contentStyle={{ fontSize: 'var(--t-caption)', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)' }} />
+                <Radar name="% da meta" dataKey="val" stroke="var(--rose-400)" fill="var(--rose-400)" fillOpacity={0.25} />
+                <Tooltip formatter={(v) => [`${v}%`, '% da meta esperada']} contentStyle={{ fontSize: 'var(--t-caption)', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)' }} />
               </RadarChart>
             </ResponsiveContainer>
             <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', textAlign: 'center', marginTop: 4 }}>
-              Percentagem do tempo total dedicada a cada cadeira
+              100% = no ritmo certo para atingir a meta · acima de 100% = adiantada · abaixo = em atraso
             </p>
           </div>
         </div>
@@ -760,8 +866,80 @@ export default function StatsPage({ settings, onOpenCadeira }) {
               })}
             </div>
             <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 8 }}>
-              Baseado em sessões com hora de início registada ({sessions.filter(s => s.startTime).length} sessões)
+              Baseado nas últimas {sessions.filter(s => s.startTime && s.hours > 0).slice(-25).length} sessões com hora de início registada
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Confidence distribution per subject */}
+      {confidenceData && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">📚 Confiança nos tópicos</span></div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {confidenceData.map(s => (
+              <div key={s.key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)' }}>{s.emoji} {s.name}</span>
+                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{s.total} tópico{s.total !== 1 ? 's' : ''}</span>
+                </div>
+                <div style={{ display: 'flex', height: 10, borderRadius: 99, overflow: 'hidden', background: 'var(--gray-100)' }}>
+                  {[
+                    { id: 'great',   color: '#15803d' },
+                    { id: 'good',    color: '#1d4ed8' },
+                    { id: 'little',  color: '#b45309' },
+                    { id: 'unknown', color: '#b91c1c' },
+                  ].map(l => {
+                    const pct = s.total > 0 ? (s.counts[l.id] / s.total) * 100 : 0
+                    if (pct === 0) return null
+                    return <div key={l.id} title={`${l.id}: ${s.counts[l.id]}`} style={{ width: `${pct}%`, background: l.color }} />
+                  })}
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+              {[{id:'great',label:'Sei muito bem',color:'#15803d'},{id:'good',label:'Sei bem',color:'#1d4ed8'},{id:'little',label:'Sei pouco',color:'#b45309'},{id:'unknown',label:'Não sei',color:'#b91c1c'}].map(l => (
+                <span key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--t-caption)', color: 'var(--gray-500)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: l.color, display: 'inline-block', flexShrink: 0 }} /> {l.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Semester comparison */}
+      {archivedSemesters.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><span className="card-title">📅 Comparação entre semestres</span></div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: '0.07em', marginBottom: 6 }}>SEMESTRE ATUAL</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--gray-900)' }}>{totalHours.toFixed(0)}h</span>
+                <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{totalSessions} sessões</span>
+              </div>
+            </div>
+            {archivedSemesters.slice(0, 4).map(sem => (
+              <div key={sem.id} style={{ padding: '10px 12px', background: 'var(--gray-50)', borderRadius: 'var(--r)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)' }}>{sem.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span style={{ fontWeight: 800, color: 'var(--gray-900)' }}>{sem.totalHours}h</span>
+                    <span style={{ fontSize: 'var(--t-caption)', color: sem.totalHours >= totalHours ? '#16a34a' : '#dc2626' }}>
+                      {sem.totalHours >= totalHours ? '▲' : '▼'} vs atual
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {Object.entries(sem.bySubject).sort((a,b) => b[1]-a[1]).slice(0,5).map(([subj, h]) => (
+                    <span key={subj} style={{ fontSize: 'var(--t-caption)', background: 'var(--white)', padding: '2px 8px', borderRadius: 99, border: '1px solid var(--gray-200)', color: 'var(--gray-600)' }}>
+                      {subj}: {h}h
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
