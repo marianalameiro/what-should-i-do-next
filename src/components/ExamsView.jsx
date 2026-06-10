@@ -86,12 +86,14 @@ export default function ExamsView({ settings }) {
   const [subjectEcts, setSubjectEcts] = useState(() => load("subject-ects", {})) // { [subjectKey]: ects }
   const [oldGrades, setOldGrades]     = useState(() => load("old-grades", []))   // [{ id, name, grade, ects }]
   const [newOldGrade, setNewOldGrade] = useState({ name: "", grade: "", ects: "" })
+  const [hideTopics, setHideTopics]   = useState(() => load("hide-scheduled-topics", false))
 
   useEffect(() => save("exams", allExams),          [allExams])
   useEffect(() => save("topics", topics),           [topics])
   useEffect(() => save("exam-schedule", schedule),  [schedule])
   useEffect(() => save("subject-ects", subjectEcts), [subjectEcts])
   useEffect(() => save("old-grades", oldGrades),    [oldGrades])
+  useEffect(() => save("hide-scheduled-topics", hideTopics), [hideTopics])
 
   const emptyForm = { subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, weight: "", notes: "" }
 
@@ -154,8 +156,9 @@ export default function ExamsView({ settings }) {
   // Each assessment carries a weight (% of the subject grade). A subject only has a
   // final grade once 100% of that weight has been graded; otherwise it stays incomplete
   // and is left OUT of the overall course average. Final grade is rounded to the unit (PT).
-  const subjectGrades = subjects.map(s => {
-    const subjExams   = exams.filter(e => e.subject === s.name)
+  // Inclui cadeiras fechadas — uma cadeira fechada é uma cadeira concluída, com nota final.
+  const subjectGrades = (settings?.subjects || []).map(s => {
+    const subjExams   = allExams.filter(e => e.subject === s.name)
     const withWeight  = subjExams.filter(e => e.weight > 0)
     const graded      = withWeight.filter(e => e.actualGrade != null)
     const definedW    = withWeight.reduce((a, e) => a + e.weight, 0)
@@ -165,7 +168,7 @@ export default function ExamsView({ settings }) {
     const finalExact  = gradedW > 0 ? weightedSum / gradedW : null
     const finalGrade  = complete ? Math.round(finalExact) : null
     const ects        = subjectEcts[s.key]
-    return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, components: subjExams, definedW, gradedW, finalExact, finalGrade, complete, ects }
+    return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, closed: !!s.closed, components: subjExams, definedW, gradedW, finalExact, finalGrade, complete, ects }
   }).filter(g => g.components.length > 0)
 
   // ── Overall course average (média do curso) ──
@@ -372,7 +375,16 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
     }
   }
 
-  const sortedExams = [...exams].sort((a, b) => new Date(a.date) - new Date(b.date))
+  // "A vir" hides closed subjects. O Arquivo mantém TODAS as avaliações passadas
+  // (incl. de cadeiras fechadas) como histórico de notas, com as mais recentes primeiro.
+  const upcomingExams = [...exams]
+    .filter(e => daysUntil(e.date) > 0)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+  const pastExams = [...allExams]
+    .filter(e => daysUntil(e.date) <= 0)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+  const shownExams = examTab === 'upcoming' ? upcomingExams : pastExams
+  const hasAnyExam = upcomingExams.length > 0 || pastExams.length > 0
 
   return (
     <div className="fade-in">
@@ -439,118 +451,21 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         </div>
       )}
 
-      {/* ── Overall course average ── */}
-      {overallAverage !== null && (
-        <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, #fdf2f4, #fce7f3)' }}>
-          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', letterSpacing: 0.4, margin: 0 }}>Média do curso (ponderada por ECTS)</p>
-              <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', margin: 0, lineHeight: 1.2 }}>{overallAverage.value}<span style={{ fontSize: '1rem', color: 'var(--gray-400)' }}>/20</span></p>
-            </div>
-            <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)', textAlign: 'right' }}>
-              <p style={{ margin: 0 }}>{overallAverage.count} cadeira{overallAverage.count !== 1 ? 's' : ''} concluída{overallAverage.count !== 1 ? 's' : ''} · {overallAverage.ects} ECTS</p>
-              <p style={{ margin: '2px 0 0', fontWeight: 600, color: overallAverage.value >= 10 ? '#16a34a' : '#dc2626' }}>{overallAverage.value >= 18 ? '⭐ Excelente' : overallAverage.value >= 14 ? '✅ Bom' : overallAverage.value >= 10 ? '👍 Positiva' : '⚠️ Negativa'}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Final grade per subject ── */}
-      {subjectGrades.length > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-header">
-            <span className="card-title">📊 Nota final por cadeira</span>
-            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>peso de cada avaliação · ECTS da cadeira</span>
-          </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {subjectGrades.map(g => {
-              const weightOff = g.definedW > 0 && Math.abs(g.definedW - 100) > 0.5
-              return (
-                <div key={g.key} style={{ border: '1px solid var(--gray-100)', borderRadius: 'var(--r)', padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)' }}>{g.emoji} {g.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <label style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        ECTS
-                        <input type="number" min={0} max={60} value={g.ects ?? ""} placeholder="—" onChange={e => updateSubjectEcts(g.key, e.target.value)}
-                          style={{ width: 56, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />
-                      </label>
-                      {g.finalGrade != null ? (
-                        <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: g.finalGrade >= 10 ? '#16a34a' : '#dc2626' }}>{g.finalGrade}<span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>/20</span></span>
-                      ) : (
-                        <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--amber-400)' }}>incompleta</span>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {g.components.map(c => (
-                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 'var(--t-caption)' }}>
-                        <span style={{ color: 'var(--gray-500)', fontWeight: 600, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {c.type} · {c.date ? new Date(c.date + 'T12:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }) : '—'}
-                        </span>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--gray-400)', flexShrink: 0 }}>
-                          <input type="number" min={0} max={100} value={c.weight ?? ""} placeholder="peso" onChange={e => updateExamWeight(c.id, e.target.value)}
-                            style={{ width: 52, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />%
-                        </label>
-                        <span style={{ flexShrink: 0, fontWeight: 700, minWidth: 44, textAlign: 'right', color: c.actualGrade != null ? (c.actualGrade >= 10 ? '#16a34a' : '#dc2626') : 'var(--gray-300)' }}>
-                          {c.actualGrade != null ? `${c.actualGrade}/20` : '—'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <p style={{ fontSize: 'var(--t-caption)', color: weightOff ? '#dc2626' : 'var(--gray-400)', margin: '8px 0 0' }}>
-                    {weightOff
-                      ? `⚠️ Os pesos somam ${g.definedW}% — deviam somar 100%.`
-                      : g.complete
-                        ? `✅ Nota final completa (${g.gradedW}% lançado).`
-                        : `Faltam lançar ${Math.max(0, Math.round(100 - g.gradedW))}% da nota para fechar a cadeira.`}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Old grades (previous years) ── */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-header">
-          <span className="card-title">🗓️ Notas de anos anteriores</span>
-          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>entram na média do curso</span>
-        </div>
-        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {oldGrades.map(o => (
-            <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--gray-50)' }}>
-              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</span>
-              <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', flexShrink: 0 }}>{o.ects} ECTS</span>
-              <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: o.grade >= 10 ? '#16a34a' : '#dc2626', minWidth: 44, textAlign: 'right', flexShrink: 0 }}>{o.grade}/20</span>
-              <button className="btn btn-ghost" onClick={() => removeOldGrade(o.id)} style={{ padding: '4px 6px', flexShrink: 0 }}><Trash2 size={13} /></button>
-            </div>
-          ))}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px auto', gap: 8, alignItems: 'center' }}>
-            <input className="form-input" placeholder="Cadeira" value={newOldGrade.name} onChange={e => setNewOldGrade(p => ({ ...p, name: e.target.value }))} />
-            <input className="form-input" type="number" min={0} max={20} step={0.1} placeholder="Nota" value={newOldGrade.grade} onChange={e => setNewOldGrade(p => ({ ...p, grade: e.target.value }))} />
-            <input className="form-input" type="number" min={0} max={60} placeholder="ECTS" value={newOldGrade.ects} onChange={e => setNewOldGrade(p => ({ ...p, ects: e.target.value }))} />
-            <button className="btn btn-primary" onClick={addOldGrade} style={{ padding: '8px 12px' }}><Plus size={14} /></button>
-          </div>
-        </div>
-      </div>
-
       {/* ── Exams list tabs ── */}
-      {sortedExams.length > 0 && (
+      {hasAnyExam && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {[['upcoming','📅 A vir'],['past','🗂️ Arquivo']].map(([id, label]) => (
             <button key={id} onClick={() => setExamTab(id)}
               style={{ padding: '6px 14px', borderRadius: 50, fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer',
                 border: `2px solid ${examTab === id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
                 background: examTab === id ? 'var(--rose-50)' : 'var(--white)', color: examTab === id ? 'var(--rose-400)' : 'var(--gray-500)' }}>
-              {label} ({sortedExams.filter(e => (daysUntil(e.date) > 0) === (id === 'upcoming')).length})
+              {label} ({(id === 'upcoming' ? upcomingExams : pastExams).length})
             </button>
           ))}
         </div>
       )}
 
-      {sortedExams.length === 0 ? (
+      {!hasAnyExam ? (
         <div style={{
           padding: '32px 28px', textAlign: 'center',
           background: 'var(--white)', borderRadius: 'var(--r)',
@@ -569,7 +484,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
-          {sortedExams.filter(e => (daysUntil(e.date) > 0) === (examTab === 'upcoming')).map(exam => {
+          {shownExams.map(exam => {
             const days = daysUntil(exam.date)
             const pill = urgencyPill(days)
             const open = expanded === exam.id
@@ -647,7 +562,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
               </div>
             )
           })}
-          {sortedExams.filter(e => (daysUntil(e.date) > 0) === (examTab === 'upcoming')).length === 0 && (
+          {shownExams.length === 0 && (
             <div className="card"><div className="empty-state" style={{ padding: 24 }}>
               <p style={{ color: 'var(--gray-400)', fontSize: 'var(--t-body)' }}>{examTab === 'upcoming' ? 'Nenhum exame futuro — boas férias! 🎉' : 'Nenhum exame passado ainda.'}</p>
             </div></div>
@@ -762,6 +677,9 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         <div className="card-header">
           <span className="card-title"><CalendarEmoji /> Calendário de estudo</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "var(--t-caption)" }} onClick={() => setHideTopics(v => !v)}>
+              {hideTopics ? "👁️ Mostrar temas" : "🙈 Esconder temas"}
+            </button>
             <button className="btn btn-secondary" style={{ padding: "4px 8px" }} onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>‹</button>
             <span style={{ fontSize: "var(--t-body)", fontWeight: 700, color: "var(--gray-700)", minWidth: 120, textAlign: "center" }}>
               {calMonth.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })}
@@ -828,9 +746,8 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   const isToday = dateStr === todayStr
                   const isExamDay = examDates.has(dateStr)
                   const isDragOver = dragOver === dateStr
-                  const SHOW_MAX = 2
-                  const visible = dayTopics.slice(0, SHOW_MAX)
-                  const overflow = dayTopics.length - SHOW_MAX
+                  // Mostra todos os temas (sem "+N"); o botão esconde-os por completo.
+                  const visible = hideTopics ? [] : dayTopics
 
                   return (
                     <div
@@ -873,9 +790,6 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                           >✕</button>
                         </div>
                       ))}
-                      {overflow > 0 && (
-                        <div style={{ fontSize: "var(--t-caption)", fontWeight: 700, color: "var(--gray-400)", textAlign: "center", marginTop: 1 }}>+{overflow}</div>
-                      )}
                     </div>
                   )
                 })}
@@ -949,6 +863,106 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
             )}
           </>
         )}
+      </div>
+
+      {/* ── Overall course average ── */}
+      {overallAverage !== null && (
+        <div className="card" style={{ marginTop: 14, background: 'linear-gradient(135deg, #fdf2f4, #fce7f3)' }}>
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', letterSpacing: 0.4, margin: 0 }}>Média do curso (ponderada por ECTS)</p>
+              <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', margin: 0, lineHeight: 1.2 }}>{overallAverage.value}<span style={{ fontSize: '1rem', color: 'var(--gray-400)' }}>/20</span></p>
+            </div>
+            <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)', textAlign: 'right' }}>
+              <p style={{ margin: 0 }}>{overallAverage.count} cadeira{overallAverage.count !== 1 ? 's' : ''} concluída{overallAverage.count !== 1 ? 's' : ''} · {overallAverage.ects} ECTS</p>
+              <p style={{ margin: '2px 0 0', fontWeight: 600, color: overallAverage.value >= 10 ? '#16a34a' : '#dc2626' }}>{overallAverage.value >= 18 ? '⭐ Excelente' : overallAverage.value >= 14 ? '✅ Bom' : overallAverage.value >= 10 ? '👍 Positiva' : '⚠️ Negativa'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Final grade per subject ── */}
+      {subjectGrades.length > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="card-header">
+            <span className="card-title">📊 Nota final por cadeira</span>
+            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>peso de cada avaliação · ECTS da cadeira</span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {subjectGrades.map(g => {
+              const weightOff = g.definedW > 0 && Math.abs(g.definedW - 100) > 0.5
+              return (
+                <div key={g.key} style={{ border: '1px solid var(--gray-100)', borderRadius: 'var(--r)', padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)' }}>
+                      {g.emoji} {g.name}
+                      {g.closed && <span style={{ marginLeft: 6, fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', background: 'var(--gray-100)', borderRadius: 99, padding: '1px 7px' }}>fechada</span>}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <label style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        ECTS
+                        <input type="number" min={0} max={60} value={g.ects ?? ""} placeholder="—" onChange={e => updateSubjectEcts(g.key, e.target.value)}
+                          style={{ width: 56, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />
+                      </label>
+                      {g.finalGrade != null ? (
+                        <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: g.finalGrade >= 10 ? '#16a34a' : '#dc2626' }}>{g.finalGrade}<span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>/20</span></span>
+                      ) : (
+                        <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--amber-400)' }}>incompleta</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {g.components.map(c => (
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 'var(--t-caption)' }}>
+                        <span style={{ color: 'var(--gray-500)', fontWeight: 600, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.type} · {c.date ? new Date(c.date + 'T12:00:00').toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }) : '—'}
+                        </span>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--gray-400)', flexShrink: 0 }}>
+                          <input type="number" min={0} max={100} value={c.weight ?? ""} placeholder="peso" onChange={e => updateExamWeight(c.id, e.target.value)}
+                            style={{ width: 52, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />%
+                        </label>
+                        <span style={{ flexShrink: 0, fontWeight: 700, minWidth: 44, textAlign: 'right', color: c.actualGrade != null ? (c.actualGrade >= 10 ? '#16a34a' : '#dc2626') : 'var(--gray-300)' }}>
+                          {c.actualGrade != null ? `${c.actualGrade}/20` : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 'var(--t-caption)', color: weightOff ? '#dc2626' : 'var(--gray-400)', margin: '8px 0 0' }}>
+                    {weightOff
+                      ? `⚠️ Os pesos somam ${g.definedW}% — deviam somar 100%.`
+                      : g.complete
+                        ? `✅ Nota final completa (${g.gradedW}% lançado).`
+                        : `Faltam lançar ${Math.max(0, Math.round(100 - g.gradedW))}% da nota para fechar a cadeira.`}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Old grades (previous years) ── */}
+      <div className="card" style={{ marginTop: 14 }}>
+        <div className="card-header">
+          <span className="card-title">🗓️ Notas de anos anteriores</span>
+          <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>entram na média do curso</span>
+        </div>
+        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {oldGrades.map(o => (
+            <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--gray-50)' }}>
+              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</span>
+              <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', flexShrink: 0 }}>{o.ects} ECTS</span>
+              <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: o.grade >= 10 ? '#16a34a' : '#dc2626', minWidth: 44, textAlign: 'right', flexShrink: 0 }}>{o.grade}/20</span>
+              <button className="btn btn-ghost" onClick={() => removeOldGrade(o.id)} style={{ padding: '4px 6px', flexShrink: 0 }}><Trash2 size={13} /></button>
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px auto', gap: 8, alignItems: 'center' }}>
+            <input className="form-input" placeholder="Cadeira" value={newOldGrade.name} onChange={e => setNewOldGrade(p => ({ ...p, name: e.target.value }))} />
+            <input className="form-input" type="number" min={0} max={20} step={0.1} placeholder="Nota" value={newOldGrade.grade} onChange={e => setNewOldGrade(p => ({ ...p, grade: e.target.value }))} />
+            <input className="form-input" type="number" min={0} max={60} placeholder="ECTS" value={newOldGrade.ects} onChange={e => setNewOldGrade(p => ({ ...p, ects: e.target.value }))} />
+            <button className="btn btn-primary" onClick={addOldGrade} style={{ padding: '8px 12px' }}><Plus size={14} /></button>
+          </div>
+        </div>
       </div>
 
     </div>

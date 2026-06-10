@@ -346,31 +346,6 @@ export default function StatsPage({ settings, onOpenCadeira }) {
     } catch { return null }
   }, [subjects])
 
-  // ── Semester burndown (expected vs actual per subject) ───────────────
-  const semesterBurndown = useMemo(() => {
-    if (subjects.length === 0 || sessions.length === 0) return null
-    let subjectTargets = {}
-    try { subjectTargets = JSON.parse(localStorage.getItem('subject-targets')) || {} } catch {}
-    const defaultPerSubject = (settings?.hoursGoal || 550) / Math.max(1, subjects.length)
-    const now = new Date()
-    const periodStart = settings?.periodStart
-      ? new Date(settings.periodStart + 'T00:00:00')
-      : new Date(Math.min(...sessions.map(s => new Date(s.date).getTime())))
-    const periodEnd = settings?.periodEnd
-      ? new Date(settings.periodEnd + 'T23:59:59')
-      : new Date(now.getTime() + 60 * 86400000)
-    const totalDays = Math.max(1, (periodEnd - periodStart) / 86400000)
-    const elapsed = Math.min(1, Math.max(0, (now - periodStart) / (totalDays * 86400000)))
-    return subjects.map(s => {
-      const t = parseFloat(subjectTargets[s.key])
-      const target = t > 0 ? t : parseFloat(defaultPerSubject.toFixed(0))
-      const done = parseFloat(sessions.filter(x => x.subject === s.key).reduce((a, b) => a + (b.hours || 0), 0).toFixed(1))
-      const expectedNow = parseFloat((target * elapsed).toFixed(1))
-      const delta = parseFloat((done - expectedNow).toFixed(1))
-      return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, target, done, expectedNow, delta, pct: Math.min(100, Math.round(done / target * 100)), pctExpected: Math.min(100, Math.round(expectedNow / target * 100)) }
-    })
-  }, [subjects, sessions, settings])
-
   // ── Archived semesters comparison ────────────────────────────────────
   const archivedSemesters = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('archived-semesters') || '[]') } catch { return [] }
@@ -757,43 +732,6 @@ export default function StatsPage({ settings, onOpenCadeira }) {
                 </p>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Semester burndown — expected vs actual pace */}
-      {semesterBurndown && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header">
-            <span className="card-title">📉 Ritmo do semestre</span>
-            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>esperado até hoje vs feito</span>
-          </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {semesterBurndown.map(s => (
-              <div key={s.key}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                  <span style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-800)' }}>{s.emoji} {s.name}</span>
-                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: s.delta >= 0 ? '#16a34a' : '#dc2626' }}>
-                    {s.delta >= 0 ? `+${s.delta}h adiantada` : `${s.delta}h em atraso`}
-                  </span>
-                </div>
-                <div style={{ position: 'relative', height: 10, borderRadius: 99, background: 'var(--gray-100)', overflow: 'visible' }}>
-                  {/* Actual done bar */}
-                  <div style={{ height: '100%', borderRadius: 99, background: s.delta >= 0 ? '#16a34a' : (s.color || 'var(--rose-400)'), width: `${s.pct}%`, transition: 'width 0.3s' }} />
-                  {/* Expected now marker */}
-                  {s.pctExpected > 0 && s.pctExpected <= 100 && (
-                    <div style={{ position: 'absolute', top: -2, left: `${s.pctExpected}%`, width: 2, height: 14, background: 'var(--gray-400)', borderRadius: 99, transform: 'translateX(-50%)' }} title={`Esperado: ${s.expectedNow}h`} />
-                  )}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{s.done}h feitas</span>
-                  <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>esperado: {s.expectedNow}h · meta: {s.target}h</span>
-                </div>
-              </div>
-            ))}
-            <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 2 }}>
-              A linha vertical indica o ritmo esperado a esta altura do semestre
-            </p>
           </div>
         </div>
       )}
