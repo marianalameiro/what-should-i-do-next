@@ -195,6 +195,30 @@ export default function DailyView() {
   useEffect(() => { saveEnergy(energyLevels) }, [energyLevels])
   useEffect(() => { localStorage.setItem('show-matrix', JSON.stringify(showMatrix)) }, [showMatrix])
 
+  // Roll-over automático: tarefas extra por terminar de dias anteriores passam para hoje.
+  // Mantêm o mesmo id, por isso conservam o quadrante (eisenhower-overrides é por id).
+  useEffect(() => {
+    const now = new Date()
+    const todayStr = now.toDateString()
+    const todayMid = new Date(todayStr).getTime()
+    const effDate = (t) => {
+      if (t.createdDate) return t.createdDate
+      try { const ts = parseInt(t.id.replace('extra-', ''), 10); if (!isNaN(ts) && ts > 1e12) return new Date(ts).toDateString() } catch {}
+      return null
+    }
+    let changed = false
+    const rolled = loadExtra().map(t => {
+      if (t.recurrence) return t                            // recorrentes seguem a sua regra
+      const eff = effDate(t)
+      if (!eff) return t                                    // sem data → aparece sempre
+      if (new Date(eff).getTime() >= todayMid) return t     // hoje ou futuro
+      if (loadDone(new Date(eff))[t.id]) return t           // já concluída nesse dia
+      changed = true
+      return { ...t, createdDate: todayStr, createdDow: now.getDay() }
+    })
+    if (changed) { saveExtra(rolled); setExtraTasks(rolled) }
+  }, [])
+
   // Exporta as tarefas de hoje + próximo exame para o widget do desktop (Übersicht)
   useEffect(() => {
     if (!window.electronAPI?.exportWidgetData) return
@@ -810,51 +834,6 @@ export default function DailyView() {
           🎉 Dia concluído! Orgulho de ti!
         </div>
       )}
-
-      {/* Deficit suggestions — shown only when no schedule tasks for today */}
-      {isToday && allCount === 0 && (() => {
-        try {
-          const s = JSON.parse(localStorage.getItem('user-settings') || '{}')
-          const subjs = s.subjects || []
-          if (subjs.length === 0) return null
-          const sess = JSON.parse(localStorage.getItem('study-sessions') || '[]')
-          const monday = getMondayOfWeek(new Date())
-          const targets = JSON.parse(localStorage.getItem('subject-targets') || '{}')
-          const hoursGoal = s.hoursGoal || 550
-          const daysRem = s.periodEnd ? Math.max(1, Math.round((new Date(s.periodEnd) - new Date()) / 86400000)) : 120
-          const weeksRem = Math.max(1, daysRem / 7)
-          const dow = new Date().getDay() === 0 ? 7 : new Date().getDay()
-          const deficits = subjs.map(sub => {
-            const weeklyT = (parseFloat(targets[sub.key] || hoursGoal / subjs.length) / weeksRem)
-            const targetNow = weeklyT * (dow / 7)
-            const weekDone = sess.filter(x => x.subject === sub.key && new Date(x.date) >= monday).reduce((a, b) => a + (b.hours || 0), 0)
-            const deficit = Math.max(0, parseFloat((targetNow - weekDone).toFixed(1)))
-            return { ...sub, deficit, weekDone: parseFloat(weekDone.toFixed(1)), weeklyT: parseFloat(weeklyT.toFixed(1)) }
-          }).filter(x => x.deficit > 0).sort((a, b) => b.deficit - a.deficit)
-          if (deficits.length === 0) return null
-          return (
-            <div style={{ marginBottom: 16, padding: '16px 18px', background: 'var(--white)', border: '1.5px dashed var(--gray-200)', borderRadius: 'var(--r)' }}>
-              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 800, color: 'var(--gray-400)', letterSpacing: 0.5, marginBottom: 10 }}>
-                💡 SUGESTÕES — ATRASO DESTA SEMANA
-              </p>
-              {deficits.slice(0, 4).map(sub => (
-                <div key={sub.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{sub.emoji}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-800)' }}>{sub.name}</p>
-                    <p style={{ margin: 0, fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
-                      {sub.weekDone}h feitas · meta {sub.weeklyT}h/semana
-                    </p>
-                  </div>
-                  <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, padding: '3px 10px', borderRadius: 50, background: (sub.color || '#f9a8d4') + '22', color: sub.textColor || 'var(--gray-600)', flexShrink: 0 }}>
-                    {sub.deficit}h em falta
-                  </span>
-                </div>
-              ))}
-            </div>
-          )
-        } catch { return null }
-      })()}
 
       {/* Extra tasks */}
       <div style={{ marginTop: 20, borderTop: '1px solid var(--gray-100)', paddingTop: 20 }}>

@@ -30,18 +30,10 @@ function applyAccent(h, s, l) {
   document.documentElement.style.setProperty('--accent-s', s)
   document.documentElement.style.setProperty('--accent-l', l)
 }
-const USER_TYPES = [
-  { id: 'student',      label: 'Estudante universitário', emoji: '🎓' },
-  { id: 'selftaught',   label: 'Autodidata',              emoji: '📖' },
-  { id: 'professional', label: 'Profissional',            emoji: '💼' },
-  { id: 'other',        label: 'Outro',                   emoji: '✨' },
-]
-
 const SECTIONS = [
-  { id: 'perfil',       label: 'Perfil',        emoji: '👤' },
+  { id: 'perfil',       label: 'Perfil & Dados', emoji: '👤' },
   { id: 'cadeiras',     label: 'Cadeiras',      emoji: '📚' },
   { id: 'preferencias', label: 'Preferências',  emoji: '✨' },
-  { id: 'dados',        label: 'Dados',         emoji: '🔧' },
   { id: 'sobre',        label: 'Sobre',         emoji: 'ℹ️' },
 ]
 
@@ -326,9 +318,6 @@ export default function SettingsPage({ settings, setSettings }) {
   const daysElapsed   = periodStart ? Math.max(0, Math.round((today - periodStart) / 86400000)) : null
   const daysRemaining = periodEnd   ? Math.max(0, Math.round((periodEnd - today) / 86400000)) : null
   const weeksRemaining = daysRemaining ? Math.max(1, daysRemaining / 7) : 1
-  const periodPct = totalDays && daysElapsed !== null ? Math.min(100, Math.round(daysElapsed / totalDays * 100)) : 0
-  const totalHours = (() => { try { return (JSON.parse(localStorage.getItem('study-sessions')) || []).reduce((a,b) => a + b.hours, 0) } catch { return 0 } })()
-  const hoursPct = settings.hoursGoal > 0 ? Math.min(100, Math.round(totalHours / settings.hoursGoal * 100)) : 0
   const totalTarget = settings.subjects?.filter(s => !s.closed).reduce((a, s) => a + getTarget(s.key), 0) || 0
 
   return (
@@ -354,24 +343,9 @@ export default function SettingsPage({ settings, setSettings }) {
       {section === 'perfil' && (
         <div className="card">
           <div className="card-body">
-            <div style={{ marginBottom: 16 }}>
+            <div>
               <label style={labelStyle}>O teu nome</label>
               <input type="text" style={inputStyle} value={settings.name} onChange={e => update('name', e.target.value)} />
-            </div>
-            <div>
-              <label style={labelStyle}>Tipo de utilizador</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {USER_TYPES.map(t => (
-                  <button key={t.id} onClick={() => update('userType', t.id)} style={{
-                    padding: '10px 14px', borderRadius: 'var(--r)', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-                    border: `2px solid ${settings.userType === t.id ? 'var(--rose-400)' : 'var(--gray-200)'}`,
-                    background: settings.userType === t.id ? 'var(--rose-50)' : 'var(--white)',
-                  }}>
-                    <span style={{ fontSize: '1rem', marginRight: 8 }}>{t.emoji}</span>
-                    <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: settings.userType === t.id ? 'var(--rose-400)' : 'var(--gray-700)' }}>{t.label}</span>
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -591,39 +565,11 @@ export default function SettingsPage({ settings, setSettings }) {
                     </div>
                   </div>
                   {totalDays && (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-600)', marginBottom: 6 }}>
-                        <span>{daysElapsed}d passados</span>
-                        <span style={{ color: 'var(--rose-400)' }}>{daysRemaining}d restantes · {weeksRemaining.toFixed(1)} semanas</span>
-                      </div>
-                      <div className="progress-wrap" style={{ height: 8 }}>
-                        <div className="progress-fill" style={{ width: `${periodPct}%`, height: '100%', background: 'var(--rose-300)' }} />
-                      </div>
-                      <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginTop: 5 }}>{periodPct}% do semestre concluído</p>
-                    </>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-600)' }}>
+                      <span>{daysElapsed}d passados</span>
+                      <span style={{ color: 'var(--rose-400)' }}>{daysRemaining}d restantes · {weeksRemaining.toFixed(1)} semanas</span>
+                    </div>
                   )}
-                </div>
-              </div>
-
-              {/* Total hours goal */}
-              <div className="card">
-                <div className="card-body">
-                  <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4, marginBottom: 14 }}>⏱️ Meta global de horas</p>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gray-900)', letterSpacing: -1 }}>{settings.hoursGoal}</span>
-                    <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', fontWeight: 600 }}>horas no semestre</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 'var(--t-caption)', fontWeight: 700, color: hoursPct >= 80 ? 'var(--green-500)' : 'var(--rose-400)' }}>
-                      {totalHours.toFixed(1)}h feitas ({hoursPct}%)
-                    </span>
-                  </div>
-                  <input type="range" min="10" max="600" step="5" value={settings.hoursGoal}
-                    onChange={e => update('hoursGoal', parseInt(e.target.value))}
-                    style={{ width: '100%', marginBottom: 4, accentColor: 'var(--rose-400)' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
-                    <span>10h</span>
-                    <span style={{ color: 'var(--gray-500)', fontWeight: 600 }}>~{(settings.hoursGoal / weeksRemaining).toFixed(1)}h/semana necessárias</span>
-                    <span>600h</span>
-                  </div>
                 </div>
               </div>
 
@@ -688,10 +634,6 @@ export default function SettingsPage({ settings, setSettings }) {
             <p style={subHeadStyle}>APARÊNCIA</p>
             <div className="card">
               <div className="card-body">
-                <div style={{ marginBottom: 20 }}>
-                  <label style={labelStyle}>Nome da app</label>
-                  <input type="text" style={inputStyle} value={settings.appName} onChange={e => update('appName', e.target.value)} />
-                </div>
                 <div style={{ marginBottom: 20 }}>
                   <label style={labelStyle}>Tema</label>
                   <div style={{ display: 'flex', gap: 10 }}>
@@ -871,8 +813,8 @@ export default function SettingsPage({ settings, setSettings }) {
       )}
 
       {/* ── DADOS ── */}
-      {section === 'dados' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {section === 'perfil' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
           {(() => {
             try {
               let bytes = 0

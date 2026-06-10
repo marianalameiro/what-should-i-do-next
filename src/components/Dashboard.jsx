@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Clock, Flame, ChevronRight, Target, TrendingUp, TrendingDown, Minus, RotateCcw } from 'lucide-react'
+import { Clock, ChevronRight, Target, TrendingUp, TrendingDown, Minus, RotateCcw } from 'lucide-react'
 import { getTasksForDay } from '../data/schedule'
 import { getMondayOfWeek, daysUntil } from '../utils/dates'
 import { suggestNextSession } from '../utils/suggestNextSession'
-import { computeWeeklyStreak } from '../utils/streak'
 import { withoutClosedSubjects } from '../utils/subjects'
 import { SundayPlanning } from './SundayPlanning'
 
@@ -16,6 +15,15 @@ function loadTargets()       { try { return JSON.parse(localStorage.getItem('sub
 function loadWeeklyTargets() { try { return JSON.parse(localStorage.getItem('weekly-targets')) || {} } catch { return {} } }
 function loadExtra()         { try { return JSON.parse(localStorage.getItem('extra-tasks')) || [] } catch { return [] } }
 function loadMatrix()        { try { return JSON.parse(localStorage.getItem('eisenhower-overrides')) || {} } catch { return {} } }
+// Plano semanal mais recente — visível só durante a semana (7 dias após ser criado).
+function loadCurrentWeekPlan() {
+  try {
+    const plans = JSON.parse(localStorage.getItem('weekly-plans')) || []
+    const latest = plans[0]
+    if (!latest) return null
+    return (Date.now() - latest.id) <= 7 * 86400000 ? latest : null
+  } catch { return null }
+}
 
 const QUADRANT_PRIORITY = { Q1: 0, Q2: 1, Q3: 2, Q4: 3 }
 
@@ -119,8 +127,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
   const [editTarget, setEditTarget] = useState(null)
   const [targetDraft, setTargetDraft] = useState('')
   const [showSundayPlanning, setShowSundayPlanning] = useState(false)
-
-  const isSunday = TODAY.getDay() === 0
+  const [weekPlan, setWeekPlan] = useState(loadCurrentWeekPlan)
 
   const SEMESTER_END   = settings?.periodEnd ? new Date(settings.periodEnd) : new Date(Date.now() + 120 * 86400000)
   const DAYS_REMAINING = Math.max(0, Math.round((SEMESTER_END - TODAY) / 86400000))
@@ -271,18 +278,10 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
   const heroColorFaint  = suggestion?.color ? suggestion.color + '18' : 'var(--accent-50)'
   const heroColorBorder = suggestion?.color ? suggestion.color + '40' : 'var(--accent-100)'
 
-  // Weekly streak — honest: "N semanas seguidas com ≥Xh"
-  const totalWeeklyGoal = subjects.reduce((acc, s) => {
-    const wGoal = weeklyTargets[s.key] !== undefined ? parseFloat(weeklyTargets[s.key]) : getTarget(s.key) / WEEKS_REMAINING
-    return acc + (isNaN(wGoal) ? 0 : wGoal)
-  }, 0)
-  const weeklyMin     = Math.max(5, Math.round(totalWeeklyGoal))
-  const weeklyStreak  = computeWeeklyStreak(sessions, weeklyMin)
-  const weekPctOfMin  = Math.min(100, weeklyMin > 0 ? Math.round(weekHrs / weeklyMin * 100) : 0)
 
   return (
     <div className="fade-in">
-      {showSundayPlanning && <SundayPlanning onClose={() => setShowSundayPlanning(false)} />}
+      {showSundayPlanning && <SundayPlanning onClose={() => { setShowSundayPlanning(false); setWeekPlan(loadCurrentWeekPlan()) }} />}
 
       {/* Greeting */}
       <div style={{ marginBottom: 20 }}>
@@ -407,7 +406,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
               <div style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--rose-400)', marginTop: 6, marginBottom: 2 }}>
                 Regista a primeira sessão →
               </div>
-              <div className="stat-sub">Clica para abrir Horas &amp; Metas</div>
+              <div className="stat-sub">Clica para abrir Horas</div>
             </>
           ) : (
             <>
@@ -426,30 +425,6 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
                   </span>
                 )}
               </div>
-            </>
-          )}
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('hours')}>
-          <div className="stat-label"><Flame size={12} /> Streak semanal</div>
-          {weeklyStreak.current === 0 ? (
-            <>
-              <div style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-500)', marginTop: 6, marginBottom: 4 }}>
-                0 semanas seguidas
-              </div>
-              <div style={{ height: 4, borderRadius: 99, background: 'var(--gray-100)', overflow: 'hidden', marginBottom: 4 }}>
-                <div style={{ height: '100%', width: `${weekPctOfMin}%`, background: 'var(--rose-300)', borderRadius: 99 }} />
-              </div>
-              <div className="stat-sub">{weekHrs.toFixed(1)}h / {weeklyMin}h esta semana</div>
-            </>
-          ) : (
-            <>
-              <div className="stat-value">
-                {weeklyStreak.current}<span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--gray-400)' }}>sem</span>
-              </div>
-              <div style={{ height: 4, borderRadius: 99, background: 'var(--gray-100)', overflow: 'hidden', marginBottom: 4 }}>
-                <div style={{ height: '100%', width: `${weekPctOfMin}%`, background: weekPctOfMin >= 100 ? '#4ade80' : 'var(--rose-300)', borderRadius: 99 }} />
-              </div>
-              <div className="stat-sub">{weekHrs.toFixed(1)}h / {weeklyMin}h esta semana{weeklyStreak.best > weeklyStreak.current ? ` · recorde ${weeklyStreak.best}sem` : ''}</div>
             </>
           )}
         </div>
@@ -627,11 +602,56 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
         </div>
       )}
 
-      {/* Weekly planning — always accessible */}
-      <button onClick={() => setShowSundayPlanning(true)} className="btn btn-ghost"
-        style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>
-        {isSunday ? '📋 Planear a semana →' : '🤖 Plano semanal com IA →'}
+      {/* Weekly planning — botão composto */}
+      <button
+        onClick={() => setShowSundayPlanning(true)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+          background: 'linear-gradient(135deg, #faf5ff, #f3e8ff)',
+          border: '1.5px solid #e9d5ff', borderRadius: 'var(--r)',
+          padding: '14px 18px', marginTop: 8, marginBottom: 14,
+          cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: '1.6rem', lineHeight: 1, flexShrink: 0 }}>🗓️</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontWeight: 800, fontSize: 'var(--t-body)', color: '#6b21a8' }}>
+            {weekPlan ? 'Replanear a semana' : 'Planear a semana'}
+          </span>
+          <span style={{ display: 'block', fontSize: 'var(--t-caption)', color: '#9333ea', fontWeight: 600, marginTop: 1 }}>
+            Reflexão guiada + plano da semana com IA
+          </span>
+        </span>
+        <span style={{ fontSize: '1.1rem', color: '#a855f7', flexShrink: 0 }}>→</span>
       </button>
+
+      {/* Plano da semana guardado — visível durante esta semana */}
+      {weekPlan && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <span className="card-title">🗓️ O teu plano desta semana</span>
+            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500 }}>{weekPlan.date}</span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(() => {
+              const colors = ['var(--amber-100)', 'var(--blue-100)', 'var(--green-50)', 'var(--orange-50)', 'var(--purple-50)']
+              const borderColors = ['#fde047', '#93c5fd', '#86efac', '#fdba74', '#c4b5fd']
+              const textColors = ['#854d0e', '#1e40af', '#14532d', '#9a3412', '#5b21b6']
+              return weekPlan.content.split('\n\n').filter(Boolean).map((section, i) => {
+                const lines = section.split('\n')
+                const title = lines[0]
+                const body = lines.slice(1).join('\n')
+                return (
+                  <div key={i} style={{ background: colors[i % colors.length], border: `1.5px solid ${borderColors[i % borderColors.length]}`, borderRadius: 'var(--r)', padding: '12px 14px' }}>
+                    <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: textColors[i % textColors.length], marginBottom: body ? 4 : 0 }}>{title}</p>
+                    {body && <p style={{ fontSize: 'var(--t-body)', lineHeight: 1.6, color: textColors[i % textColors.length], margin: 0, opacity: 0.85, whiteSpace: 'pre-wrap' }}>{body}</p>}
+                  </div>
+                )
+              })
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -420,7 +420,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
             Ainda sem dados para mostrar
           </p>
           <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-400)', lineHeight: 1.6, maxWidth: 320, margin: '0 auto 20px' }}>
-            Regista sessões de estudo em <strong>Horas &amp; Metas</strong> e os teus padrões aparecem aqui automaticamente — heatmap, streaks, e muito mais.
+            Regista sessões de estudo em <strong>Horas</strong> e os teus padrões aparecem aqui automaticamente — heatmap, streaks, e muito mais.
           </p>
         </div>
       </div>

@@ -18,7 +18,7 @@ class ErrorBoundary extends Component {
     return this.props.children
   }
 }
-import { BookOpen, ListTodo, CalendarDays, FolderKanban, Target, Timer, NotebookPen, BarChart3, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { BookOpen, ListTodo, CalendarDays, Target, Timer, BarChart3, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from "./lib/supabase"
 import { useUserSettings } from "./hooks/useUserSettings"
 import { getTasksForDay, getSubjectsMap } from "./data/schedule"
@@ -33,8 +33,6 @@ const Dashboard     = lazy(() => import("./components/Dashboard"))
 const DailyView     = lazy(() => import("./components/DailyView"))
 const ExamsView     = lazy(() => import("./components/ExamsView"))
 const StudyHours    = lazy(() => import("./components/StudyHours"))
-const StudyDiary    = lazy(() => import("./components/StudyDiary"))
-const ProjectsPage  = lazy(() => import("./components/ProjectsPage"))
 const StatsPage     = lazy(() => import("./components/StatsPage"))
 const SchedulePage  = lazy(() => import("./components/SchedulePage"))
 
@@ -42,10 +40,8 @@ const TABS = [
   { id: "dashboard", icon: BookOpen,     label: "Diário de Bordo", emoji: "🏠" },
   { id: "today",     icon: ListTodo,     label: "Hoje",            emoji: "📋" },
   { id: "schedule",  icon: CalendarDays, label: "Horário",         emoji: <CalendarEmoji /> },
-  { id: "projects",  icon: FolderKanban, label: "Projetos",        emoji: "🗂️" },
   { id: "exams",     icon: Target,       label: "Exames",          emoji: "🎯" },
-  { id: "hours",     icon: Timer,        label: "Horas & Metas",   emoji: "⏱️" },
-  { id: "diary",     icon: NotebookPen,  label: "Reflexões",       emoji: "✏️" },
+  { id: "hours",     icon: Timer,        label: "Horas",           emoji: "⏱️" },
   { id: "stats",     icon: BarChart3,    label: "Estatísticas",    emoji: "📊" },
   { id: "settings",  icon: Settings,     label: "Definições",      emoji: "⚙️" },
 ]
@@ -180,15 +176,6 @@ function CommandPalette({ onClose, onNavigate }) {
           action: () => onNavigate('exams'),
         }))
     } catch {}
-    try {
-      const diary = readLSArray('diary-entries')
-      diary.filter(e => (e.text || '').toLowerCase().includes(q) || (e.subject || '').toLowerCase().includes(q))
-        .slice(0, 3).forEach(e => results.push({
-          id: `diary-${e.id}`, emoji: '📓', type: 'diary',
-          label: (e.text || '').slice(0, 50) || 'Entrada', sub: `Reflexões · ${new Date(e.id).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}`,
-          action: () => onNavigate('diary'),
-        }))
-    } catch {}
     return results
   })()
 
@@ -207,7 +194,7 @@ function CommandPalette({ onClose, onNavigate }) {
     if (e.key === 'Enter' && filtered[sel]) { filtered[sel].action(); onClose() }
   }
 
-  const TYPE_LABEL = { nav: 'Páginas', session: 'Sessões', exam: 'Exames', diary: 'Reflexões' }
+  const TYPE_LABEL = { nav: 'Páginas', session: 'Sessões', exam: 'Exames' }
 
   return (
     <div
@@ -487,7 +474,7 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
 
       // 1-9 navigation
-      const map = { '1':'dashboard','2':'today','3':'schedule','4':'projects','5':'exams','6':'hours','7':'diary','8':'stats','9':'settings' }
+      const map = { '1':'dashboard','2':'today','3':'schedule','4':'exams','5':'hours','6':'stats','7':'settings' }
       if (map[e.key]) { e.preventDefault(); setTab(map[e.key]); return }
 
       // S — iniciar Pomodoro (selecionar cadeira)
@@ -1083,22 +1070,6 @@ export default function App() {
           </div>
         )}
 
-        {!settings?.sidebarCompact && <p className="sidebar-section">Menu</p>}
-        {!settings?.sidebarCompact && (
-          <button
-            onClick={() => setCmdOpen(true)}
-            style={{
-              margin: '0 10px 6px', padding: '6px 10px',
-              background: 'var(--gray-50)', border: '1px solid var(--gray-200)',
-              borderRadius: 'var(--r)', cursor: 'pointer', fontFamily: 'inherit',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              color: 'var(--gray-400)', fontSize: 'var(--t-caption)', fontWeight: 600,
-            }}
-          >
-            <span>Navegar...</span>
-            <span style={{ background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 4, padding: '1px 5px', fontSize: 'var(--t-caption)' }}>⌘K</span>
-          </button>
-        )}
         <button
           onClick={() => setQuickLog(true)}
           style={{
@@ -1299,10 +1270,8 @@ export default function App() {
                       }}
                     />
                   )}
-                  {tab === "projects" && <ProjectsPage settings={settings} />}
                   {tab === "exams" && <ExamsView settings={settings} />}
                   {tab === "hours" && <StudyHours settings={settings} />}
-                  {tab === "diary" && <StudyDiary />}
                   {tab === "stats" && <StatsPage settings={settings} onOpenCadeira={setActiveSubjectKey} />}
                   {tab === "settings" && <SettingsPage settings={settings} setSettings={setSettings} />}
                 </>

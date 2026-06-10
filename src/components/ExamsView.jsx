@@ -252,6 +252,15 @@ export default function ExamsView({ settings }) {
     setSchedule(prev => ({ ...prev, [dateStr]: (prev[dateStr] || []).filter(t => t.id !== topicId) }))
   }
 
+  // Apaga TODOS os temas agendados de uma vez (com opção de desfazer).
+  function clearSchedule() {
+    const hasAny = Object.values(schedule).some(arr => (arr || []).length > 0)
+    if (!hasAny) return
+    const previous = schedule
+    setSchedule({})
+    toast({ message: 'Agenda de estudo apagada', onUndo: () => setSchedule(previous) })
+  }
+
   function applyAIPlan() {
     if (!aiPlan) return
     const examForSelected = exams.find(e => e.subject === selectedSubject && daysUntil(e.date) > 0)
@@ -679,6 +688,9 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "var(--t-caption)" }} onClick={() => setHideTopics(v => !v)}>
               {hideTopics ? "👁️ Mostrar temas" : "🙈 Esconder temas"}
+            </button>
+            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "var(--t-caption)", color: "var(--red-400)" }} onClick={clearSchedule}>
+              🗑️ Apagar agenda
             </button>
             <button className="btn btn-secondary" style={{ padding: "4px 8px" }} onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>‹</button>
             <span style={{ fontSize: "var(--t-body)", fontWeight: 700, color: "var(--gray-700)", minWidth: 120, textAlign: "center" }}>
