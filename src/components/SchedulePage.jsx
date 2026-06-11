@@ -1442,19 +1442,6 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
                 <p style={{fontSize:'var(--t-body)',fontWeight:500,color:'#db2777',fontFamily:'inherit'}}>A gerar horário com IA...</p>
               </div>
             )}
-            {!aiLoading&&blocks.length===0&&classBlocks.length===0&&gcalTimed.length===0&&(
-              <div style={{padding:'56px 32px',display:'flex',flexDirection:'column',alignItems:'center',gap:14,textAlign:'center'}}>
-                <div style={{fontSize:'2.5rem'}}>✨</div>
-                <p style={{fontFamily:'inherit',fontWeight:700,fontSize:'1.1rem',color:'var(--gray-900)'}}>Dia em branco</p>
-                <p style={{fontSize:'var(--t-caption)',color:'var(--gray-400)',maxWidth:220,lineHeight:1.7}}>
-                  Clica em <strong>Auto-agendar</strong> para gerar o horário deste dia.
-                </p>
-                <Btn onClick={handleAutoSchedule} solid color="#db2777" bg="#fdf2f7" style={{marginTop:4}}>
-                  <Zap size={13}/> Auto-agendar
-                </Btn>
-              </div>
-            )}
-
             <div style={{position:'relative',paddingLeft:56,paddingTop:16,cursor:'crosshair'}} onClick={handleTimelineClick}
               onDragOver={handleTimelineDragOver} onDragLeave={handleTimelineDragLeave} onDrop={handleTimelineDrop}>
               {/* Hour lines */}

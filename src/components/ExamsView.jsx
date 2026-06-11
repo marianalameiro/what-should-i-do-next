@@ -77,28 +77,45 @@ export default function ExamsView({ settings }) {
     type: "Exame",
     date: "",
     minGrade: 10,
+    desiredGrade: "",
     weight: "",
     notes: "",
   })
+  const [compDraft, setCompDraft] = useState(null) // { subject, type, weight, date } | null
   const [examTab, setExamTab] = useState("upcoming") // "upcoming" | "past"
 
   // ── Grade / average state ──
   const [subjectEcts, setSubjectEcts] = useState(() => load("subject-ects", {})) // { [subjectKey]: ects }
   const [oldGrades, setOldGrades]     = useState(() => load("old-grades", []))   // [{ id, name, grade, ects }]
   const [newOldGrade, setNewOldGrade] = useState({ name: "", grade: "", ects: "" })
-  const [hideTopics, setHideTopics]   = useState(() => load("hide-scheduled-topics", false))
 
   useEffect(() => save("exams", allExams),          [allExams])
   useEffect(() => save("topics", topics),           [topics])
   useEffect(() => save("exam-schedule", schedule),  [schedule])
   useEffect(() => save("subject-ects", subjectEcts), [subjectEcts])
   useEffect(() => save("old-grades", oldGrades),    [oldGrades])
-  useEffect(() => save("hide-scheduled-topics", hideTopics), [hideTopics])
 
-  const emptyForm = { subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, weight: "", notes: "" }
+  // Migração única: preenche a cadeira nos temas agendados antigos (que não a guardavam),
+  // procurando em que cadeira está cada tópico pelo id.
+  useEffect(() => {
+    let changed = false
+    const next = {}
+    for (const [date, arr] of Object.entries(schedule)) {
+      next[date] = (arr || []).map(t => {
+        if (t.subject) return t
+        const owner = Object.keys(topics).find(name => (topics[name] || []).some(x => x.id === t.id))
+        if (owner) { changed = true; return { ...t, subject: owner } }
+        return t
+      })
+    }
+    if (changed) setSchedule(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const emptyForm = { subject: firstSubjectName, type: "Exame", date: "", minGrade: 10, desiredGrade: "", weight: "", notes: "" }
 
   function openEditForm(exam) {
-    setForm({ subject: exam.subject, type: exam.type, date: exam.date, minGrade: exam.minGrade, weight: exam.weight ?? "", notes: exam.notes || "" })
+    setForm({ subject: exam.subject, type: exam.type, date: exam.date, minGrade: exam.minGrade, desiredGrade: exam.desiredGrade ?? "", weight: exam.weight ?? "", notes: exam.notes || "" })
     setEditingExamId(exam.id)
     setShowForm(true)
     setTimeout(() => document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' }), 20)
@@ -112,13 +129,28 @@ export default function ExamsView({ settings }) {
 
   function saveExam() {
     if (!form.date) return
-    const payload = { ...form, weight: form.weight ? parseFloat(form.weight) : null }
+    const payload = {
+      ...form,
+      weight: form.weight ? parseFloat(form.weight) : null,
+      desiredGrade: form.desiredGrade !== "" ? parseFloat(form.desiredGrade) : null,
+    }
     if (editingExamId) {
       setExams(prev => prev.map(e => e.id === editingExamId ? { ...e, ...payload } : e))
     } else {
       setExams(prev => [...prev, { id: Date.now(), ...payload, sheets: [] }])
     }
     closeForm()
+  }
+
+  // Adiciona rapidamente um componente de avaliação a uma cadeira (sem abrir o formulário todo).
+  function addComponent() {
+    if (!compDraft?.subject) return
+    const w = compDraft.weight ? parseFloat(compDraft.weight) : null
+    setExams(prev => [...prev, {
+      id: Date.now(), subject: compDraft.subject, type: compDraft.type || 'Componente',
+      date: compDraft.date || '', minGrade: 10, desiredGrade: null, weight: w, sheets: [],
+    }])
+    setCompDraft(null)
   }
 
   function updateActualGrade(id, grade) {
@@ -169,7 +201,7 @@ export default function ExamsView({ settings }) {
     const finalGrade  = complete ? Math.round(finalExact) : null
     const ects        = subjectEcts[s.key]
     return { key: s.key, name: s.name, emoji: s.emoji, color: s.color, closed: !!s.closed, components: subjExams, definedW, gradedW, finalExact, finalGrade, complete, ects }
-  }).filter(g => g.components.length > 0)
+  }).filter(g => g.components.length > 0 || !g.closed) // cadeiras ativas aparecem sempre (para adicionar componentes)
 
   // ── Overall course average (média do curso) ──
   // Only subjects with a complete final grade + ECTS count, plus manually-added old grades.
@@ -191,6 +223,10 @@ export default function ExamsView({ settings }) {
   }
 
   const subjectTopics = topics[selectedSubject] || []
+  // Um tema agendado pertence à cadeira selecionada se foi agendado para ela
+  // (campo subject) ou, para agendamentos antigos, se o id está nos tópicos dela.
+  const selectedTopicIds = new Set(subjectTopics.map(t => t.id))
+  const belongsToSelected = (t) => t.subject ? t.subject === selectedSubject : selectedTopicIds.has(t.id)
 
   function addTopic() {
     if (!newTopic.trim()) return
@@ -238,10 +274,10 @@ export default function ExamsView({ settings }) {
       if (fromDate) {
         next[fromDate] = (next[fromDate] || []).filter(t => t.id !== topic.id)
       }
-      // Add to target day (dedup)
+      // Add to target day (dedup), keeping which subject the topic belongs to
       const existing = next[targetDate] || []
       if (!existing.find(t => t.id === topic.id)) {
-        next[targetDate] = [...existing, topic]
+        next[targetDate] = [...existing, { ...topic, subject: topic.subject || selectedSubject }]
       }
       return next
     })
@@ -279,7 +315,7 @@ export default function ExamsView({ settings }) {
         })
         if (toAdd.length > 0) {
           const existing = next[dateStr] || []
-          toAdd.forEach(t => { if (!existing.find(e => e.id === t.id)) existing.push(t) })
+          toAdd.forEach(t => { if (!existing.find(e => e.id === t.id)) existing.push({ ...t, subject: t.subject || selectedSubject }) })
           next[dateStr] = existing
         }
       })
@@ -424,7 +460,9 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
               <div>
                 <label className="form-label">Disciplina</label>
                 <select className="form-input" value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })}>
-                  {subjects.map(s => <option key={s.name}>{s.name}</option>)}
+                  {(subjects.some(s => s.name === form.subject) ? subjects.map(s => s.name) : [form.subject, ...subjects.map(s => s.name)])
+                    .filter(Boolean)
+                    .map(name => <option key={name} value={name}>{name}</option>)}
                 </select>
               </div>
               <div>
@@ -440,6 +478,10 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
               <div>
                 <label className="form-label">Nota mínima</label>
                 <input className="form-input" type="number" min={0} max={20} value={form.minGrade} onChange={e => setForm({ ...form, minGrade: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label className="form-label">Nota desejada</label>
+                <input className="form-input" type="number" min={0} max={20} placeholder="ex: 16" value={form.desiredGrade} onChange={e => setForm({ ...form, desiredGrade: e.target.value })} />
               </div>
               <div>
                 <label className="form-label">Peso na nota final (%)</label>
@@ -474,7 +516,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         </div>
       )}
 
-      {!hasAnyExam ? (
+      {allExams.length === 0 ? (
         <div style={{
           padding: '32px 28px', textAlign: 'center',
           background: 'var(--white)', borderRadius: 'var(--r)',
@@ -528,7 +570,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                       {isPast && exam.actualGrade != null && <span className={exam.actualGrade >= exam.minGrade ? "status-pill status-green" : "status-pill status-red"}>{exam.actualGrade >= exam.minGrade ? "✅ Aprovada" : "❌ Reprovada"}</span>}
                     </div>
                     <div style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontWeight: 500 }}>
-                      {exam.type} · {new Date(exam.date).toLocaleDateString("pt-PT", { day: "numeric", month: "long" })} · Meta: {exam.minGrade}/20{exam.weight ? ` · ${exam.weight}% da nota` : ''}
+                      {exam.type} · {new Date(exam.date).toLocaleDateString("pt-PT", { day: "numeric", month: "long" })} · Mín: {exam.minGrade}/20{exam.desiredGrade != null ? ` · Desejada: ${exam.desiredGrade}/20` : ''}{exam.weight ? ` · ${exam.weight}% da nota` : ''}
                     </div>
                     {studyH > 0 && ['Exame','Teste','Mini-teste'].includes(exam.type) && <div style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", marginTop: 2 }}>⏱️ {studyH}h de estudo registadas nesta cadeira</div>}
                     {exam.notes && <div style={{ fontSize: "var(--t-caption)", color: "var(--gray-500)", marginTop: 3 }}>{exam.notes}</div>}
@@ -686,10 +728,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         <div className="card-header">
           <span className="card-title"><CalendarEmoji /> Calendário de estudo</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "var(--t-caption)" }} onClick={() => setHideTopics(v => !v)}>
-              {hideTopics ? "👁️ Mostrar temas" : "🙈 Esconder temas"}
-            </button>
-            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "var(--t-caption)", color: "var(--red-400)" }} onClick={clearSchedule}>
+            <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: "var(--t-caption)", color: "var(--gray-900)" }} onClick={clearSchedule}>
               🗑️ Apagar agenda
             </button>
             <button className="btn btn-secondary" style={{ padding: "4px 8px" }} onClick={() => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>‹</button>
@@ -759,7 +798,8 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   const isExamDay = examDates.has(dateStr)
                   const isDragOver = dragOver === dateStr
                   // Mostra todos os temas (sem "+N"); o botão esconde-os por completo.
-                  const visible = hideTopics ? [] : dayTopics
+                  // Só os temas agendados da cadeira atualmente selecionada
+                  const visible = dayTopics.filter(belongsToSelected)
 
                   return (
                     <div
@@ -933,12 +973,36 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                           <input type="number" min={0} max={100} value={c.weight ?? ""} placeholder="peso" onChange={e => updateExamWeight(c.id, e.target.value)}
                             style={{ width: 52, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />%
                         </label>
-                        <span style={{ flexShrink: 0, fontWeight: 700, minWidth: 44, textAlign: 'right', color: c.actualGrade != null ? (c.actualGrade >= 10 ? '#16a34a' : '#dc2626') : 'var(--gray-300)' }}>
-                          {c.actualGrade != null ? `${c.actualGrade}/20` : '—'}
-                        </span>
+                        <input type="number" min={0} max={20} step={0.1} value={c.actualGrade ?? ""} placeholder="nota"
+                          onChange={e => updateActualGrade(c.id, e.target.value)}
+                          style={{ width: 58, flexShrink: 0, padding: '3px 6px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)', fontWeight: 700, textAlign: 'center', color: c.actualGrade != null ? (c.actualGrade >= 10 ? '#16a34a' : '#dc2626') : 'var(--gray-700)' }} />
+                        <button onClick={() => removeExam(c.id)} title="Remover componente"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: 0, flexShrink: 0, display: 'flex' }}>
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     ))}
                   </div>
+                  {compDraft?.subject === g.name ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                      <select value={compDraft.type} onChange={e => setCompDraft(d => ({ ...d, type: e.target.value }))}
+                        style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }}>
+                        {EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                      <input type="number" min={0} max={100} value={compDraft.weight} placeholder="peso %"
+                        onChange={e => setCompDraft(d => ({ ...d, weight: e.target.value }))}
+                        style={{ width: 70, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />
+                      <input type="date" value={compDraft.date} onChange={e => setCompDraft(d => ({ ...d, date: e.target.value }))}
+                        style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--gray-200)', fontFamily: 'inherit', fontSize: 'var(--t-caption)' }} />
+                      <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 'var(--t-caption)' }} onClick={addComponent}>Adicionar</button>
+                      <button className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: 'var(--t-caption)' }} onClick={() => setCompDraft(null)}>Cancelar</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setCompDraft({ subject: g.name, type: 'Teste', weight: '', date: '' })}
+                      style={{ marginTop: 8, background: 'none', border: '1px dashed var(--gray-300)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--t-caption)', fontWeight: 600, color: 'var(--gray-500)' }}>
+                      + adicionar componente
+                    </button>
+                  )}
                   <p style={{ fontSize: 'var(--t-caption)', color: weightOff ? '#dc2626' : 'var(--gray-400)', margin: '8px 0 0' }}>
                     {weightOff
                       ? `⚠️ Os pesos somam ${g.definedW}% — deviam somar 100%.`

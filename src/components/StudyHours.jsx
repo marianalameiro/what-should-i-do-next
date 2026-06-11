@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, TrendingUp, TrendingDown, Minus, Clock, Flame, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb, CalendarDays } from 'lucide-react'
-import { computeWeeklyStreak } from '../utils/streak'
+import { Plus, TrendingUp, TrendingDown, Minus, Clock, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
 import { PomodoroTimer } from './PomodoroTimer'
 import { getMondayOfWeek } from '../utils/dates'
 import { useToast, ToastContainer } from './Toast'
@@ -206,12 +205,6 @@ export default function StudyHours({ settings }) {
   const [showPomodoro, setShowPomodoro] = useState(false)
   const [expandedSuggestions, setExpandedSuggestions] = useState({})
   const [showOnTrack, setShowOnTrack] = useState(true)
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
-  const [editingSession, setEditingSession] = useState(null)
-  const [editDraft, setEditDraft] = useState({})
-  const [historySearch, setHistorySearch] = useState('')
-  const [historySubject, setHistorySubject] = useState('')
-  const [chartDays, setChartDays] = useState(7)
   const [postSession, setPostSession] = useState(null)
   const { toasts, toast, dismiss } = useToast()
   const [form, setForm] = useState({
@@ -258,8 +251,6 @@ export default function StudyHours({ settings }) {
     } catch {}
   }
 
-  const removeSession = (id) => setSessions(prev => prev.filter(s => s.id !== id))
-
   const updateTarget = (key, val) => {
     const num = parseFloat(val)
     setTargets(prev => {
@@ -286,34 +277,7 @@ export default function StudyHours({ settings }) {
   const weekPct         = Math.min(100, shouldShowBehind() ? Math.round(weekHours / weekTarget * 100) : 100)
   const weekTargetNow   = weekTarget * (weekDayNum() / 7)
 
-  const saveEditSession = () => {
-    const hours = parseFloat(editDraft.hours)
-    if (!hours || hours <= 0) return
-    setSessions(prev => prev.map(s => s.id === editingSession
-      ? { ...s, hours, notes: editDraft.notes, mood: editDraft.mood, date: new Date(editDraft.date).toDateString() }
-      : s
-    ))
-    setEditingSession(null)
-    setEditDraft({})
-  }
 
-  const weeklyMin    = Math.max(5, Math.round(avgWeeklyTarget))
-  const weeklyStreak = computeWeeklyStreak(sessions, weeklyMin)
-  const chartData = (() => {
-    const result = []
-    for (let i = chartDays - 1; i >= 0; i--) {
-      const d = new Date(TODAY)
-      d.setDate(TODAY.getDate() - i)
-      const key = d.toDateString()
-      const hours = sessions.filter(s => s.date === key).reduce((a, b) => a + (b.hours || 0), 0)
-      const label = chartDays <= 7
-        ? d.toLocaleDateString('pt-PT', { weekday: 'short' })
-        : d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'numeric' })
-      result.push({ label, hours, date: key })
-    }
-    return result
-  })()
-  const maxChart  = Math.max(...chartData.map(d => d.hours), 1)
   const dowLabel  = DOW_LABELS[TODAY.getDay()]
 
   // Weekday breakdown: average hours per day of week from all sessions
@@ -553,65 +517,6 @@ export default function StudyHours({ settings }) {
         </div>
       </div>
 
-      {/* Weekly streak + daily activity chart */}
-      <div className="stat-card" style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 12 }}>
-          {/* Streak */}
-          <div style={{ minWidth: 0 }}>
-            <div className="stat-label"><Flame size={12} /> Streak semanal</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <span className="stat-value" style={{ fontSize: '1.5rem' }}>{weeklyStreak.current}</span>
-              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-400)' }}>
-                semana{weeklyStreak.current !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="stat-sub" style={{ marginTop: 2 }}>
-              meta: {weeklyMin}h/sem{weeklyStreak.best > weeklyStreak.current ? ` · recorde ${weeklyStreak.best}` : ''}
-            </div>
-          </div>
-          {/* Weeks hit */}
-          <div style={{ minWidth: 0 }}>
-            <div className="stat-label"><CalendarDays size={12} /> Metas cumpridas</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <span className="stat-value" style={{ fontSize: '1.5rem' }}>{weeklyStreak.weeksHit}</span>
-              <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-400)' }}>semanas</span>
-            </div>
-            <div className="stat-sub" style={{ marginTop: 2 }}>semanas com ≥{weeklyMin}h (total)</div>
-          </div>
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', gap: 4, alignSelf: 'flex-start' }}>
-            {[7,30].map(n => (
-              <button key={n} onClick={() => setChartDays(n)} style={{
-                padding: '3px 10px', borderRadius: 50, cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: 'var(--t-caption)', fontWeight: 700, border: `1.5px solid ${chartDays === n ? 'var(--rose-300)' : 'var(--gray-200)'}`,
-                background: chartDays === n ? 'var(--rose-50)' : 'var(--white)', color: chartDays === n ? 'var(--rose-400)' : 'var(--gray-400)',
-              }}>{n}d</button>
-            ))}
-          </div>
-        </div>
-        <div className="stat-label" style={{ marginBottom: 6 }}>Actividade diária</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: chartDays > 7 ? 2 : 5, height: 50 }}>
-          {chartData.map(d => {
-            const h   = Math.max(0, (d.hours / maxChart) * 100)
-            const isT = d.date === TODAY.toDateString()
-            return (
-              <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <div style={{
-                  width: '100%', height: `${h}%`, minHeight: d.hours > 0 ? 3 : 0,
-                  background: isT ? 'var(--rose-400)' : 'var(--rose-200)',
-                  borderRadius: 2,
-                }} />
-                {chartDays <= 14 && (
-                  <span style={{ fontSize: 'var(--t-caption)', color: isT ? 'var(--rose-400)' : 'var(--gray-400)', fontWeight: isT ? 700 : 500 }}>
-                    {d.label}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
       {/* Weekday breakdown */}
       {sessions.length >= 5 && (
         <div className="card" style={{ marginBottom: 14, padding: '16px 20px' }}>
@@ -744,7 +649,7 @@ export default function StudyHours({ settings }) {
         </div>}
       </div>
 
-      {/* History */}
+      {/* Empty state */}
       {sessions.length === 0 && (
         <div style={{
           marginBottom: 20, padding: '28px 24px', textAlign: 'center',
@@ -761,92 +666,6 @@ export default function StudyHours({ settings }) {
           <button className="btn btn-primary" onClick={() => setShowForm(true)}>
             <Plus size={14} /> Registar primeira sessão
           </button>
-        </div>
-      )}
-      {sessions.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Historial</span>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                type="text"
-                placeholder="Pesquisar notas..."
-                value={historySearch}
-                onChange={e => setHistorySearch(e.target.value)}
-                style={{ fontSize: 'var(--t-caption)', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none', width: 140 }}
-              />
-              <select value={historySubject} onChange={e => setHistorySubject(e.target.value)}
-                style={{ fontSize: 'var(--t-caption)', border: '1px solid var(--gray-200)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', color: 'var(--gray-900)', background: 'var(--white)', outline: 'none' }}>
-                <option value="">Todas</option>
-                {subjects.map(s => <option key={s.key} value={s.key}>{s.emoji} {s.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ padding: '8px 20px 12px' }}>
-            {sessions.filter(s => {
-              if (historySubject && s.subject !== historySubject) return false
-              if (historySearch && !(s.notes||'').toLowerCase().includes(historySearch.toLowerCase())) return false
-              return true
-            }).slice(0, 30).map(session => {
-              const subj = subjects.find(s => s.key === session.subject)
-              const isEditing = editingSession === session.id
-              return (
-                <div key={session.id} style={{ borderBottom: '1px solid var(--gray-50)', borderLeft: `3px solid ${subj?.color || 'var(--gray-200)'}`, paddingLeft: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0' }}>
-                    <span>{subj?.emoji}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontWeight: 600, fontSize: 'var(--t-body)', color: subj?.textColor }}>{subj?.name}</span>
-                        {session.mood && <span style={{ fontSize: 'var(--t-body)' }}>{session.mood}</span>}
-                      </div>
-                      {session.notes && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>{session.notes}</p>}
-                    </div>
-                    <span style={{ fontWeight: 700, fontSize: 'var(--t-body)', color: 'var(--gray-700)' }}>{session.hours}h</span>
-                    <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', minWidth: 80, textAlign: 'right' }}>{session.date}</span>
-                    <button className="btn btn-ghost" style={{ fontSize: 'var(--t-caption)', padding: '2px 6px' }}
-                      onClick={() => { setEditingSession(isEditing ? null : session.id); setEditDraft({ hours: session.hours, notes: session.notes || '', mood: session.mood || '😊', date: new Date(session.date).toISOString().split('T')[0] }) }}>
-                      ✏️
-                    </button>
-                    {confirmDeleteId === session.id ? (
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <button className="btn" onClick={() => { removeSession(session.id); setConfirmDeleteId(null) }}
-                          style={{ fontSize: 'var(--t-caption)', padding: '3px 8px', background: 'var(--red-100)', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 6 }}>
-                          Apagar
-                        </button>
-                        <button className="btn" onClick={() => setConfirmDeleteId(null)}
-                          style={{ fontSize: 'var(--t-caption)', padding: '3px 8px', background: 'var(--gray-100)', color: 'var(--gray-600)', border: '1px solid var(--gray-200)', borderRadius: 6 }}>
-                          Não
-                        </button>
-                      </div>
-                    ) : (
-                      <button className="btn btn-ghost" onClick={() => setConfirmDeleteId(session.id)}><X size={12} /></button>
-                    )}
-                  </div>
-                  {isEditing && (
-                    <div style={{ padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 'var(--r)', marginBottom: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                      <div>
-                        <label className="form-label">Horas</label>
-                        <input type="number" min="0.25" max="12" step="0.25" className="form-input" style={{ width: 70 }}
-                          value={editDraft.hours} onChange={e => setEditDraft(p => ({ ...p, hours: e.target.value }))} />
-                      </div>
-                      <div>
-                        <label className="form-label">Data</label>
-                        <input type="date" className="form-input" style={{ width: 130 }}
-                          value={editDraft.date} onChange={e => setEditDraft(p => ({ ...p, date: e.target.value }))} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 120 }}>
-                        <label className="form-label">Notas</label>
-                        <input type="text" className="form-input" value={editDraft.notes}
-                          onChange={e => setEditDraft(p => ({ ...p, notes: e.target.value }))} />
-                      </div>
-                      <button className="btn btn-primary" style={{ fontSize: 'var(--t-caption)', padding: '6px 12px' }} onClick={saveEditSession}>Guardar</button>
-                      <button className="btn btn-secondary" style={{ fontSize: 'var(--t-caption)', padding: '6px 12px' }} onClick={() => setEditingSession(null)}>Cancelar</button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
         </div>
       )}
     </div>

@@ -38,7 +38,7 @@ const SECTIONS = [
 ]
 
 const SHORTCUTS = [
-  { key: '1–9', desc: 'Navegar entre páginas' },
+  { key: '1–7', desc: 'Navegar entre páginas' },
   { key: '⌘K',  desc: 'Pesquisa rápida' },
   { key: 'ESC', desc: 'Fechar modais / voltar' },
 ]

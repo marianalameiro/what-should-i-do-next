@@ -230,7 +230,7 @@ export function CalendarView() {
             <div key={d} style={{ textAlign: 'center', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', padding: '6px 0', letterSpacing: 0.5 }}>{d}</div>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 2 }}>
           {cells.map((day, i) => {
             if (!day) return <div key={`empty-${i}`} />
             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
@@ -265,7 +265,7 @@ export function CalendarView() {
                   {day}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {dayEvents.slice(0, 3).map(ev => {
+                  {dayEvents.map(ev => {
                     const t = EVENT_TYPES[ev.type] || EVENT_TYPES.other
                     return (
                       <div key={ev.id} style={{
@@ -280,9 +280,6 @@ export function CalendarView() {
                       </div>
                     )
                   })}
-                  {dayEvents.length > 3 && (
-                    <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>+{dayEvents.length - 3}</div>
-                  )}
                 </div>
               </div>
             )
@@ -341,34 +338,31 @@ export function CalendarView() {
     const todayStr = toDateStr(today)
 
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}>
         {days.map(d => {
           const dateStr = toDateStr(d)
           const dayEvents = getEventsForDate(dateStr)
           const isToday = dateStr === todayStr
           return (
-            <div key={dateStr} style={{ background: isToday ? 'var(--rose-50)' : 'var(--white)', border: `1.5px solid ${isToday ? 'var(--rose-300)' : 'var(--gray-100)'}`, borderRadius: 'var(--r)', padding: '10px 8px', minHeight: 100, overflow: 'hidden' }}>
+            <div key={dateStr} style={{ background: isToday ? 'var(--rose-50)' : 'var(--white)', border: `1.5px solid ${isToday ? 'var(--rose-300)' : 'var(--gray-100)'}`, borderRadius: 'var(--r)', padding: '10px 8px', minHeight: 100 }}>
               <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', marginBottom: 2 }}>{DAY_NAMES[d.getDay()]}</p>
               <p style={{ fontSize: '1rem', fontWeight: 800, color: isToday ? 'var(--rose-400)' : 'var(--gray-800)', marginBottom: 8 }}>{d.getDate()}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {dayEvents.slice(0, 3).map(ev => {
+                {dayEvents.map(ev => {
                   const t = EVENT_TYPES[ev.type] || EVENT_TYPES.other
                   return (
                     <div key={ev.id} style={{ fontSize: 'var(--t-caption)', fontWeight: 600, background: t.bg, color: t.color, borderRadius: 4, padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
                       <span style={{ flexShrink: 0, lineHeight: 1 }}>{smartEmoji(t.emoji)}</span>
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</span>
+                      <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', lineHeight: 1.2 }}>{ev.title}</span>
                       {(ev.source === 'manual' || ev.source === 'manual-recurring') && (
                         <>
-                          <button onClick={() => startEdit(ev)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', opacity: 0.6, lineHeight: 1 }}><Pencil size={10} /></button>
-                          <button onClick={() => removeEvent(ev.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', opacity: 0.6, lineHeight: 1 }}><Trash2 size={10} /></button>
+                          <button onClick={() => startEdit(ev)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', opacity: 0.6, lineHeight: 1, flexShrink: 0 }}><Pencil size={10} /></button>
+                          <button onClick={() => removeEvent(ev.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', opacity: 0.6, lineHeight: 1, flexShrink: 0 }}><Trash2 size={10} /></button>
                         </>
                       )}
                     </div>
                   )
                 })}
-                {dayEvents.length > 3 && (
-                  <div style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>+{dayEvents.length - 3} mais</div>
-                )}
               </div>
             </div>
           )
