@@ -194,8 +194,12 @@ export default function StudyHours({ settings }) {
   const subjects = (settings?.subjects || []).filter(s => !s.closed)
 
   const periodEnd     = settings?.periodEnd ? new Date(settings.periodEnd) : new Date(Date.now() + 120 * 86400000)
+  const periodStart   = settings?.periodStart ? new Date(settings.periodStart) : null
   const DAYS_REMAINING  = Math.max(0, Math.round((periodEnd - TODAY) / 86400000))
   const WEEKS_REMAINING = Math.max(1, DAYS_REMAINING / 7)
+  // Semanas totais do semestre — usadas para o ritmo semanal (constante), não as que faltam,
+  // senão a meta semanal inflaciona à medida que o semestre avança.
+  const TOTAL_WEEKS   = periodStart ? Math.max(1, (periodEnd - periodStart) / (7 * 86400000)) : WEEKS_REMAINING
   const defaultTarget   = Math.round((settings?.hoursGoal || 550) / Math.max(1, subjects.length))
 
   const [sessions, setSessions]       = useState(loadSessions)
@@ -271,7 +275,7 @@ export default function StudyHours({ settings }) {
   const totalHours      = sessions.reduce((a, b) => a + (b.hours || 0), 0)
   const totalPct        = Math.min(100, totalTarget === 0 ? 100 : Math.round(totalHours / totalTarget * 100))
 
-  const avgWeeklyTarget = subjects.reduce((a, s) => a + getTarget(s.key) / WEEKS_REMAINING, 0)
+  const avgWeeklyTarget = subjects.reduce((a, s) => a + getTarget(s.key) / TOTAL_WEEKS, 0)
   const weekHours       = hoursThisWeek(sessions)
   const weekTarget      = avgWeeklyTarget
   const weekPct         = Math.min(100, shouldShowBehind() ? Math.round(weekHours / weekTarget * 100) : 100)
@@ -463,7 +467,7 @@ export default function StudyHours({ settings }) {
                   />
                   <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 600 }}>h</span>
                   <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', minWidth: 90 }}>
-                    ~{(getTarget(s.key) / WEEKS_REMAINING).toFixed(1)}h/semana
+                    ~{(getTarget(s.key) / TOTAL_WEEKS).toFixed(1)}h/semana
                   </span>
                 </div>
               </div>
@@ -571,7 +575,7 @@ export default function StudyHours({ settings }) {
           )}
           {subjects.map(s => {
             const subjectTarget  = getTarget(s.key)
-            const weeklyT        = subjectTarget / WEEKS_REMAINING
+            const weeklyT        = subjectTarget / TOTAL_WEEKS
             const targetNow      = weeklyT * (weekDayNum() / 7)
             const totalDone      = hoursForSubject(sessions, s.key)
             const weekDone       = hoursForSubjectThisWeek(sessions, s.key)

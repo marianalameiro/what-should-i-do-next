@@ -15,9 +15,9 @@ import { getMondayOfWeek, daysUntil } from './dates'
  * @param {Array}   opts.todaySchedule   - getTasksForDay() result
  * @param {object}  opts.done            - tasks-<date> map from localStorage
  * @param {Function} opts.getWeeklyGoal  - (key) → semester target hours
- * @param {number}  opts.weeksRemaining
+ * @param {number}  opts.totalWeeks      - semanas totais do semestre (ritmo constante)
  */
-export function suggestNextSession({ subjects, sessions, exams, weeklyTargets, mood, todaySchedule, done, getWeeklyGoal, weeksRemaining }) {
+export function suggestNextSession({ subjects, sessions, exams, weeklyTargets, mood, todaySchedule, done, getWeeklyGoal, totalWeeks }) {
   subjects = (subjects || []).filter(s => !s.closed)
   if (subjects.length === 0) return []
 
@@ -33,7 +33,7 @@ export function suggestNextSession({ subjects, sessions, exams, weeklyTargets, m
     // ── Weekly goal ───────────────────────────────────────────────────────
     const weeklyGoal = (weeklyTargets?.[s.key] !== undefined && weeklyTargets[s.key] !== '')
       ? parseFloat(weeklyTargets[s.key])
-      : getWeeklyGoal(s.key) / Math.max(1, weeksRemaining)
+      : getWeeklyGoal(s.key) / Math.max(1, totalWeeks)
 
     // ── Expected hours so far this week (proportional) ───────────────────
     const expectedNow = weeklyGoal * (todayDow / 7)

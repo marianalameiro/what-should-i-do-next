@@ -130,8 +130,11 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
   const [weekPlan, setWeekPlan] = useState(loadCurrentWeekPlan)
 
   const SEMESTER_END   = settings?.periodEnd ? new Date(settings.periodEnd) : new Date(Date.now() + 120 * 86400000)
+  const SEMESTER_START = settings?.periodStart ? new Date(settings.periodStart) : null
   const DAYS_REMAINING = Math.max(0, Math.round((SEMESTER_END - TODAY) / 86400000))
   const WEEKS_REMAINING = Math.max(1, DAYS_REMAINING / 7)
+  // Ritmo semanal constante: total ÷ semanas totais do semestre (não as restantes).
+  const TOTAL_WEEKS = SEMESTER_START ? Math.max(1, (SEMESTER_END - SEMESTER_START) / (7 * 86400000)) : WEEKS_REMAINING
 
   const getTarget = (key) => {
     const targets = loadTargets()
@@ -203,7 +206,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
   })() : null
 
   const onTrackRows = subjects.length > 0 ? subjects.map(s => {
-    const wGoal = weeklyTargets[s.key] !== undefined ? parseFloat(weeklyTargets[s.key]) : getTarget(s.key) / WEEKS_REMAINING
+    const wGoal = weeklyTargets[s.key] !== undefined ? parseFloat(weeklyTargets[s.key]) : getTarget(s.key) / TOTAL_WEEKS
     return scoreSubject(s, sessions, exams, wGoal)
   }).sort((a, b) => b.score - a.score) : []
 
@@ -225,7 +228,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
     return subjects.map(s => {
       const weeklyGoal = weeklyTargets[s.key] !== undefined
         ? parseFloat(weeklyTargets[s.key])
-        : getTarget(s.key) / WEEKS_REMAINING
+        : getTarget(s.key) / TOTAL_WEEKS
       if (!weeklyGoal || weeklyGoal <= 0) return null
       const subSessions = sessions.filter(x => x.subject === s.key)
       const doneThisWeekBeforeToday = subSessions
@@ -269,7 +272,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
     subjects, sessions, exams, weeklyTargets, mood,
     todaySchedule, done,
     getWeeklyGoal: getTarget,
-    weeksRemaining: WEEKS_REMAINING,
+    totalWeeks: TOTAL_WEEKS,
   })
   const safeIdx   = suggestions.length > 0 ? suggIdx % suggestions.length : 0
   const suggestion = suggestions[safeIdx] ?? null

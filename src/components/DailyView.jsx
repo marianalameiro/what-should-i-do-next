@@ -206,13 +206,15 @@ export default function DailyView() {
       try { const ts = parseInt(t.id.replace('extra-', ''), 10); if (!isNaN(ts) && ts > 1e12) return new Date(ts).toDateString() } catch {}
       return null
     }
+    const doneCache = {} // mapa de "done" por dia, para não reparsear o mesmo dia várias vezes
+    const doneFor = (eff) => (doneCache[eff] ??= loadDone(new Date(eff)))
     let changed = false
     const rolled = loadExtra().map(t => {
       if (t.recurrence) return t                            // recorrentes seguem a sua regra
       const eff = effDate(t)
       if (!eff) return t                                    // sem data → aparece sempre
       if (new Date(eff).getTime() >= todayMid) return t     // hoje ou futuro
-      if (loadDone(new Date(eff))[t.id]) return t           // já concluída nesse dia
+      if (doneFor(eff)[t.id]) return t                      // já concluída nesse dia
       changed = true
       return { ...t, createdDate: todayStr, createdDow: now.getDay() }
     })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, ArchiveRestore } from 'lucide-react'
 import { smartEmoji } from './CalendarEmoji'
+import GradesPanel from './GradesPanel'
 
 const COLORS = [
   { color: '#f9a8d4', textColor: '#9d174d' },
@@ -33,14 +34,8 @@ function applyAccent(h, s, l) {
 const SECTIONS = [
   { id: 'perfil',       label: 'Perfil & Dados', emoji: '👤' },
   { id: 'cadeiras',     label: 'Cadeiras',      emoji: '📚' },
+  { id: 'notas',        label: 'Notas',         emoji: '📊' },
   { id: 'preferencias', label: 'Preferências',  emoji: '✨' },
-  { id: 'sobre',        label: 'Sobre',         emoji: 'ℹ️' },
-]
-
-const SHORTCUTS = [
-  { key: '1–7', desc: 'Navegar entre páginas' },
-  { key: '⌘K',  desc: 'Pesquisa rápida' },
-  { key: 'ESC', desc: 'Fechar modais / voltar' },
 ]
 
 export default function SettingsPage({ settings, setSettings }) {
@@ -625,6 +620,9 @@ export default function SettingsPage({ settings, setSettings }) {
         </div>
       )}
 
+      {/* ── NOTAS ── */}
+      {section === 'notas' && <GradesPanel settings={settings} />}
+
       {/* ── PREFERÊNCIAS ── */}
       {section === 'preferencias' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -937,40 +935,6 @@ export default function SettingsPage({ settings, setSettings }) {
         </div>
       )}
 
-      {/* ── SOBRE ── */}
-      {section === 'sobre' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="card">
-            <div className="card-body">
-              <p style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: 'var(--gray-800)', marginBottom: 4 }}>
-                {settings?.appName || 'what should I do next?'}
-              </p>
-              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>
-                App pessoal de gestão de estudo — sessões, exames, reflexões e progresso num só sítio.
-              </p>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-body">
-              <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', letterSpacing: 0.4, marginBottom: 14 }}>ATALHOS DE TECLADO</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {SHORTCUTS.map(s => (
-                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{
-                      fontFamily: 'monospace', fontSize: 'var(--t-caption)', fontWeight: 700,
-                      background: 'var(--gray-100)', border: '1px solid var(--gray-200)',
-                      borderRadius: 6, padding: '3px 8px', color: 'var(--gray-700)',
-                      flexShrink: 0, minWidth: 40, textAlign: 'center',
-                    }}>{s.key}</span>
-                    <span style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)' }}>{s.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
