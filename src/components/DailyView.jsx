@@ -110,6 +110,7 @@ export default function DailyView() {
   const [newTask, setNewTask]           = useState('')
   const [newTaskEmoji, setNewTaskEmoji] = useState('')
   const [newTaskQuadrant, setNewTaskQuadrant] = useState('Q1')
+  const [showUrgency, setShowUrgency] = useState(false)
   const [newTaskMins, setNewTaskMins]   = useState('')
   const [newTaskRecurrence, setNewTaskRecurrence] = useState('none')
   const [taskFilter, setTaskFilter]     = useState('all') // 'all'|'Q1'|'Q2'|'Q3'|'Q4'
@@ -910,15 +911,25 @@ export default function DailyView() {
           />
         </div>
 
-        {/* Urgência */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', letterSpacing: 0.4, flexShrink: 0 }}>urgência</span>
-          {Object.entries(QUADRANTS).map(([id, q]) => (
-            <button key={id} onClick={() => setNewTaskQuadrant(id)}
-              style={{ padding: '3px 10px', border: `1.5px solid ${newTaskQuadrant === id ? q.border : 'var(--gray-200)'}`, borderRadius: 50, background: newTaskQuadrant === id ? q.color : 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 'var(--t-caption)', color: newTaskQuadrant === id ? q.text : 'var(--gray-500)', whiteSpace: 'nowrap' }}>
-              {q.emoji} {q.label}
-            </button>
-          ))}
+        {/* Urgência — toggle que abre uma janela com as opções */}
+        <div style={{ marginBottom: 6, position: 'relative', display: 'inline-block' }}>
+          <button onClick={() => setShowUrgency(v => !v)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', border: '1.5px solid var(--gray-200)', borderRadius: 50, background: 'var(--white)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', color: 'var(--gray-600)' }}>
+            Urgência {showUrgency ? '▴' : '▾'}
+          </button>
+          {showUrgency && (
+            <>
+              <div onClick={() => setShowUrgency(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+              <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 51, background: 'var(--white)', border: '1px solid var(--gray-200)', borderRadius: 'var(--r)', boxShadow: '0 10px 30px rgba(0,0,0,0.14)', padding: 6, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 210 }}>
+                {Object.entries(QUADRANTS).map(([id, q]) => (
+                  <button key={id} onClick={() => { setNewTaskQuadrant(id); setShowUrgency(false) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: `1.5px solid ${newTaskQuadrant === id ? q.border : 'transparent'}`, borderRadius: 'var(--r)', background: newTaskQuadrant === id ? q.color : 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 'var(--t-body)', color: newTaskQuadrant === id ? q.text : 'var(--gray-700)', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                    {q.emoji} {q.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
