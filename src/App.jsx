@@ -20,6 +20,7 @@ class ErrorBoundary extends Component {
 }
 import { BookOpen, ListTodo, CalendarDays, Target, Timer, BarChart3, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from "./lib/supabase"
+import { startCloudSync, stopCloudSync } from "./lib/cloudSync"
 import { useUserSettings } from "./hooks/useUserSettings"
 import { getTasksForDay, getSubjectsMap } from "./data/schedule"
 import { CalendarEmoji } from "./components/CalendarEmoji"
@@ -379,6 +380,7 @@ function ShortcutsModal({ onClose }) {
 }
 
 const isElectron = typeof window !== "undefined" && window.electronAPI
+const isCapacitor = typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.()
 
 export default function App() {
   const [tab, setTab] = useState("dashboard")
@@ -394,22 +396,36 @@ export default function App() {
 
   const { settings, setSettings, loading: settingsLoading } = useUserSettings()
 
-  // ───────── Supabase session (skipped in Electron — all data is local)
+  // ───────── Supabase session + sincronização na nuvem (PC + telemóvel)
   useEffect(() => {
-    if (isElectron) {
-      setSession({})
-      return
-    }
-
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
+      if (data.session?.user) startCloudSync(data.session.user.id)
     })
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s)
+      if (s?.user) startCloudSync(s.user.id)
+      else stopCloudSync()
+    })
 
     return () => subscription.unsubscribe()
+  }, [])
+
+  // ───────── Retorno do OAuth por deep-link (Electron wsidn:// e iOS Capacitor)
+  useEffect(() => {
+    if (isElectron && window.electronAPI?.onAuthCallback) {
+      window.electronAPI.onAuthCallback((url) => {
+        try { supabase.auth.exchangeCodeForSession(url) } catch (e) { console.error(e) }
+      })
+    }
+    if (isCapacitor && window.Capacitor?.Plugins?.App) {
+      window.Capacitor.Plugins.App.addListener('appUrlOpen', ({ url }) => {
+        if (url) { try { supabase.auth.exchangeCodeForSession(url) } catch (e) { console.error(e) } }
+      })
+    }
   }, [])
 
   // ───────── Apply theme

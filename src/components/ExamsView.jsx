@@ -5,6 +5,7 @@ import { CONFIDENCE, EVENT_TYPES } from '../constants'
 import { daysUntil } from '../utils/dates'
 import { activeSubjects, withoutClosedSubjects } from '../utils/subjects'
 import { useToast, ToastContainer } from './Toast'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 function exportICS(exams) {
   const withDate = exams.filter(e => e.date)
@@ -47,8 +48,11 @@ function urgencyPill(days) {
 }
 
 export default function ExamsView({ settings }) {
+  const isMobile = useIsMobile()
   const subjects = activeSubjects(settings)
   const firstSubjectName = subjects[0]?.name || ''
+  // Telemóvel: tocar num tópico seleciona-o; tocar num dia agenda-o (o arrastar não funciona em touch)
+  const [pickedTopic, setPickedTopic] = useState(null)
 
   const [allExams, setExams]    = useState(() => load("exams", []))
   // Closed subjects must vanish everywhere — hide their exams from the whole view.
@@ -214,6 +218,15 @@ export default function ExamsView({ settings }) {
       return next
     })
     setDragOver(null)
+  }
+
+  // Telemóvel: agenda um tópico num dia (via toque, não arrastar)
+  function scheduleTopicOnDay(topic, targetDate) {
+    setSchedule(prev => {
+      const existing = prev[targetDate] || []
+      if (existing.find(t => t.id === topic.id)) return prev
+      return { ...prev, [targetDate]: [...existing, { ...topic, subject: topic.subject || selectedSubject }] }
+    })
   }
 
   function removeFromDay(dateStr, topicId) {
@@ -672,28 +685,36 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
         </div>
         <div className="card-body">
 
-          {/* Draggable topics from list */}
+          {/* Tópicos da lista — arrastar no desktop, tocar no telemóvel */}
           {subjectTopics.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-              <span style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontWeight: 600, alignSelf: "center", marginRight: 4 }}>Arrasta para os dias →</span>
-              {subjectTopics.map(topic => (
-                <div
-                  key={topic.id}
-                  draggable
-                  onDragStart={() => setDragging({ topic, fromDate: null })}
-                  onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 5,
-                    background: "var(--white)", border: "1px solid var(--gray-200)",
-                    borderRadius: "var(--r)", padding: "5px 10px",
-                    fontSize: "var(--t-caption)", fontWeight: 500, color: "var(--gray-700)",
-                    cursor: "grab", boxShadow: "var(--shadow)",
-                    opacity: dragging?.topic?.id === topic.id && dragging?.fromDate === null ? 0.5 : 1,
-                  }}
-                >
-                  <GripVertical size={11} color="var(--gray-400)" /> {topic.name}
-                </div>
-              ))}
+              <span style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontWeight: 600, alignSelf: "center", marginRight: 4 }}>
+                {isMobile ? (pickedTopic ? "Toca num dia para agendar" : "Toca num tópico e depois num dia") : "Arrasta para os dias →"}
+              </span>
+              {subjectTopics.map(topic => {
+                const picked = pickedTopic?.id === topic.id
+                return (
+                  <div
+                    key={topic.id}
+                    draggable={!isMobile}
+                    onDragStart={!isMobile ? () => setDragging({ topic, fromDate: null }) : undefined}
+                    onDragEnd={!isMobile ? () => { setDragging(null); setDragOver(null) } : undefined}
+                    onClick={isMobile ? () => setPickedTopic(picked ? null : topic) : undefined}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      background: picked ? "var(--accent-500)" : "var(--white)",
+                      border: `1px solid ${picked ? "var(--accent-500)" : "var(--gray-200)"}`,
+                      borderRadius: "var(--r)", padding: "5px 10px",
+                      fontSize: "var(--t-caption)", fontWeight: 500,
+                      color: picked ? "#fff" : "var(--gray-700)",
+                      cursor: isMobile ? "pointer" : "grab", boxShadow: "var(--shadow)",
+                      opacity: dragging?.topic?.id === topic.id && dragging?.fromDate === null ? 0.5 : 1,
+                    }}
+                  >
+                    <GripVertical size={11} color={picked ? "#fff" : "var(--gray-400)"} /> {topic.name}
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -733,18 +754,21 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   // Só os temas agendados da cadeira atualmente selecionada
                   const visible = dayTopics.filter(belongsToSelected)
 
+                  const isPickTarget = isMobile && pickedTopic
                   return (
                     <div
                       key={dateStr}
                       style={{
-                        border: `1.5px solid ${isDragOver ? "var(--rose-400)" : isExamDay ? "#f97316" : isToday ? "var(--rose-300)" : dayTopics.length > 0 ? "var(--accent-200)" : "var(--gray-200)"}`,
+                        border: `1.5px solid ${isDragOver ? "var(--rose-400)" : isPickTarget ? "var(--accent-300)" : isExamDay ? "#f97316" : isToday ? "var(--rose-300)" : dayTopics.length > 0 ? "var(--accent-200)" : "var(--gray-200)"}`,
                         borderRadius: "var(--r)",
                         minHeight: 60,
                         padding: "3px",
                         background: isDragOver ? "var(--rose-50)" : isExamDay ? "#fff7ed" : isToday ? "#fff1f2" : dayTopics.length > 0 ? "var(--accent-50)" : "var(--white)",
                         transition: "border-color 0.1s, background 0.1s",
                         boxSizing: "border-box",
+                        cursor: isPickTarget ? "pointer" : "default",
                       }}
+                      onClick={isMobile && pickedTopic ? () => { scheduleTopicOnDay(pickedTopic, dateStr); setPickedTopic(null) } : undefined}
                       onDragOver={e => { e.preventDefault(); setDragOver(dateStr) }}
                       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null) }}
                       onDrop={() => dropTopic(dateStr)}

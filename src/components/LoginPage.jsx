@@ -41,6 +41,24 @@ export default function LoginPage({ onLogin, onSkip }) {
   const handleGoogle = async () => {
     setError('')
     logger.auth.oauthAttempt('google')
+    const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+    const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.()
+
+    // Apps nativas: o OAuth abre no browser do sistema e regressa por deep-link
+    if (isElectron || isCapacitor) {
+      const redirectTo = isElectron ? 'wsidn://auth' : 'com.mariana.whatshouldidonext://auth'
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      })
+      if (error) { logger.auth.oauthFailure('google', error.message); setError(error.message); return }
+      if (data?.url) {
+        if (isElectron) window.electronAPI.openExternal(data.url)
+        else window.open(data.url, '_system')
+      }
+      return
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },

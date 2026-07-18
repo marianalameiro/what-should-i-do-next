@@ -11,13 +11,16 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
+const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.()
+const isNative = isElectron || isCapacitor
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     storageKey: 'app-auth',
     autoRefreshToken: true,
-    detectSessionInUrl: !isElectron, // web needs this to catch OAuth token in redirect URL
+    flowType: 'pkce', // necessário para OAuth nativo (deep-link) no Electron/iOS
+    detectSessionInUrl: !isNative, // web apanha o token no URL; nativo trata via deep-link
   }
 })
 
