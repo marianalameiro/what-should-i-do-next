@@ -1,0 +1,8 @@
+{
+	"appId": "com.mariana.whatshouldidonext",
+	"appName": "What Should I Do Next",
+	"webDir": "dist",
+	"packageClassList": [
+		"AppPlugin"
+	]
+}

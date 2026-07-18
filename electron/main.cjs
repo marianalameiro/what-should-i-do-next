@@ -14,6 +14,28 @@ let trayWindow
 let tray
 let lastWidgetWriteLogKey = null
 let lastDoneQueueLogKey = null
+let pendingAuthUrl = null
+
+// ── OAuth deep link (wsidn://auth?code=...) ─────────────────────────────────
+// O login Google abre no browser do sistema e regressa à app por este esquema.
+app.setAsDefaultProtocolClient('wsidn')
+
+function sendAuthCallback(url) {
+  if (!url || !url.startsWith('wsidn://')) return
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('auth-callback', url)
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show(); mainWindow.focus()
+  } else {
+    pendingAuthUrl = url // entrega quando a janela estiver pronta
+  }
+}
+
+// macOS entrega o retorno do OAuth por aqui
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  sendAuthCallback(url)
+})
 
 function createTray() {
   try {
@@ -138,6 +160,14 @@ function createWindow() {
   // Limpa a referência ao fechar para que o activate a recrie corretamente
   mainWindow.on('closed', () => { mainWindow = null })
 
+  // Entrega um retorno de OAuth que tenha chegado antes da janela existir
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingAuthUrl) {
+      mainWindow.webContents.send('auth-callback', pendingAuthUrl)
+      pendingAuthUrl = null
+    }
+  })
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')
   } else {
@@ -147,7 +177,9 @@ function createWindow() {
 }
 
 // Segunda instância → foca a janela da primeira em vez de abrir outra
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  const urlArg = argv.find(a => typeof a === 'string' && a.startsWith('wsidn://'))
+  if (urlArg) sendAuthCallback(urlArg)
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()

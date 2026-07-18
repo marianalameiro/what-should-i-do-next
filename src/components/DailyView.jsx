@@ -625,46 +625,41 @@ export default function DailyView() {
       </div>
 
       {/* Header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22 }}>
         <div>
-          <h1>
-            {DAY_FULL[selectedDate.getDay()]} {isToday ? '🌸' : ''}
-            <span style={{ fontSize: '1rem', color: 'var(--gray-400)', fontWeight: 500, marginLeft: 8 }}>
-              {selectedDate.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' })}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <h1 style={{ marginBottom: 0 }}>{DAY_FULL[selectedDate.getDay()]}</h1>
+            <span style={{ fontSize: '15px', color: 'var(--gray-400)', fontWeight: 600 }}>
+              {selectedDate.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}{isToday ? ' 🌸' : ''}
             </span>
-          </h1>
-          <p className="subtitle">
-            {allCount === 0 ? 'Sem tarefas para este dia!' : `${doneCount} de ${allCount} tarefas concluídas${pendingMins > 0 ? ` · ~${pendingMins}min pendentes` : ''}`}
+          </div>
+          <p className="subtitle" style={{ fontSize: '14px', marginTop: 6 }}>
+            {allCount === 0 ? 'Sem tarefas para este dia!' : <><b style={{ color: 'var(--accent-500)', fontWeight: 700 }}>{doneCount} de {allCount}</b> feitas{pendingMins > 0 ? ` · ~${pendingMins} min por fazer` : ''}</>}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {allCount > 0 && (
-            <button
-              onClick={() => setShowMatrix(v => !v)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px', borderRadius: 50,
-                border: '1.5px solid var(--gray-200)',
-                background: showMatrix ? 'var(--rose-50)' : 'var(--white)',
-                color: showMatrix ? 'var(--rose-400)' : 'var(--gray-500)',
-                fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-caption)', cursor: 'pointer',
-              }}
-            >
-              <Settings2 size={13} />
-              {showMatrix ? 'Vista normal' : 'Matriz'}
-            </button>
-          )}
-        </div>
+        {allCount > 0 && (
+          <button
+            onClick={() => setShowMatrix(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 50,
+              border: '1px solid var(--gray-200)',
+              background: showMatrix ? 'var(--accent-100)' : 'transparent',
+              color: showMatrix ? 'var(--accent-500)' : 'var(--gray-500)',
+              fontFamily: 'inherit', fontWeight: 600, fontSize: 'var(--t-caption)', cursor: 'pointer',
+            }}
+          >
+            <Settings2 size={13} />
+            {showMatrix ? 'Vista normal' : 'Matriz'}
+          </button>
+        )}
       </div>
 
-      {/* Progress */}
+      {/* Progress — hairline sutil */}
       {allCount > 0 && (
-        <>
-          <p className="progress-label">{pct}% do dia concluído</p>
-          <div className="progress-bar-wrap">
-            <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
-          </div>
-        </>
+        <div className="progress-bar-wrap" style={{ height: 4, marginBottom: 24 }}>
+          <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+        </div>
       )}
 
       {/* Energy selector */}
@@ -787,40 +782,46 @@ export default function DailyView() {
             const doneSub = tasks.filter(t => done[t.id]).length
             return (
               <div className="subject-group" key={subjectKey}>
-                <div className="subject-header" style={{ borderLeft: `4px solid ${subject.color}` }}>
+                <div className="subject-header">
                   <div className="subject-dot" style={{ background: subject.color }} />
-                  <span className="subject-name" style={{ color: subject.textColor }}>{subject.emoji} {subject.name}</span>
-                  {isScheduled && <span className="subject-count">{doneSub}/{tasks.length}</span>}
+                  <span className="subject-name">{subject.emoji} {subject.name}</span>
+                  {isScheduled && <span className="subject-count">{doneSub} / {tasks.length}</span>}
                 </div>
                 <div className="task-list">
                   {visibleTasks.map(task => (
                     <div key={task.id} className="task-item">
-                      <div className="task-checkbox" style={{ cursor: 'pointer' }} onClick={() => check(task.id)}><Check size={13} color="transparent" strokeWidth={3} /></div>
+                      <div className="task-checkbox" style={{ cursor: 'pointer' }} onClick={() => check(task.id)}><Check size={13} color="#fff" strokeWidth={3} /></div>
                       <span className="task-label">{task.label}</span>
+                      {task.mins && <span className="task-mins">{task.mins} min</span>}
+                      {scheduledLabels.has(task.label) && <span className="task-sched">📅 agendada</span>}
                       {task.highlight && <span className="task-highlight">{isWeekend ? 'fim de semana' : 'última aula'}</span>}
-                      <button
-                        onClick={e => { e.stopPropagation(); snoozeTask({ ...task, subjectKey, isExtra: false }) }}
-                        title="Adiar para amanhã"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}
-                      >↪</button>
-                      <button onClick={e => { e.stopPropagation(); check(task.id) }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                        <X size={12} />
-                      </button>
+                      <div className="task-actions">
+                        <button
+                          onClick={e => { e.stopPropagation(); snoozeTask({ ...task, subjectKey, isExtra: false }) }}
+                          title="Adiar para amanhã"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1 }}
+                        >↪</button>
+                        <button onClick={e => { e.stopPropagation(); check(task.id) }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 2px', display: 'flex', alignItems: 'center' }}>
+                          <X size={12} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                   {extraForSub.map(task => (
                     <div key={task.id} className="task-item">
-                      <div className="task-checkbox" style={{ border: '1.5px solid var(--gray-300)', cursor: 'pointer' }} onClick={() => check(task.id)}><Check size={13} color="transparent" strokeWidth={3} /></div>
-                      <span className="task-label" style={{ color: 'var(--gray-700)' }}>{task.label}</span>
-                      {task.mins && <span style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', flexShrink: 0, marginLeft: 'auto' }}>{task.mins}min</span>}
+                      <div className="task-checkbox" style={{ cursor: 'pointer' }} onClick={() => check(task.id)}><Check size={13} color="#fff" strokeWidth={3} /></div>
+                      <span className="task-label">{task.label}</span>
+                      {task.mins && <span className="task-mins">{task.mins} min</span>}
                       {task.recurrence && <span style={{ fontSize: 'var(--t-caption)', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
-                      <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}>↪</button>
-                      <button onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                        <X size={12} />
-                      </button>
+                      <div className="task-actions">
+                        <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1 }}>↪</button>
+                        <button onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 2px', display: 'flex', alignItems: 'center' }}>
+                          <X size={12} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

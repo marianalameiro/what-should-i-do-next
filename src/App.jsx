@@ -46,6 +46,12 @@ const TABS = [
   { id: "settings",  icon: Settings,     label: "Definições",      emoji: "⚙️" },
 ]
 
+// Rótulos curtos para a barra de navegação do telemóvel
+const MOBILE_NAV_LABELS = {
+  dashboard: 'Diário', today: 'Tarefas', schedule: 'Horário',
+  exams: 'Exames', hours: 'Horas', stats: 'Stats', settings: 'Definições',
+}
+
 function readLSArray(key) {
   try {
     const value = JSON.parse(localStorage.getItem(key) || '[]')
@@ -1280,6 +1286,20 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
       </main>
+
+      {/* Barra de navegação flutuante — só telemóvel */}
+      <nav className="mobile-nav">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            className={`mobile-nav-btn ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            <span className="mobile-nav-emoji">{typeof t.emoji === 'string' ? t.emoji : <CalendarEmoji />}</span>
+            <span className="mobile-nav-label">{MOBILE_NAV_LABELS[t.id] || t.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }

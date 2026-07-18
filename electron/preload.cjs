@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   offDoneQueueChanged: (cb) => ipcRenderer.removeListener('done-queue-changed', cb),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   sendEmail: (opts) => ipcRenderer.invoke('send-email', opts),
+  onAuthCallback: (cb) => ipcRenderer.on('auth-callback', (_e, url) => cb(url)),
 })
