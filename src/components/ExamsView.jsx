@@ -776,28 +776,37 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                       <div style={{ fontSize: "var(--t-caption)", fontWeight: 700, color: isExamDay ? "#c2410c" : isToday ? "var(--rose-400)" : "var(--gray-500)", textAlign: "center", marginBottom: 2 }}>
                         {day}{isExamDay ? " 🎯" : ""}
                       </div>
-                      {visible.map(t => (
-                        <div
-                          key={t.id}
-                          draggable
-                          onDragStart={e => { e.stopPropagation(); setDragging({ topic: t, fromDate: dateStr }) }}
-                          onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 2,
-                            fontSize: "var(--t-caption)", fontWeight: 600, color: "var(--accent-600)",
-                            background: "var(--accent-100)", borderRadius: 3,
-                            padding: "2px 4px", marginBottom: 2,
-                            cursor: "grab",
-                            opacity: dragging?.topic?.id === t.id && dragging?.fromDate === dateStr ? 0.4 : 1,
-                          }}
-                        >
-                          <span style={{ flex: 1, wordBreak: "break-word", lineHeight: 1.3 }}>{t.name}</span>
-                          <button
-                            onClick={e => { e.stopPropagation(); removeFromDay(dateStr, t.id) }}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-400)", padding: 0, lineHeight: 1, flexShrink: 0, fontSize: "var(--t-caption)" }}
-                          >✕</button>
+                      {isMobile ? (
+                        // Telemóvel: pontos (os nomes não cabem na célula). Toca no dia para ver/remover.
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, justifyContent: "center", marginTop: 2 }}>
+                          {visible.map(t => (
+                            <span key={t.id} title={t.name} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent-400)", flexShrink: 0 }} />
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        visible.map(t => (
+                          <div
+                            key={t.id}
+                            draggable
+                            onDragStart={e => { e.stopPropagation(); setDragging({ topic: t, fromDate: dateStr }) }}
+                            onDragEnd={() => { setDragging(null); setDragOver(null) }}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 2,
+                              fontSize: "var(--t-caption)", fontWeight: 600, color: "var(--accent-600)",
+                              background: "var(--accent-100)", borderRadius: 3,
+                              padding: "2px 4px", marginBottom: 2,
+                              cursor: "grab",
+                              opacity: dragging?.topic?.id === t.id && dragging?.fromDate === dateStr ? 0.4 : 1,
+                            }}
+                          >
+                            <span style={{ flex: 1, wordBreak: "break-word", lineHeight: 1.3 }}>{t.name}</span>
+                            <button
+                              onClick={e => { e.stopPropagation(); removeFromDay(dateStr, t.id) }}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-400)", padding: 0, lineHeight: 1, flexShrink: 0, fontSize: "var(--t-caption)" }}
+                            >✕</button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )
                 })}
@@ -862,13 +871,7 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="card-body">
-                <p style={{ fontSize: "var(--t-caption)", color: "var(--gray-400)", fontStyle: "italic" }}>
-                  Adiciona tópicos com auto-avaliação e clica Analisar — a IA sugere ordem de estudo, prioridades, número de revisões com base nos exames e distribui as revisões por dias específicos no calendário.
-                </p>
-              </div>
-            )}
+            ) : null}
           </>
         )}
       </div>
