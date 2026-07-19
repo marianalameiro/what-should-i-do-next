@@ -480,7 +480,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
           <div className="card-header">
             <span className="card-title">
               <Target size={14} style={{ display: 'inline', marginRight: 6 }} />
-              On Track
+              Ritmo
             </span>
             <button onClick={() => onNavigate('hours')} style={{ fontSize: 'var(--t-caption)', color: 'var(--rose-400)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
               Ver detalhes
@@ -489,6 +489,8 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
           <div className="card-body" style={{ padding: '10px 20px' }}>
             {onTrackRows.map(s => {
               const pct = Math.min(100, s.tNow < 0.1 ? 100 : Math.round(s.hrs / s.tNow * 100))
+              // Blend: quanto ainda falta HOJE para esta cadeira (da sugestão diária)
+              const today = dailySuggestions.find(d => d.key === s.key)
               return (
                 <div key={s.key} className="track-row">
                   <button
@@ -538,8 +540,13 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
                   ) : (
                     <span className="track-hours" title="Clica para editar meta semanal"
                       onClick={() => { setEditTarget(s.key); setTargetDraft(s.weeklyGoal.toFixed(1)) }}
-                      style={{ cursor: 'pointer' }}>
-                      {s.hrs.toFixed(1)}h / {s.weeklyGoal.toFixed(1)}h
+                      style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
+                      <span>{s.hrs.toFixed(1)}h / {s.weeklyGoal.toFixed(1)}h</span>
+                      {today && today.stillNeeded > 0 && (
+                        <span style={{ fontWeight: 800, color: today.stillNeeded >= 3 ? '#dc2626' : today.stillNeeded >= 1.5 ? '#d97706' : '#16a34a' }}>
+                          hoje: {today.stillNeeded}h
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
@@ -549,33 +556,7 @@ export default function Dashboard({ onNavigate, settings, onOpenCadeira }) {
         </div>
       )}
 
-      {/* ── 4b. SUGESTÃO DIÁRIA ────────────────────────────────────── */}
-      {dailySuggestions.length > 0 && (
-        <div className="card dashboard-full" style={{ marginBottom: 14 }}>
-          <div className="card-header">
-            <span className="card-title">🎯 Para estar no ritmo hoje</span>
-            <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>{DAYS_LEFT_IN_WEEK} {DAYS_LEFT_IN_WEEK === 1 ? 'dia restante' : 'dias restantes'} na semana</span>
-          </div>
-          <div className="card-body" style={{ padding: '8px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {dailySuggestions.slice(0, 4).map(s => (
-              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{s.emoji}</span>
-                <span style={{ flex: 1, fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)' }}>{s.name}</span>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: 'var(--t-body)', fontWeight: 800, color: s.stillNeeded >= 3 ? '#dc2626' : s.stillNeeded >= 1.5 ? '#d97706' : '#16a34a' }}>
-                    {s.stillNeeded}h
-                  </span>
-                  {s.doneToday > 0 && (
-                    <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', display: 'block', lineHeight: 1 }}>
-                      {s.doneToday}h feitas hoje
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Widget "Para estar no ritmo hoje" fundida na widget Ritmo (blend) */}
 
       {/* ── 4c. REVISÕES ─────────────────────────────────────────── */}
       {reviewDue.length > 0 && (
