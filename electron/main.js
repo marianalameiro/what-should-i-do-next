@@ -11,8 +11,8 @@ function createWindow() {
     }
   });
 
-  win.loadFile(path.join(__dirname, "../dist/index.html"));
-  // win.webContents.openDevTools();
+  // Rota absoluta padrao e robusta para apps empacotadas no Mac
+  win.loadFile(path.join(__dirname, "dist/index.html"));
 }
 
 app.whenReady().then(() => {
