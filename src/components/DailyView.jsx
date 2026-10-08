@@ -495,9 +495,10 @@ export default function DailyView() {
   const thisWeekTabs = WEEK_DAYS
     .map(dow => getDateForDow(dow, todayMonday))
     .filter(date => {
-      const isT = date.toDateString() === today.toDateString();
-      return isT || getCompletionPct(date) < 100 || hasPendingExtrasForDate(date);
-    });
+      const isToday = date.toDateString() === today.toDateString();
+      const pct = getCompletionPct(date);
+      return isToday || pct < 100 || hasPendingExtrasForDate(date);
+    });;
 
   const allTabs = [
     ...incompletePast.filter(d => !thisWeekTabs.find(t => t.toDateString() === d.toDateString())),
