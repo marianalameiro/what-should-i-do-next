@@ -24,7 +24,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.0.0",
-    "electron": "^31.0.0",
+    "electron": "31.7.7",
     "electron-builder": "^24.0.0",
     "vite": "^5.4.0",
     "vite-plugin-pwa": "^1.2.0",
@@ -49,7 +49,11 @@
       "icon": "electron/icon.icns",
       "identity": null,
       "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "target": [
+        "dmg",
+        "dir"
+      ]
     },
     "files": [
       "dist/**/*",
