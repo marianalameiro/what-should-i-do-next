@@ -377,6 +377,8 @@ function ShortcutsModal({ onClose }) {
 const isElectron = typeof window !== "undefined" && window.electronAPI
 const isCapacitor = false;
 
+const MOBILE_NAV_LABELS = {};
+
 export default function App() {
   const [tab, setTab] = useState("dashboard")
   const [activeSubjectKey, setActiveSubjectKey] = useState(null)
