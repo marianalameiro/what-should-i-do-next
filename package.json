@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite --strictPort\" \"wait-on http://localhost:5173 && ELECTRON_DEV=1 electron .\"",
     "electron:build": "vite build && electron-builder",
-    "electron:build:signed": "vite build && electron-builder && rm -rf \"/Applications/What Should I Do Next.app\" && cp -R \"dist-electron/mac-arm64/What Should I Do Next.app\" \"/Applications/\" && xattr -cr \"/Applications/What Should I Do Next.app\" && codesign --force --deep --entitlements electron/entitlements.mac.plist --sign - \"/Applications/What Should I Do Next.app\""
+    "electron:build:signed": "vite build && electron-builder && rm -rf \"/Applications/What Should I Do Next.app\" && cp -R \"dist-electron/mac-arm64/What Should I Do Next.app\" \"/Applications/\" && xattr -cr \"/Applications/What Should I Do Next.app\" && codesign --force --deep --entitlements electron/entitlements.mac.plist --sign - \"/Applications/What Should I Do Next.app\"",
+    "build:mac": "npx vite build && export CSC_IDENTITY_AUTO_DISCOVERY=false && export ELECTRON_BUILDER_ALLOW_UNSIGN=true && npx electron-builder --dir --config.mac.identity=null --config.mac.hardenedRuntime=false && rm -rf \"/Applications/What Should I Do Next.app\" && cp -R dist-electron/mac-arm64/\"What Should I Do Next.app\" /Applications/ && xattr -cr \"/Applications/What Should I Do Next.app\" && codesign --force --deep --sign - \"/Applications/What Should I Do Next.app\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",
