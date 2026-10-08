@@ -47,11 +47,6 @@ const TABS = [
   { id: "settings",  icon: Settings,     label: "Definições",      emoji: "⚙️" },
 ]
 
-// Rótulos curtos para a barra de navegação do telemóvel
-const MOBILE_NAV_LABELS = {
-  dashboard: 'Diário', today: 'Tarefas', schedule: 'Horário',
-  exams: 'Exames', hours: 'Horas', stats: 'Stats', settings: 'Definições',
-}
 
 function readLSArray(key) {
   try {
@@ -380,7 +375,7 @@ function ShortcutsModal({ onClose }) {
 }
 
 const isElectron = typeof window !== "undefined" && window.electronAPI
-const isCapacitor = typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.()
+const false = typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.()
 
 export default function App() {
   const [tab, setTab] = useState("dashboard")
@@ -421,7 +416,7 @@ export default function App() {
         try { supabase.auth.exchangeCodeForSession(url) } catch (e) { console.error(e) }
       })
     }
-    if (isCapacitor && window.Capacitor?.Plugins?.App) {
+    if (false && window.Capacitor?.Plugins?.App) {
       window.Capacitor.Plugins.App.addListener('appUrlOpen', ({ url }) => {
         if (url) { try { supabase.auth.exchangeCodeForSession(url) } catch (e) { console.error(e) } }
       })

@@ -9,15 +9,9 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite --strictPort\" \"wait-on http://localhost:5173 && ELECTRON_DEV=1 electron .\"",
     "electron:build": "vite build && electron-builder",
-    "electron:build:signed": "vite build && electron-builder && rm -rf \"/Applications/What Should I Do Next.app\" && cp -R \"dist-electron/mac-arm64/What Should I Do Next.app\" \"/Applications/\" && xattr -cr \"/Applications/What Should I Do Next.app\" && codesign --force --deep --entitlements electron/entitlements.mac.plist --sign - \"/Applications/What Should I Do Next.app\"",
-    "ios:add": "vite build && cap add ios",
-    "ios:sync": "vite build && cap sync ios",
-    "ios:open": "cap open ios"
+    "electron:build:signed": "vite build && electron-builder && rm -rf \"/Applications/What Should I Do Next.app\" && cp -R \"dist-electron/mac-arm64/What Should I Do Next.app\" \"/Applications/\" && xattr -cr \"/Applications/What Should I Do Next.app\" && codesign --force --deep --entitlements electron/entitlements.mac.plist --sign - \"/Applications/What Should I Do Next.app\""
   },
   "dependencies": {
-    "@capacitor/app": "^8.1.0",
-    "@capacitor/core": "^8.4.1",
-    "@capacitor/ios": "^8.4.1",
     "@supabase/supabase-js": "^2.99.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.383.0",
@@ -27,7 +21,6 @@
     "recharts": "^3.8.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.4.1",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.0.0",
     "electron": "^31.0.0",
