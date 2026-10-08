@@ -57,12 +57,13 @@ function saveExtra(tasks) {
 
 function getCompletionPct(date) {
   const schedule = getTasksForDay(date.getDay())
-  const ids = schedule.flatMap(g => g.tasks.map(t => t.id))
+  const ids = schedule.flatMap(g => g.tasks.map(t => t.id));
   const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]");
-  const hasPendingExtra = extraTasks.some(t => !loadDone(date)[t.id]);
-  if (ids.length === 0) return hasPendingExtra ? 0 : 100;
-  const done = loadDone(date)
-  return Math.round(ids.filter(id => done[id]).length / ids.length * 100)
+  const done = loadDone(date);
+  const totalTasks = ids.length + extraTasks.length;
+  if (totalTasks === 0) return 100;
+  const completed = ids.filter(id => done[id]).length + extraTasks.filter(t => done[t.id]).length;
+  return Math.round((completed / totalTasks) * 100);
 }
 
 function hasPendingExtrasForDate(date) {
