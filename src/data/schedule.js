@@ -1,22 +1,22 @@
 function loadSettings() {
-  try { return JSON.parse(localStorage.getItem('user-settings')) } catch { return null }
+  try { return JSON.parse(localStorage.getItem("user-settings")) } catch { return null }
 }
 
 export function getTasksForDay(dayOfWeek, settingsOverride) {
   const settings = settingsOverride || loadSettings()
   if (!settings?.subjects?.length) return []
   const subjectKeys = settings.schedule?.[dayOfWeek] || []
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   return subjectKeys.map(key => {
     const subject = settings.subjects.find(s => s.key === key)
     if (!subject || subject.closed) return null
-    const tasks = isWeekend
-      ? [{ id: `${key}-sheet-weekend`, label: 'Ficha semanal da matéria', highlight: true }]
-      : (subject.methods || []).map((method, i) => {
-          const label = typeof method === 'string' ? method : (method?.label || '')
-          const duration = typeof method === 'object' && method?.duration ? Number(method.duration) : undefined
-          return { id: `${key}-method-${i}`, label, ...(duration ? { duration } : {}) }
-        })
+    
+    // Lógica 100% dinâmica: lê apenas os métodos reais configurados por qualquer utilizador
+    const tasks = (subject.methods || []).map((method, i) => {
+      const label = typeof method === "string" ? method : (method?.label || "")
+      const duration = typeof method === "object" && method?.duration ? Number(method.duration) : undefined
+      return { id: `${key}-method-${i}`, label, ...(duration ? { duration } : {}) }
+    });
+    
     return { subjectKey: key, tasks }
   }).filter(Boolean)
 }
