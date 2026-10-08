@@ -495,12 +495,8 @@ export default function DailyView() {
   const thisWeekTabs = WEEK_DAYS
     .map(dow => getDateForDow(dow, todayMonday))
     .filter(date => {
-      const isT    = date.toDateString() === today.toDateString()
-      const isPast = date < today
-      if (isT) return true
-      if (isPast) return getCompletionPct(date) < 100 || hasPendingExtrasForDate(date)
-      const isCurrentWeekDay = (date.toDateString() === new Date().toDateString()) || (date > new Date(Date.now() - 7*24*60*60*1000) && date < new Date(Date.now() + 7*24*60*60*1000));
-      return isCurrentWeekDay || getTasksForDay(date.getDay()).some(g => g.tasks.length > 0) || hasPendingExtrasForDate(date)
+      const isT = date.toDateString() === today.toDateString();
+      return isT || getCompletionPct(date) < 100 || hasPendingExtrasForDate(date);
     })
 
   const allTabs = [
