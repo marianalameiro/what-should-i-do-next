@@ -375,7 +375,7 @@ function ShortcutsModal({ onClose }) {
 }
 
 const isElectron = typeof window !== "undefined" && window.electronAPI
-const false = typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.()
+const isCapacitor = false;
 
 export default function App() {
   const [tab, setTab] = useState("dashboard")
