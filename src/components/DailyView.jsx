@@ -59,10 +59,16 @@ function getCompletionPct(date) {
   const dateStr = date.toDateString();
   const schedule = getTasksForDay(date.getDay());
   const ids = schedule.flatMap(g => g.tasks.map(t => t.id));
-  const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]").filter(t => t.date === dateStr || new Date(t.date).toDateString() === dateStr);
+  
+  // Captura tarefas extras desta data especifica E TODAS as tarefas com recorrencia diaria
+  const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]").filter(t => {
+    return t.date === dateStr || new Date(t.date).toDateString() === dateStr || t.recurring === "daily" || t.isDaily === true;
+  });
+  
   const done = loadDone(date);
   const totalTasks = ids.length + extraTasks.length;
   if (totalTasks === 0) return 100;
+  
   const completed = ids.filter(id => done[id]).length + extraTasks.filter(t => done[t.id]).length;
   return Math.round((completed / totalTasks) * 100);
 }
@@ -498,8 +504,8 @@ export default function DailyView() {
     .filter(date => {
       const isToday = date.toDateString() === today.toDateString();
       const pct = getCompletionPct(date);
-      const hasExtras = hasPendingExtrasForDate(date);
-      const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]"); const doneMap = loadDone(date); const hasPendingExtra = extraTasks.some(t => !doneMap[t.id]); const isThisWeek = date >= new Date(Date.now() - 7*24*60*60*1000) && date <= new Date(Date.now() + 7*24*60*60*1000); return isToday || pct < 100 || (isThisWeek && hasPendingExtra);
+      // O dia SO aparece se for Hoje OU se ainda tiver qualquer tarefa pendente (pct < 100)
+      return isToday || pct < 100;
     });;
 
   const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
