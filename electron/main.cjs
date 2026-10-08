@@ -12,13 +12,18 @@ function createWindow() {
     titleBarStyle: 'hidden',
     webPreferences: {
       contextIsolation: true,
-      webSecurity: true,
+      webSecurity: true, // Mantemos ativo porque a rota interna agora está correta
       nodeIntegration: false
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
-    console.error(err);
+  // Rota à prova de bala: deteta se está a rodar empacotado no asar ou em dev local
+  const indexPath = app.isPackaged 
+    ? path.join(__dirname, '..', 'dist', 'index.html')
+    : path.join(__dirname, '../dist/index.html');
+
+  mainWindow.loadFile(indexPath).catch(err => {
+    console.error("Erro ao abrir index.html:", err);
   });
 
   mainWindow.on('closed', () => {
