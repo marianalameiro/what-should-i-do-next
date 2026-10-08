@@ -504,7 +504,8 @@ export default function DailyView() {
     .filter(date => {
       const isToday = date.toDateString() === today.toDateString();
       const pct = getCompletionPct(date);
-      // O dia SO aparece se for Hoje OU se ainda tiver qualquer tarefa pendente (pct < 100)
+      
+      // Regra exata: Aparece se for Hoje OU se tiver qualquer tipo de tarefa pendente (pct < 100)
       return isToday || pct < 100;
     });;
 
