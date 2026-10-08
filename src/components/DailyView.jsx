@@ -498,12 +498,12 @@ export default function DailyView() {
       const isToday = date.toDateString() === today.toDateString();
       const pct = getCompletionPct(date);
       return isToday || pct < 100 || hasPendingExtrasForDate(date);
-    });;
+    });
 
   const allTabs = [
-    ...incompletePast.filter(d => !thisWeekTabs.find(t => t.toDateString() === d.toDateString())),
-    ...thisWeekTabs,
-  ].sort((a, b) => a - b)
+    ...incompletePast.filter(d => !thisWeekTabs.find(t => t.toDateString() === d.toDateString()) && getCompletionPct(d) < 100),
+    ...thisWeekTabs
+  ].sort((a, b) => a - b);
 
   function renderTask(task, q, qKey) {
     const subject = task.subjectKey ? SUBJECTS[task.subjectKey] : null
