@@ -493,7 +493,8 @@ export default function DailyView() {
       const isPast = date < today
       if (isT) return true
       if (isPast) return getCompletionPct(date) < 100 || hasPendingExtrasForDate(date)
-      return getTasksForDay(date.getDay()).some(g => g.tasks.length > 0) || hasPendingExtrasForDate(date)
+      const isThisWeek = thisWeekTabs.some(t => t.toDateString() === date.toDateString());
+      return isThisWeek || getTasksForDay(date.getDay()).some(g => g.tasks.length > 0) || hasPendingExtrasForDate(date);
     })
 
   const allTabs = [
