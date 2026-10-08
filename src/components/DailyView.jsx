@@ -471,7 +471,10 @@ export default function DailyView() {
     const realDone  = doneCount - snoozedInScope
     const realPct   = realTotal === 0 ? 0 : Math.round((realDone / realTotal) * 100)
 
-    if (realPct === 100 && realTotal > 0 && !confettiShownDates.current.has(dateStr)) {
+    const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]");
+    const hasPendingExtra = extraTasks.some(t => !loadDone(selectedDate)[t.id]);
+    const hasAnyDone = Object.values(loadDone(selectedDate)).some(Boolean);
+    if (realPct === 100 && !hasPendingExtra && hasAnyDone && !confettiShownDates.current.has(dateStr)) {
       confettiShownDates.current.add(dateStr)
       const pieces = Array.from({ length: 25 }, (_, i) => ({
         id: i,
