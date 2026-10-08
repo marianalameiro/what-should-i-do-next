@@ -1,11 +1,6 @@
- nativo trata via deep-link
-  }
-})
+import { createClient } from "@supabase/supabase-js";
 
-// Log all auth state transitions so unusual patterns are visible in logs.
-supabase.auth.onAuthStateChange((event, session) => {
-  logger.auth.stateChange(event, session?.user?.id)
-  if (event === 'SIGNED_IN') {
-    logger.auth.sessionRestored(session?.user?.id)
-  }
-})
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
