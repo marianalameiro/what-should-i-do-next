@@ -133,7 +133,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
     insights.push({
       emoji: '📅',
       title: `Rendes mais ${bestDow === 0 || bestDow === 6 ? "aos" : "às"} ${DOW_PT[bestDow]}s`,
-      sub: `${dowH[bestDow].toFixed(1)}h acumuladas — o teu melhor dia da semana`,
+      sub: `${dowH[bestDow].toFixed(1)}h ${dowH[bestDow] <= 1 ? "acumulada" : "acumuladas"} — o teu melhor dia da semana`,
       color: '#6366f1', bg: 'var(--indigo-50)',
     })
 
