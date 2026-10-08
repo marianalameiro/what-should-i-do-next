@@ -56,9 +56,10 @@ function saveExtra(tasks) {
 }
 
 function getCompletionPct(date) {
-  const schedule = getTasksForDay(date.getDay())
+  const dateStr = date.toDateString();
+  const schedule = getTasksForDay(date.getDay());
   const ids = schedule.flatMap(g => g.tasks.map(t => t.id));
-  const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]");
+  const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]").filter(t => t.date === dateStr || new Date(t.date).toDateString() === dateStr);
   const done = loadDone(date);
   const totalTasks = ids.length + extraTasks.length;
   if (totalTasks === 0) return 100;
@@ -500,10 +501,7 @@ export default function DailyView() {
       return isToday || pct < 100 || hasPendingExtrasForDate(date);
     });
 
-  const allTabs = [
-    ...incompletePast.filter(d => !thisWeekTabs.find(t => t.toDateString() === d.toDateString()) && getCompletionPct(d) < 100),
-    ...thisWeekTabs
-  ].sort((a, b) => a - b);
+  const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
 
   function renderTask(task, q, qKey) {
     const subject = task.subjectKey ? SUBJECTS[task.subjectKey] : null
