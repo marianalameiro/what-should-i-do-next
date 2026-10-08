@@ -32,7 +32,7 @@ function applyAccent(h, s, l) {
   document.documentElement.style.setProperty('--accent-l', l)
 }
 const SECTIONS = [
-  { id: 'perfil',       label: 'Perfil & Dados', emoji: '👤' },
+  { id: 'perfil',       label: 'Perfil',        emoji: '👤' },
   { id: 'cadeiras',     label: 'Cadeiras',      emoji: '📚' },
   { id: 'notas',        label: 'Notas',         emoji: '📊' },
   { id: 'preferencias', label: 'Preferências',  emoji: '✨' },
@@ -41,6 +41,7 @@ const SECTIONS = [
 export default function SettingsPage({ settings, setSettings }) {
   const [section, setSection]         = useState('perfil')
   const [showSubjectForm, setShowSubjectForm] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [editingSubject, setEditingSubject]   = useState(null)
   const [newSubject, setNewSubject]    = useState({ name: '', emoji: '📚', color: COLORS[0].color, textColor: COLORS[0].textColor, methods: '' })
   const [archivedSemesters, setArchivedSemesters] = useState(() => {
@@ -162,50 +163,6 @@ export default function SettingsPage({ settings, setSettings }) {
 
   const [apiKey, setApiKeyState] = useState(() => localStorage.getItem('groq-key') || '')
 
-  const AUTO_BACKUP_KEYS = ['wsidnx-auto-bk-0', 'wsidnx-auto-bk-1', 'wsidnx-auto-bk-2']
-  const [autoBackups, setAutoBackups] = useState(() =>
-    AUTO_BACKUP_KEYS.map(k => { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } }).filter(Boolean)
-  )
-
-  const saveAutoBackup = () => {
-    const staticKeys = [
-      'study-sessions','exams','projects-v2','diary-entries','weekly-reviews',
-      'subject-targets','user-settings','calendar-events','extra-tasks',
-      'eisenhower-overrides','energy-levels','quick-links','schedule-blocks',
-    ]
-    const data = {}
-    staticKeys.forEach(k => { try { data[k] = JSON.parse(localStorage.getItem(k)) } catch {} })
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)
-      if (k.startsWith('tasks-')) { try { data[k] = JSON.parse(localStorage.getItem(k)) } catch {} }
-    }
-    const snapshot = { ts: Date.now(), data }
-    const prev = AUTO_BACKUP_KEYS.map(k => { try { return localStorage.getItem(k) } catch { return null } })
-    AUTO_BACKUP_KEYS.forEach((k, i) => {
-      if (i === 0) localStorage.setItem(k, JSON.stringify(snapshot))
-      else if (prev[i - 1]) localStorage.setItem(k, prev[i - 1])
-    })
-    setAutoBackups([snapshot, ...AUTO_BACKUP_KEYS.slice(1).map(k => { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } }).filter(Boolean)])
-  }
-
-  const restoreAutoBackup = (snapshot) => {
-    if (!window.confirm('Restaurar este backup? Os dados atuais serão substituídos.')) return
-    Object.entries(snapshot.data).forEach(([k, v]) => {
-      try { localStorage.setItem(k, JSON.stringify(v)) } catch {}
-    })
-    window.alert('Backup restaurado! A app vai recarregar.')
-    window.location.reload()
-  }
-
-  const deleteAutoBackup = (ts) => {
-    const remaining = autoBackups.filter(bk => bk.ts !== ts)
-    AUTO_BACKUP_KEYS.forEach((k, i) => {
-      if (remaining[i]) localStorage.setItem(k, JSON.stringify(remaining[i]))
-      else localStorage.removeItem(k)
-    })
-    setAutoBackups(remaining)
-  }
-
   const saveApiKey = (val) => {
     setApiKeyState(val)
     localStorage.setItem('groq-key', val)
@@ -304,6 +261,18 @@ export default function SettingsPage({ settings, setSettings }) {
   }
 
   const notifUpdate = (key, val) => update('notifications', { ...(settings.notifications || {}), [key]: val })
+  const NOTIF_GROUPS = [
+    { id: 'progress', label: 'Progresso diário',   desc: 'Horas estudadas ao longo do dia, meta atingida e sugestão de pausa longa', keys: ['studyProgress', 'dailyGoal', 'longBreak'] },
+    { id: 'exams',    label: 'Exames e prazos',    desc: 'Aviso no dia de testes e exames marcados', keys: ['examDay'] },
+    { id: 'habits',   label: 'Hábitos e reviews',  desc: 'Streak em risco, cadeiras esquecidas e reviews semanais', keys: ['streakRisk', 'neglectedSubject', 'midWeekGoal', 'weeklyReview'] },
+    { id: 'morning',  label: 'Lembrete matinal',   desc: 'Mensagem ao acordar, com destaque para exames próximos', keys: ['morningReminder'] },
+  ]
+  const notifGroupValue = (keys) => keys.every(k => settings.notifications?.[k] !== false)
+  const notifGroupToggle = (keys, val) => {
+    const next = { ...(settings.notifications || {}) }
+    keys.forEach(k => { next[k] = val })
+    update('notifications', next)
+  }
 
   // Period / goals calculations (used in cadeiras section)
   const today = new Date(); today.setHours(0,0,0,0)
@@ -706,26 +675,16 @@ export default function SettingsPage({ settings, setSettings }) {
                 <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 20 }}>
                   Ativa ou desativa cada tipo de notificação. As notificações requerem permissão do sistema.
                 </p>
-                {[
-                  { key: 'studyProgress',   label: 'Progresso de estudo (cada hora)',  desc: 'Avisa quantas horas estudaste durante o dia' },
-                  { key: 'streakRisk',      label: 'Streak em risco',                  desc: 'Alerta às 21h se ainda não estudaste e tens streak ativo' },
-                  { key: 'weeklyReview',    label: 'Lembrete de review semanal',       desc: 'Avisa ao domingo à noite se não fizeste a review da semana' },
-                  { key: 'longBreak',       label: 'Pausa longa após 4 Pomodoros',     desc: 'Sugere uma pausa mais longa depois de 4 sessões seguidas' },
-                  { key: 'examDay',         label: 'Notificação no dia do exame',      desc: 'Lembra-te de exames/testes no próprio dia' },
-                  { key: 'morningReminder', label: 'Lembrete matinal',                 desc: 'Mensagem motivacional ao acordar, com destaque para exames próximos' },
-                  { key: 'dailyGoal',       label: 'Meta do dia atingida',             desc: 'Avisa quando atinges o total de horas diárias definidas nas metas' },
-                  { key: 'neglectedSubject',label: 'Cadeira sem atenção',              desc: 'Alerta se não estudas uma cadeira há 5 ou mais dias' },
-                  { key: 'midWeekGoal',     label: 'Balanço a meio da semana',         desc: 'Resumo do progresso semanal às quartas-feiras ao meio-dia' },
-                ].map(({ key, label, desc }) => {
-                  const val = settings.notifications?.[key] !== false
+                {NOTIF_GROUPS.map(({ id, label, desc, keys }) => {
+                  const val = notifGroupValue(keys)
                   return (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 16 }}>
+                    <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, gap: 16 }}>
                       <div>
                         <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', margin: 0 }}>{label}</p>
                         <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '2px 0 0' }}>{desc}</p>
                       </div>
                       <button
-                        onClick={() => notifUpdate(key, !val)}
+                        onClick={() => notifGroupToggle(keys, !val)}
                         style={{
                           flexShrink: 0, width: 44, height: 24, borderRadius: 'var(--r)', border: 'none', cursor: 'pointer',
                           background: val ? 'var(--rose-400)' : 'var(--gray-200)',
@@ -740,34 +699,6 @@ export default function SettingsPage({ settings, setSettings }) {
                     </div>
                   )
                 })}
-                <div style={{ marginTop: 8, paddingTop: 18, borderTop: '1px solid var(--gray-100)' }}>
-                  <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Email para a weekly review</p>
-                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>O relatório é enviado automaticamente para este endereço</p>
-                  <input
-                    type="email"
-                    placeholder="o-teu@email.com"
-                    value={settings.reviewEmail || ''}
-                    onChange={e => update('reviewEmail', e.target.value)}
-                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box', marginBottom: 10 }}
-                  />
-                  <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>Gmail remetente</p>
-                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 8 }}>Conta Gmail usada para enviar (precisa de uma app password — gera em myaccount.google.com/apppasswords)</p>
-                  <input
-                    type="email"
-                    placeholder="remetente@gmail.com"
-                    value={settings.smtpUser || ''}
-                    onChange={e => update('smtpUser', e.target.value)}
-                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box', marginBottom: 10 }}
-                  />
-                  <p style={{ fontSize: 'var(--t-body)', fontWeight: 700, color: 'var(--gray-700)', marginBottom: 4 }}>App password do Gmail</p>
-                  <input
-                    type="password"
-                    placeholder="xxxx xxxx xxxx xxxx"
-                    value={settings.smtpPass || ''}
-                    onChange={e => update('smtpPass', e.target.value)}
-                    style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 12px', outline: 'none', background: 'var(--gray-50)', color: 'var(--gray-900)', boxSizing: 'border-box' }}
-                  />
-                </div>
               </div>
             </div>
           </div>
@@ -810,9 +741,18 @@ export default function SettingsPage({ settings, setSettings }) {
         </div>
       )}
 
-      {/* ── DADOS ── */}
+      {/* ── DADOS (avançado, escondido por defeito) ── */}
       {section === 'perfil' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+        <div style={{ marginTop: 20 }}>
+          <button
+            onClick={() => setShowAdvanced(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)' }}
+          >
+            <span style={{ display: 'inline-block', transition: 'transform 0.15s', transform: showAdvanced ? 'rotate(90deg)' : 'none' }}>▸</span>
+            Avançado
+          </button>
+          {showAdvanced && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 14 }}>
           {(() => {
             try {
               let bytes = 0
@@ -861,61 +801,22 @@ export default function SettingsPage({ settings, setSettings }) {
           </div>
           <div className="card">
             <div className="card-body">
-              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Exportar dados</p>
+              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Exportar / importar dados</p>
               <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>
-                Descarrega uma cópia de todos os teus dados (sessões, exames, projetos, reflexões).
+                Guarda ou restaura uma cópia de todos os teus dados (sessões, exames, projetos, reflexões). Importar substitui os dados existentes.
               </p>
-              <button className="btn btn-secondary" onClick={exportData}>
-                💾 Exportar JSON
-              </button>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-body">
-              <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Importar dados</p>
-              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', marginBottom: 12 }}>
-                Restaura um backup exportado anteriormente. Os dados existentes serão substituídos.
-              </p>
-              <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-                📂 Importar JSON
-                <input type="file" accept=".json" onChange={importData} style={{ display: 'none' }} />
-              </label>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-body">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div>
-                  <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, margin: 0 }}>Auto-backup (3 cópias)</p>
-                  <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: '2px 0 0' }}>Guarda um snapshot manual dos teus dados</p>
-                </div>
-                <button className="btn btn-secondary" onClick={saveAutoBackup} style={{ fontSize: 'var(--t-caption)' }}>
-                  📸 Guardar agora
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" onClick={exportData}>
+                  💾 Exportar JSON
                 </button>
+                <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+                  📂 Importar JSON
+                  <input type="file" accept=".json" onChange={importData} style={{ display: 'none' }} />
+                </label>
               </div>
-              {autoBackups.length === 0 ? (
-                <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)' }}>Nenhum backup guardado ainda.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {autoBackups.map((bk, i) => (
-                    <div key={bk.ts} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 'var(--r)' }}>
-                      <span style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-600)', fontWeight: 600, flex: 1 }}>
-                        Cópia {i + 1} — {new Date(bk.ts).toLocaleString('pt-PT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <button onClick={() => restoreAutoBackup(bk)} style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--rose-400)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-                        Restaurar
-                      </button>
-                      <button onClick={() => deleteAutoBackup(bk.ts)} style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }} title="Apagar backup">
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
+
           <div className="card">
             <div className="card-body">
               <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-600)', fontWeight: 600, marginBottom: 6 }}>Arquivar semestre</p>
@@ -932,6 +833,8 @@ export default function SettingsPage({ settings, setSettings }) {
               )}
             </div>
           </div>
+          </div>
+          )}
         </div>
       )}
 
