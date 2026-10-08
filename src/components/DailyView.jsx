@@ -498,8 +498,9 @@ export default function DailyView() {
     .filter(date => {
       const isToday = date.toDateString() === today.toDateString();
       const pct = getCompletionPct(date);
-      return isToday || pct < 100 || hasPendingExtrasForDate(date);
-    });
+      const hasExtras = hasPendingExtrasForDate(date);
+      return isToday || pct < 100 || hasExtras;
+    });;
 
   const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
 
