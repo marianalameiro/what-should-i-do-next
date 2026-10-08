@@ -491,13 +491,13 @@ export default function DailyView() {
     if (realPct < 100) confettiShownDates.current.delete(dateStr)
   }, [pct, allCount, doneCount, dateStr])
 
-  const incompletePast = getIncompletePastDays(todayMonday)
+  const incompletePast = getIncompletePastDays(todayMonday);
   const thisWeekTabs = WEEK_DAYS
     .map(dow => getDateForDow(dow, todayMonday))
     .filter(date => {
       const isT = date.toDateString() === today.toDateString();
       return isT || getCompletionPct(date) < 100 || hasPendingExtrasForDate(date);
-    })
+    });
 
   const allTabs = [
     ...incompletePast.filter(d => !thisWeekTabs.find(t => t.toDateString() === d.toDateString())),
