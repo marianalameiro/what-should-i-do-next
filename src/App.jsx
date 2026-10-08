@@ -1307,7 +1307,7 @@ export default function App() {
             onClick={() => setTab(t.id)}
           >
             <span className="mobile-nav-emoji">{typeof t.emoji === 'string' ? t.emoji : <CalendarEmoji />}</span>
-            <span className="mobile-nav-label">{MOBILE_NAV_LABELS[t.id] || t.label}</span>
+            <span className="mobile-nav-label">{TABS.find(t => t.id === t.id)?.label || t.id || t.label}</span>
           </button>
         ))}
       </nav>
