@@ -5,7 +5,7 @@ import { CONFIDENCE, EVENT_TYPES } from '../constants'
 import { daysUntil } from '../utils/dates'
 import { activeSubjects, withoutClosedSubjects } from '../utils/subjects'
 import { useToast, ToastContainer } from './Toast'
-import { useIsMobile } from '../hooks/useIsMobile'
+
 
 function exportICS(exams) {
   const withDate = exams.filter(e => e.date)
@@ -48,7 +48,7 @@ function urgencyPill(days) {
 }
 
 export default function ExamsView({ settings }) {
-  const isMobile = useIsMobile()
+  const isMobile = false
   const subjects = activeSubjects(settings)
   const firstSubjectName = subjects[0]?.name || ''
   // Telemóvel: tocar num tópico seleciona-o; tocar num dia agenda-o (o arrastar não funciona em touch)
