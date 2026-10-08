@@ -499,7 +499,7 @@ export default function DailyView() {
       const isToday = date.toDateString() === today.toDateString();
       const pct = getCompletionPct(date);
       const hasExtras = hasPendingExtrasForDate(date);
-      return isToday || pct < 100 || hasExtras;
+      const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]"); const doneMap = loadDone(date); const hasPendingExtra = extraTasks.some(t => !doneMap[t.id]); const isThisWeek = date >= new Date(Date.now() - 7*24*60*60*1000) && date <= new Date(Date.now() + 7*24*60*60*1000); return isToday || pct < 100 || (isThisWeek && hasPendingExtra);
     });;
 
   const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
