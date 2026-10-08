@@ -11,8 +11,7 @@ function createWindow() {
     }
   });
 
-  // Rota absoluta padrao e robusta para apps empacotadas no Mac
-  win.loadFile(path.join(__dirname, "dist/index.html"));
+  win.loadFile(path.join(__dirname, "../dist/index.html"));
 }
 
 app.whenReady().then(() => {

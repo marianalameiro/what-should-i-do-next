@@ -504,13 +504,11 @@ export default function DailyView() {
     .filter(date => {
       const isToday = date.toDateString() === today.toDateString();
       
-      // Contagem real de tarefas de disciplinas agendadas para esta data
       const schedule = getTasksForDay(date.getDay());
       const scheduledIds = schedule.flatMap(g => g.tasks.map(t => t.id));
       const doneMap = loadDone(date);
       const hasPendingScheduled = scheduledIds.some(id => !doneMap[id]);
       
-      // Contagem real de tarefas extras/diárias pendentes para esta data
       const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]");
       const dateStr = date.toDateString();
       const hasPendingExtra = extraTasks.some(t => {
@@ -519,7 +517,10 @@ export default function DailyView() {
       });
       
       return isToday || hasPendingScheduled || hasPendingExtra;
-    });;
+    });
+      
+      return isToday || hasPendingScheduled || hasPendingExtra;
+    });
       
       return isToday || hasPendingScheduled || hasPendingExtra;
     });;
