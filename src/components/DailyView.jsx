@@ -400,7 +400,10 @@ export default function DailyView() {
   }
 
   const setEnergy = (periodKey, energyId) => {
-    setEnergyLevels(prev => ({ ...prev, [periodKey]: energyId }))
+    setEnergyLevels(prev => {
+      if (prev[periodKey] === energyId) { const next = { ...prev }; delete next[periodKey]; return next }
+      return { ...prev, [periodKey]: energyId }
+    })
   }
 
   const getQuadrant = (taskId, taskLabel) => matrixOverrides[taskId] || autoClassify(taskId, taskLabel)
@@ -503,7 +506,6 @@ export default function DailyView() {
     .map(dow => getDateForDow(dow, todayMonday))
     .filter(date => {
       const isToday = date.toDateString() === today.toDateString();
-      
       const schedule = getTasksForDay(date.getDay());
       const scheduledIds = schedule.flatMap(g => g.tasks.map(t => t.id));
       const doneMap = loadDone(date);
@@ -518,12 +520,6 @@ export default function DailyView() {
       
       return isToday || hasPendingScheduled || hasPendingExtra;
     });
-      
-      return isToday || hasPendingScheduled || hasPendingExtra;
-    });
-      
-      return isToday || hasPendingScheduled || hasPendingExtra;
-    });;
 
   const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
 
