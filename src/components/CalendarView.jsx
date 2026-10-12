@@ -101,7 +101,7 @@ function getDaysInMonth(year, month) {
 }
 
 function getFirstDayOfMonth(year, month) {
-  return new Date(year, month, 1).getDay()
+  return (new Date(year, month, 1).getDay() + 6) % 7
 }
 
 export function CalendarView() {
@@ -226,7 +226,7 @@ export function CalendarView() {
     return (
       <div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1, marginBottom: 2 }}>
-          {DAY_NAMES.map(d => (
+          {['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(d => (
             <div key={d} style={{ textAlign: 'center', fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-400)', padding: '6px 0', letterSpacing: 0.5 }}>{d}</div>
           ))}
         </div>
