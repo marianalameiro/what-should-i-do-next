@@ -503,23 +503,7 @@ export default function DailyView() {
 
   const incompletePast = getIncompletePastDays(todayMonday);
   const thisWeekTabs = WEEK_DAYS
-    .map(dow => getDateForDow(dow, todayMonday))
-    .filter(date => {
-      const isToday = date.toDateString() === today.toDateString();
-      const schedule = getTasksForDay(date.getDay());
-      const scheduledIds = schedule.flatMap(g => g.tasks.map(t => t.id));
-      const doneMap = loadDone(date);
-      const hasPendingScheduled = scheduledIds.some(id => !doneMap[id]);
-      
-      const extraTasks = JSON.parse(localStorage.getItem("extra-tasks") || "[]");
-      const dateStr = date.toDateString();
-      const hasPendingExtra = extraTasks.some(t => {
-        const isCurrentDayTask = t.date === dateStr || new Date(t.date).toDateString() === dateStr || t.recurring === "daily" || t.isDaily;
-        return isCurrentDayTask && !doneMap[t.id];
-      });
-      
-      return isToday || hasPendingScheduled || hasPendingExtra;
-    });
+    .map(dow => getDateForDow(dow, todayMonday));
 
   const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
 
