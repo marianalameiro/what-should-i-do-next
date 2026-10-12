@@ -261,7 +261,7 @@ function autoScheduleDay(dateStr, settings, household, dailyTargets={}) {
     return isExtraVisibleOnDate(t, dateStr)
   }).forEach(t=>{
     const q=matOvr[t.id]||autoClassify(t.id,t.label)
-    const qe=q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪'
+    const qe=t.emoji||(q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪')
     byQ[q].push({label:t.label,emoji:qe,color:'#71717a',bg:'#fafafa',border:'#d4d4d8',type:'manual',duration:estimateDuration(t.label,q)})
   })
   // Milestones de projetos com prazo próximo (7 dias)
@@ -388,7 +388,7 @@ async function aiSchedule(dateStr, settings, household, apiKey) {
     return isExtraVisibleOnDate(t, dateStr)
   }).forEach(t=>{
     const q=matOvr[t.id]||autoClassify(t.id,t.label)
-    tasks.push({id:t.id,label:t.label,quadrant:q,subject:'',emoji:q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪',color:'#71717a',bg:'#fafafa',border:'#d4d4d8'})
+    tasks.push({id:t.id,label:t.label,quadrant:q,subject:'',emoji:t.emoji||(q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪'),color:'#71717a',bg:'#fafafa',border:'#d4d4d8'})
   })
   const houseDue=household.filter(h=>{
     if(h.preferredDay!==undefined&&h.preferredDay!==dow)return false
@@ -904,7 +904,7 @@ export default function SchedulePage({ settings, setSettings, onNavigate, onStar
       return isExtraVisibleOnDate(t, dateStr)
     }).forEach(t=>{
       const q=matOvr[t.id]||autoClassify(t.id,t.label)
-      tasks.push({id:t.id,label:t.label,quadrant:q,emoji:q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪',color:'#71717a',bg:'#fafafa',border:'#d4d4d8',type:'manual',isExtra:true,duration:estimateDuration(t.label,q)})
+      tasks.push({id:t.id,label:t.label,quadrant:q,emoji:t.emoji||(q==='Q1'?'🔴':q==='Q2'?'🟡':q==='Q3'?'🟠':'⚪'),color:'#71717a',bg:'#fafafa',border:'#d4d4d8',type:'manual',isExtra:true,duration:estimateDuration(t.label,q)})
     })
     return tasks.sort((a,b)=>a.quadrant.localeCompare(b.quadrant))
   },[dow,settings,blocks,dateStr])
