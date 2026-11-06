@@ -536,7 +536,7 @@ export default function DailyView() {
           )}
           {task.isExtra ? (
             <button
-              onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
+              onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: q.text, opacity: 0.4, padding: '0 2px', display: 'flex', alignItems: 'center' }}
             >
               <X size={11} />
@@ -824,7 +824,7 @@ export default function DailyView() {
                       <div className="task-actions">
                         <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1 }}>↪</button>
-                        <button onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
+                        <button onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 2px', display: 'flex', alignItems: 'center' }}>
                           <X size={12} />
                         </button>
@@ -876,7 +876,7 @@ export default function DailyView() {
                 {task.recurrence && <span style={{ fontSize: 'var(--t-caption)', opacity: 0.45, flexShrink: 0 }}>{task.recurrence === 'daily' ? '🔁' : '📅'}</span>}
                 <button onClick={e => { e.stopPropagation(); snoozeTask(task) }} title="Adiar para amanhã"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 3px', fontSize: 'var(--t-body)', lineHeight: 1, flexShrink: 0 }}>↪</button>
-                <button onClick={e => { e.stopPropagation(); task.recurrence ? check(task.id) : removeExtra(task.id) }}
+                <button onClick={e => { e.stopPropagation(); removeExtra(task.id) }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', padding: '0 2px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                   <X size={12} />
                 </button>
