@@ -124,7 +124,8 @@ function dayHasPending(date) {
   const dow = date.getDay()
   const done = loadDone(date)
   const fixed = getTasksForDay(dow).flatMap(g => g.tasks.map(t => t.id))
-  if (fixed.some(id => !done[id])) return true
+  const hidden = (() => { try { return JSON.parse(localStorage.getItem(`hidden-tasks-${dateStr}`)) || [] } catch { return [] } })()
+  if (fixed.some(id => !done[id] && !hidden.includes(id))) return true
   return loadExtra().some(t => {
     if (done[t.id]) return false
     const created = extraCreatedDay(t)
@@ -435,8 +436,17 @@ export default function DailyView() {
 
   const getQuadrant = (taskId, taskLabel) => matrixOverrides[taskId] || autoClassify(taskId, taskLabel)
 
+  const [hiddenIds, setHiddenIds] = useState(() => { try { return JSON.parse(localStorage.getItem(`hidden-tasks-${dateStr}`)) || [] } catch { return [] } })
+  useEffect(() => { try { setHiddenIds(JSON.parse(localStorage.getItem(`hidden-tasks-${dateStr}`)) || []) } catch { setHiddenIds([]) } }, [dateStr])
+  const saveHidden = (list) => { setHiddenIds(list); localStorage.setItem(`hidden-tasks-${dateStr}`, JSON.stringify(list)) }
+  // Tarefas do horário fixo: o X esconde-as só neste dia (e tira-as do contador)
+  const hideScheduled = (task) => {
+    const prev = hiddenIds
+    saveHidden([...prev.filter(id => id !== task.id), task.id])
+    toast({ message: 'Tarefa eliminada', onUndo: () => saveHidden(prev) })
+  }
   const allScheduledTasks = schedule.flatMap(g =>
-    g.tasks.map(t => ({ ...t, subjectKey: g.subjectKey, isExtra: false }))
+    g.tasks.filter(t => !hiddenIds.includes(t.id)).map(t => ({ ...t, subjectKey: g.subjectKey, isExtra: false }))
   )
   // Infer creation date from ID timestamp for old tasks that predate the createdDate field
   const inferCreatedDate = (t) => {
@@ -570,7 +580,7 @@ export default function DailyView() {
             </button>
           ) : (
             <button
-              onClick={e => { e.stopPropagation(); check(task.id) }}
+              onClick={e => { e.stopPropagation(); hideScheduled(task) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: q.text, opacity: 0.4, padding: '0 2px', display: 'flex', alignItems: 'center' }}
             >
               <X size={11} />
@@ -806,7 +816,7 @@ export default function DailyView() {
             subjectLinkedExtras.filter(t => !done[t.id] && !scheduledKeys.has(t.subjectKey)).map(t => t.subjectKey)
           )]
           const allGroups = [
-            ...schedule.map(g => ({ subjectKey: g.subjectKey, tasks: g.tasks, isScheduled: true })),
+            ...schedule.map(g => ({ subjectKey: g.subjectKey, tasks: g.tasks.filter(t => !hiddenIds.includes(t.id)), isScheduled: true })),
             ...orphanKeys.map(key => ({ subjectKey: key, tasks: [], isScheduled: false })),
           ]
           return allGroups.map(({ subjectKey, tasks, isScheduled }) => {
@@ -837,7 +847,7 @@ export default function DailyView() {
                           title="Adiar para amanhã"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 4px', fontSize: 'var(--t-body)', lineHeight: 1 }}
                         >↪</button>
-                        <button onClick={e => { e.stopPropagation(); check(task.id) }}
+                        <button onClick={e => { e.stopPropagation(); hideScheduled(task) }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '0 2px', display: 'flex', alignItems: 'center' }}>
                           <X size={12} />
                         </button>
