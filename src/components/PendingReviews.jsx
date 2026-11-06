@@ -18,7 +18,7 @@ export default function PendingReviews({ subjects }) {
   const [, bump] = useState(0)
   const [showAll, setShowAll] = useState(false)
 
-  const open = new Map((subjects || loadSubjects()).filter(s => !s.closed).map(s => [s.key, s]))
+  const open = new Map((subjects || loadSubjects()).filter(s => !s.closed).flatMap(s => [[s.key, s], [s.name, s], [s.label, s]]))
   const items = dueReviews().filter(r => open.has(r.subjectKey))
   if (items.length === 0) return null
 
