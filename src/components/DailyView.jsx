@@ -109,6 +109,32 @@ function getIncompletePastDays(todayMonday) {
   return result
 }
 
+// Um dia só aparece na faixa se tiver tarefas (horário fixo, extras, diárias ou semanais).
+function extraCreatedDay(t) {
+  try {
+    if (t.createdDate) { const d = new Date(t.createdDate); d.setHours(0, 0, 0, 0); return isNaN(d) ? null : d }
+    const ts = parseInt(String(t.id).replace('extra-', ''), 10)
+    if (!isNaN(ts) && ts > 1e12) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d }
+  } catch {}
+  return null
+}
+
+function dayHasPending(date) {
+  const dateStr = date.toDateString()
+  const dow = date.getDay()
+  const done = loadDone(date)
+  const fixed = getTasksForDay(dow).flatMap(g => g.tasks.map(t => t.id))
+  if (fixed.some(id => !done[id])) return true
+  return loadExtra().some(t => {
+    if (done[t.id]) return false
+    const created = extraCreatedDay(t)
+    if (t.recurrence === 'daily') return !created || date >= created
+    if (t.recurrence === 'weekly') return t.createdDow === dow && (!created || date >= created)
+    if (t.date && new Date(t.date).toDateString() === dateStr) return true
+    return !!created && created.toDateString() === dateStr
+  })
+}
+
 export default function DailyView() {
   const SUBJECTS = getSubjectsMap()
   const today = new Date()
@@ -605,7 +631,7 @@ export default function DailyView() {
       ))}
       {/* Day tabs */}
       <div className="day-tabs">
-        {allTabs.map(date => {
+        {allTabs.filter(d => d.toDateString() === today.toDateString() || d.toDateString() === selectedDate.toDateString() || dayHasPending(d)).map(date => {
           const dow             = date.getDay()
           const isT             = date.toDateString() === today.toDateString()
           const tabPct          = getCompletionPct(date)
