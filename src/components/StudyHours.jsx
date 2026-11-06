@@ -1,3 +1,4 @@
+import { scheduleReviews } from '../lib/reviews'
 import { useState, useEffect } from 'react'
 import { Plus, TrendingUp, TrendingDown, Minus, Clock, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
 import { PomodoroTimer } from './PomodoroTimer'
@@ -409,6 +410,7 @@ export default function StudyHours({ settings }) {
                         raw[postSession.subjectKey] = subs.map(t => t.id === topic.id ? { ...t, confidence: next } : t)
                         localStorage.setItem('topics', JSON.stringify(raw))
                         setPostSession(ps => ({ ...ps, topics: ps.topics.map(t => t.id === topic.id ? { ...t, confidence: next } : t) }))
+                        scheduleReviews(postSession.subjectKey, topic)
                       } catch {}
                     }}
                     style={{

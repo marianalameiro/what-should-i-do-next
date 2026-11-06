@@ -1,3 +1,4 @@
+import { scheduleReviews } from '../lib/reviews'
 import { useState, useEffect, useRef } from 'react'
 import { Play, Pause, RotateCcw, Timer } from 'lucide-react'
 import { CONFIDENCE } from '../constants'
@@ -474,9 +475,10 @@ export function PomodoroTimer({ subjects: propSubjects }) {
                             const next = ids[Math.min(idx + 1, ids.length - 1)]
                             try {
                               const raw = JSON.parse(localStorage.getItem('topics') || '{}')
-                              const subs = raw[subject] || []
+                              const subs = raw[topicKey] || []
                               raw[topicKey] = subs.map(t => t.id === topic.id ? { ...t, confidence: next } : t)
                               localStorage.setItem('topics', JSON.stringify(raw))
+                              scheduleReviews(subject, topic)
                             } catch {}
                           }}
                           style={{

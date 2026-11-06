@@ -11,7 +11,7 @@ import { logger } from './logger'
 const TABLE = 'app_data'
 
 const STATIC_KEYS = [
-  'user-settings', 'study-sessions', 'exams', 'topics', 'exam-schedule', 'extra-tasks',
+  'user-settings', 'study-sessions', 'exams', 'topics', 'exam-schedule', 'extra-tasks', 'topic-reviews',
   'diary-entries', 'weekly-reviews', 'projects-v2', 'household-tasks', 'subject-targets',
   'weekly-targets', 'eisenhower-overrides', 'energy-levels', 'show-matrix',
   'calendar-events', 'gcal-events', 'quick-links', 'schedule-blocks', 'daily-study-targets',

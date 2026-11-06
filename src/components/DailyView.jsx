@@ -1,3 +1,4 @@
+import PendingReviews from './PendingReviews'
 import { useState, useEffect, useRef } from 'react'
 import { getTasksForDay, getSubjectsMap } from '../data/schedule'
 import { Check, Plus, X, Settings2 } from 'lucide-react'
@@ -661,6 +662,8 @@ export default function DailyView() {
           </button>
         )}
       </div>
+
+      {isToday && <PendingReviews />}
 
       {/* Progress — hairline sutil */}
       {allCount > 0 && (
