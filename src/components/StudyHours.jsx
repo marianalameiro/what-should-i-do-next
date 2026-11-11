@@ -401,15 +401,9 @@ export default function StudyHours({ settings }) {
                 return (
                   <button key={topic.id}
                     onClick={() => {
-                      const ids = ['unknown', 'little', 'good', 'great']
-                      const idx = ids.indexOf(topic.confidence)
-                      const next = ids[Math.min(idx + 1, ids.length - 1)]
+                      if (topic.covered) return
                       try {
-                        const raw = JSON.parse(localStorage.getItem('topics') || '{}')
-                        const subs = raw[postSession.subjectKey] || []
-                        raw[postSession.subjectKey] = subs.map(t => t.id === topic.id ? { ...t, confidence: next } : t)
-                        localStorage.setItem('topics', JSON.stringify(raw))
-                        setPostSession(ps => ({ ...ps, topics: ps.topics.map(t => t.id === topic.id ? { ...t, confidence: next } : t) }))
+                        setPostSession(ps => ({ ...ps, topics: ps.topics.map(t => t.id === topic.id ? { ...t, covered: true } : t) }))
                         scheduleReviews(postSession.subjectKey, topic)
                       } catch {}
                     }}
@@ -421,13 +415,13 @@ export default function StudyHours({ settings }) {
                       transition: 'all 0.15s',
                     }}
                   >
-                    {topic.name}
+                    {topic.covered ? '✓ ' : ''}{topic.name}
                   </button>
                 )
               })}
             </div>
             <p style={{ fontSize: 'var(--t-caption)', color: '#16a34a', margin: 0, fontWeight: 500 }}>
-              Clica num tópico para aumentar a confiança · fica guardado em Exames
+              Clica num tópico para o assinalar como estudado e agendar as revisões · a confiança não muda
             </p>
           </div>
         </div>

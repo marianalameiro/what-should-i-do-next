@@ -462,23 +462,17 @@ export function PomodoroTimer({ subjects: propSubjects }) {
               return (
                 <div style={{ marginBottom: 14 }}>
                   <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 8, letterSpacing: 0.4 }}>
-                    O que cobriste? (clica para aumentar confiança)
+                    O que cobriste? (clica para assinalar e agendar revisões)
                   </p>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {sTopics.map(topic => {
                       const conf = CONFIDENCE.find(c => c.id === topic.confidence) || CONFIDENCE[0]
                       return (
                         <button key={topic.id}
-                          onClick={() => {
-                            const ids = ['unknown', 'little', 'good', 'great']
-                            const idx = ids.indexOf(topic.confidence)
-                            const next = ids[Math.min(idx + 1, ids.length - 1)]
+                          onClick={e => {
                             try {
-                              const raw = JSON.parse(localStorage.getItem('topics') || '{}')
-                              const subs = raw[topicKey] || []
-                              raw[topicKey] = subs.map(t => t.id === topic.id ? { ...t, confidence: next } : t)
-                              localStorage.setItem('topics', JSON.stringify(raw))
                               scheduleReviews(subject, topic)
+                              e.currentTarget.style.boxShadow = '0 0 0 2px #16a34a'
                             } catch {}
                           }}
                           style={{
