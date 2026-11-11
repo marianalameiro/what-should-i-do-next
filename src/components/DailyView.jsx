@@ -542,7 +542,13 @@ export default function DailyView() {
   const thisWeekTabs = WEEK_DAYS
     .map(dow => getDateForDow(dow, todayMonday));
 
-  const allTabs = [...thisWeekTabs].sort((a, b) => a - b);
+  const pastWeeksTabs = []
+  for (let w = 1; w <= 4; w++) {
+    const prevMonday = new Date(todayMonday)
+    prevMonday.setDate(todayMonday.getDate() - 7 * w)
+    WEEK_DAYS.forEach(dow => pastWeeksTabs.push(getDateForDow(dow, prevMonday)))
+  }
+  const allTabs = [...pastWeeksTabs.filter(d => dayHasPending(d)), ...thisWeekTabs].sort((a, b) => a - b);
 
   function renderTask(task, q, qKey) {
     const subject = task.subjectKey ? SUBJECTS[task.subjectKey] : null
