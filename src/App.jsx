@@ -1,3 +1,4 @@
+import TopicsCovered, { loadTopics } from './components/TopicsCovered'
 import MoodPicker from './components/MoodPicker'
 import { useState, useEffect, useRef, Component, lazy, Suspense } from "react"
 
@@ -98,7 +99,7 @@ function QuickLogModal({ onClose, settings }) {
       localStorage.setItem('study-sessions', JSON.stringify(sessions))
     } catch {}
     setSaved(true)
-    setTimeout(onClose, 900)
+    if (loadTopics(subject, subjects).length === 0) setTimeout(onClose, 900)
   }
 
   return (
@@ -108,7 +109,16 @@ function QuickLogModal({ onClose, settings }) {
           <p style={{ fontWeight: 800, fontSize: 'var(--t-body)', color: 'var(--gray-800)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><Timer size={15} strokeWidth={1.5} /> Registar sessão</p>
         </div>
         {saved ? (
-          <div style={{ padding: '28px 20px', textAlign: 'center', fontSize: '1.5rem' }}>✅</div>
+          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ textAlign: 'center', fontSize: '1.5rem' }}>✅</div>
+            {loadTopics(subject, subjects).length > 0 && (
+              <>
+                <p style={{ fontSize: 'var(--t-caption)', fontWeight: 700, color: 'var(--gray-500)', margin: 0 }}>O que cobriste? (assinala para agendar revisões)</p>
+                <TopicsCovered subjectKey={subject} subjects={subjects} />
+                <button onClick={onClose} style={{ padding: '10px', borderRadius: 'var(--r)', border: '1px solid var(--gray-200)', background: 'var(--white)', fontFamily: 'inherit', cursor: 'pointer', color: 'var(--gray-500)' }}>Fechar</button>
+              </>
+            )}
+          </div>
         ) : (
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

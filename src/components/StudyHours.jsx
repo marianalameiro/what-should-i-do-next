@@ -1,3 +1,4 @@
+import MoodPicker from './MoodPicker'
 import { scheduleReviews } from '../lib/reviews'
 import { useState, useEffect } from 'react'
 import { Plus, TrendingUp, TrendingDown, Minus, Clock, Star, SlidersHorizontal, ChevronDown, ChevronUp, Lightbulb } from 'lucide-react'
@@ -217,7 +218,7 @@ export default function StudyHours({ settings }) {
     hours: '',
     mins: '0',
     notes: '',
-    mood: '😊',
+    mood: '',
     date: TODAY.toISOString().split('T')[0],
   })
 
@@ -236,7 +237,7 @@ export default function StudyHours({ settings }) {
       subject: form.subject,
       hours: totalHours,
       notes: form.notes,
-      mood: form.mood,
+      ...(form.mood ? { mood: form.mood } : {}),
       date: new Date(form.date).toDateString(),
       startTime: null,
     }
@@ -245,7 +246,7 @@ export default function StudyHours({ settings }) {
     achsAfter.filter(a => !achsBefore.some(b => b.desc === a.desc))
       .forEach(ach => toast({ message: `${ach.icon} ${ach.desc}`, duration: 8000 }))
     setSessions(prev => [newSession, ...prev])
-    setForm(p => ({ ...p, hours: '', mins: '0', notes: '', mood: '😊' }))
+    setForm(p => ({ ...p, hours: '', mins: '0', notes: '', mood: '' }))
     setShowForm(false)
     try {
       const allTopics = JSON.parse(localStorage.getItem('topics') || '{}')
@@ -364,18 +365,7 @@ export default function StudyHours({ settings }) {
                 onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                 style={{ resize: 'vertical', lineHeight: 1.5 }} />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label className="form-label">Humor</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[{emoji:'😴',label:'Cansada'},{emoji:'😐',label:'Normal'},{emoji:'😊',label:'Bem'},{emoji:'🔥',label:'Flow'}].map(m => (
-                  <button key={m.emoji} type="button" onClick={() => setForm(p => ({ ...p, mood: m.emoji }))} title={m.label} style={{
-                    width: 36, height: 36, borderRadius: 'var(--r)', cursor: 'pointer', fontSize: '1.1rem',
-                    border: `2px solid ${form.mood === m.emoji ? 'var(--rose-300)' : 'var(--gray-200)'}`,
-                    background: form.mood === m.emoji ? 'var(--rose-50)' : 'var(--white)',
-                  }}>{m.emoji}</button>
-                ))}
-              </div>
-            </div>
+            <div style={{ marginBottom: 12 }}><MoodPicker value={form.mood} onChange={mood => setForm(p => ({ ...p, mood }))} /></div>
             <button className="btn btn-primary" onClick={addSession}>
               <Plus size={14} /> Guardar sessao
             </button>

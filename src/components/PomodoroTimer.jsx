@@ -1,3 +1,4 @@
+import MoodPicker from './MoodPicker'
 import { scheduleReviews } from '../lib/reviews'
 import { useState, useEffect, useRef } from 'react'
 import { Play, Pause, RotateCcw, Timer } from 'lucide-react'
@@ -102,6 +103,8 @@ export function PomodoroTimer({ subjects: propSubjects }) {
   const [showNotes, setShowNotes]     = useState(false)
   const [pendingMinutes, setPendingMinutes] = useState(0)
   const [noteText, setNoteText]       = useState('')
+  const [sessionMood, setSessionMood] = useState('')
+  useEffect(() => { if (!showNotes) setSessionMood('') }, [showNotes])
   const didMount        = useRef(false)
   const intervalRef     = useRef(null)
   // Wall-clock based timing — source of truth to avoid setInterval drift
@@ -225,6 +228,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
       date: new Date().toDateString(),
       startTime: Date.now() - totalMinutes * 60 * 1000,
       projectId: null,
+      ...(sessionMood ? { mood: sessionMood } : {}),
     }
     saveSessions([newSession, ...sessions])
     setCompleted(prev => prev + 1)
@@ -257,14 +261,14 @@ export function PomodoroTimer({ subjects: propSubjects }) {
     if (isStopwatch) {
       // Stopwatch: save now (no auto-save happened)
       saveSession(pendingMinutes, noteText)
-    } else if (noteText.trim()) {
+    } else if (noteText.trim() || sessionMood) {
       // Countdown: just update notes on the auto-saved session
       const sessions = loadSessions()
       const updated = sessions.map((s, i) => i === 0 && s._pomodoroAutoSaved
-        ? { ...s, notes: noteText.trim(), _pomodoroAutoSaved: undefined }
+        ? { ...s, notes: noteText.trim() || s.notes, ...(sessionMood ? { mood: sessionMood } : {}), _pomodoroAutoSaved: undefined }
         : s)
       saveSessions(updated)
-      setLog(prev => prev.map((l, i) => i === 0 ? { ...l, notes: noteText.trim() } : l))
+      setLog(prev => prev.map((l, i) => i === 0 ? { ...l, notes: noteText.trim() || l.notes } : l))
     }
     setElapsed(0)
     setNoteText('')
@@ -512,6 +516,7 @@ export function PomodoroTimer({ subjects: propSubjects }) {
             onBlur={e => e.target.style.borderColor = 'var(--gray-200)'}
             onKeyDown={e => e.key === 'Enter' && e.metaKey && confirmSave()}
           />
+          <div style={{ marginBottom: 12 }}><MoodPicker value={sessionMood} onChange={setSessionMood} /></div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={confirmSave} style={{ background: '#8b5cf6' }}>
               {isStopwatch ? 'Guardar sessão' : 'Adicionar notas'}
