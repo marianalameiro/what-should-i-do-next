@@ -1,3 +1,4 @@
+import MoodPicker from './components/MoodPicker'
 import { useState, useEffect, useRef, Component, lazy, Suspense } from "react"
 
 class ErrorBoundary extends Component {
@@ -84,6 +85,7 @@ function QuickLogModal({ onClose, settings }) {
   const [mins, setMins]       = useState('0')
   const [notes, setNotes]     = useState('')
   const [saved, setSaved]     = useState(false)
+  const [mood, setMood]   = useState('')
 
   const save = () => {
     const h = parseFloat(hours) || 0
@@ -92,7 +94,7 @@ function QuickLogModal({ onClose, settings }) {
     if (total <= 0 || !subject) return
     try {
       const sessions = readLSArray('study-sessions')
-      sessions.unshift({ id: Date.now(), subject, hours: total, notes, mood: '😊', date: new Date().toDateString(), startTime: null })
+      sessions.unshift({ id: Date.now(), subject, hours: total, notes, ...(mood ? { mood } : {}), date: new Date().toDateString(), startTime: null })
       localStorage.setItem('study-sessions', JSON.stringify(sessions))
     } catch {}
     setSaved(true)
@@ -132,6 +134,7 @@ function QuickLogModal({ onClose, settings }) {
             </div>
             <input type="text" placeholder="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()}
               style={{ fontFamily: 'inherit', fontSize: 'var(--t-body)', border: '1.5px solid var(--gray-200)', borderRadius: 'var(--r)', padding: '8px 10px', outline: 'none', background: 'var(--white)' }} />
+            <MoodPicker value={mood} onChange={setMood} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={save} disabled={!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)} style={{ flex: 1, padding: '10px', borderRadius: 'var(--r)', border: 'none', background: 'var(--rose-400)', color: '#fff', fontFamily: 'inherit', fontWeight: 700, fontSize: 'var(--t-body)', cursor: 'pointer', opacity: (!subject || (!(parseFloat(hours) > 0) && parseInt(mins) === 0)) ? 0.5 : 1 }}>
                 Guardar

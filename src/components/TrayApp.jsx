@@ -39,6 +39,7 @@ export default function TrayApp() {
   const [showLog, setShowLog]       = useState(false)
   const [logHours, setLogHours]     = useState('1')
   const [logDone, setLogDone]       = useState(false)
+  const [logMood, setLogMood]     = useState('')
 
   const subjects = settings?.subjects || []
 
@@ -77,11 +78,11 @@ export default function TrayApp() {
     if (!h || h <= 0 || !selSubject) return
     try {
       const sessions = JSON.parse(localStorage.getItem('study-sessions') || '[]')
-      sessions.push({ id: Date.now(), subject: selSubject, hours: h, date: new Date().toDateString(), notes: '', mood: '😊', startTime: Date.now() - h * 3600000 })
+      sessions.push({ id: Date.now(), subject: selSubject, hours: h, date: new Date().toDateString(), notes: '', ...(logMood ? { mood: logMood } : {}), startTime: Date.now() - h * 3600000 })
       localStorage.setItem('study-sessions', JSON.stringify(sessions))
     } catch {}
     setLogDone(true)
-    setLogHours('1')
+    setLogHours('1'); setLogMood('')
     setShowLog(false)
     setTimeout(() => setLogDone(false), 3000)
   }
@@ -285,7 +286,14 @@ export default function TrayApp() {
         {logDone ? (
           <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#16a34a', padding: '5px 0' }}>✓ Sessão registada!</div>
         ) : showLog ? (
-          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+              {['😴', '😐', '😊', '🔥'].map(m => (
+                <button key={m} type="button" onClick={() => setLogMood(logMood === m ? '' : m)}
+                  style={{ width: 28, height: 28, borderRadius: 8, cursor: 'pointer', fontSize: 14, border: '1.5px solid ' + (logMood === m ? '#f9a8d4' : '#e5e7eb'), background: logMood === m ? '#fdf2f8' : '#fff' }}>{m}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
             <input
               type="number" min={0.25} max={12} step={0.25}
               value={logHours} onChange={e => setLogHours(e.target.value)}
@@ -297,6 +305,7 @@ export default function TrayApp() {
             <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>h</span>
             <button onClick={logSession} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontFamily: 'inherit', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>✓</button>
             <button onClick={() => setShowLog(false)} style={{ padding: '6px 8px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', color: '#9ca3af', fontFamily: 'inherit', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>✕</button>
+          </div>
           </div>
         ) : (
           <button onClick={() => setShowLog(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.06em', padding: '2px 0', textAlign: 'center' }}>
