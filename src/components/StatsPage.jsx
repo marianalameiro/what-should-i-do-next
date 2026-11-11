@@ -19,6 +19,9 @@ export default function StatsPage({ settings, onOpenCadeira }) {
   const [showAch, setShowAch] = useState(false)
   const subjects = (settings?.subjects || []).filter(s => !s.closed)
   const [sessions] = useState(loadSessions)
+  // Humor: só conta sessões das cadeiras ativas (não fechadas)
+  const activeKeys = new Set(subjects.map(x => x.key))
+  const activeSessions = sessions.filter(x => activeKeys.has(x.subject))
 
   // ── Weekly bar chart data ──────────────────────────────────────────────
   const weeklyData = useMemo(() => {
@@ -152,7 +155,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
     }
 
     // Mood vs hours
-    const moodSessions = sessions.filter(s => s.mood)
+    const moodSessions = activeSessions.filter(s => s.mood)
     if (moodSessions.length >= 5) {
       const mH = {}, mC = {}
       moodSessions.forEach(s => { mH[s.mood] = (mH[s.mood]||0) + s.hours; mC[s.mood] = (mC[s.mood]||0) + 1 })
@@ -583,22 +586,27 @@ export default function StatsPage({ settings, onOpenCadeira }) {
 
       {/* Mood breakdown + correlation */}
       {(() => {
-        const MOOD_LABELS = { '😴': 'Cansada', '😐': 'Normal', '😊': 'Bem', '🔥': 'Flow' }
-        const MOOD_COLORS = { '😴': '#94a3b8', '😐': '#f59e0b', '😊': '#34d399', '🔥': '#f97316' }
-        const moodSessions = sessions.filter(s => s.mood)
-        if (moodSessions.length === 0) return null
+        const MOOD_LABELS = { '😴': 'Cansada', '😐': 'Normal', '😊': 'Bem', '🔥': 'Flow', '': 'Sem humor' }
+        const MOOD_COLORS = { '😴': '#94a3b8', '😐': '#f59e0b', '😊': '#34d399', '🔥': '#f97316', '': '#cbd5e1' }
+        const moodSessions = activeSessions.filter(s => s.mood)
+        const noMoodSessions = activeSessions.filter(s => !s.mood)
+        if (activeSessions.length === 0) return null
         const counts = {}, hours = {}
         moodSessions.forEach(s => {
           counts[s.mood] = (counts[s.mood] || 0) + 1
           hours[s.mood] = (hours[s.mood] || 0) + (s.hours || 0)
         })
-        const total = moodSessions.length
+        const total = activeSessions.length
+        if (noMoodSessions.length > 0) {
+          counts[''] = noMoodSessions.length
+          hours[''] = noMoodSessions.reduce((a, x) => a + (x.hours || 0), 0)
+        }
         const avgHours = Object.fromEntries(Object.keys(counts).map(m => [m, hours[m] / counts[m]]))
         const maxAvg = Math.max(...Object.values(avgHours), 0.1)
         return (
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="card-header">
-              <span className="card-title">Humor nas sessões</span>
+              <span className="card-title">Humor nas sessões (cadeiras ativas)</span>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button onClick={() => setMoodView('dist')} className={moodView === 'dist' ? 'btn btn-primary' : 'btn btn-secondary'} style={{ fontSize: 'var(--t-caption)', padding: '4px 10px' }}>Frequência</button>
                 <button onClick={() => setMoodView('corr')} className={moodView === 'corr' ? 'btn btn-primary' : 'btn btn-secondary'} style={{ fontSize: 'var(--t-caption)', padding: '4px 10px' }}>Média de horas</button>
@@ -611,7 +619,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
                   const pct = Math.round(count / total * 100)
                   return (
                     <div key={emoji} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                      <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji}</span>
+                      <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji || '—'}</span>
                       <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)', width: 70 }}>{label}</span>
                       <div className="progress-wrap" style={{ flex: 1, height: 8 }}>
                         <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: MOOD_COLORS[emoji] || 'var(--rose-300)' }} />
@@ -627,7 +635,7 @@ export default function StatsPage({ settings, onOpenCadeira }) {
                     const pct = avg / maxAvg * 100
                     return (
                       <div key={emoji} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                        <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji}</span>
+                        <span style={{ fontSize: '1.2rem', width: 28 }}>{emoji || '—'}</span>
                         <span style={{ fontSize: 'var(--t-body)', fontWeight: 600, color: 'var(--gray-700)', width: 70 }}>{label}</span>
                         <div className="progress-wrap" style={{ flex: 1, height: 8 }}>
                           <div className="progress-fill" style={{ width: `${pct}%`, height: '100%', background: MOOD_COLORS[emoji] || 'var(--rose-300)', opacity: avg === 0 ? 0.2 : 1 }} />
