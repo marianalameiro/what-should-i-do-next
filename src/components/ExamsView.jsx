@@ -1,3 +1,4 @@
+import ExamTopicsPlan from './ExamTopicsPlan'
 import { useState, useEffect } from "react"
 import { Plus, X, ChevronDown, ChevronUp, Trash2, GripVertical, Pencil } from "lucide-react"
 import { CalendarEmoji } from './CalendarEmoji'
@@ -392,6 +393,8 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
           </button>
         </div>
       </div>
+
+      <ExamTopicsPlan />
 
       {/* ── Add form ── */}
       {showForm && (

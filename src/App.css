@@ -388,3 +388,13 @@ body {
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 }
+/* Título com marcador */
+.page-header h1 {
+  display: inline-block;
+  padding: 0 6px;
+  margin-left: -6px;
+  background-image: linear-gradient(transparent 58%, color-mix(in srgb, var(--accent-300) 45%, transparent) 58%, color-mix(in srgb, var(--accent-300) 45%, transparent) 90%, transparent 90%);
+}
+[data-theme="dark"] .page-header h1 {
+  background-image: linear-gradient(transparent 58%, color-mix(in srgb, var(--accent-400) 35%, transparent) 58%, color-mix(in srgb, var(--accent-400) 35%, transparent) 90%, transparent 90%);
+}
