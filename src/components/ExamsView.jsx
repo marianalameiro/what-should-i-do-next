@@ -1,4 +1,3 @@
-import { WeeklyQuizStats } from './QuizViews'
 import QuizImport from './QuizImport'
 import ExamTopicsPlan from './ExamTopicsPlan'
 import { useState, useEffect } from "react"
@@ -397,7 +396,6 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
       </div>
 
       <ExamTopicsPlan />
-      <WeeklyQuizStats />
       <QuizImport />
 
       {/* ── Add form ── */}

@@ -1,3 +1,4 @@
+import { WeeklyQuizStats } from './QuizViews'
 import { useState, useMemo } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { getMondayOfWeek } from '../utils/dates'
@@ -479,6 +480,8 @@ export default function StatsPage({ settings, onOpenCadeira }) {
       )}
 
       {/* Weekly chart */}
+      <WeeklyQuizStats />
+
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <span className="card-title">Horas por semana</span>
