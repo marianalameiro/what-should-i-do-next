@@ -1,3 +1,4 @@
+import { personalEnergy } from '../lib/bestHours'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Zap, Plus, X, Check, Settings2, Pencil, Trash2 } from 'lucide-react'
 import { syncAllCalendars } from '../utils/gcalSync'
@@ -211,6 +212,8 @@ function getEnergyAtMinute(m, dateStr) {
   // map DailyView energy ids to scheduler energy levels
   const map = { high:'high', medium:'medium', low:'low', exhausted:'very_low' }
   if (stored && map[stored]) return map[stored]
+  const mine = personalEnergy(m)
+  if (mine) return mine
   // fallback: time-of-day heuristic
   if (m < 13*60) return 'high'
   if (m < 17*60) return 'medium'

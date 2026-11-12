@@ -1,3 +1,4 @@
+import BestHours from './BestHours'
 import { WeeklyQuizStats } from './QuizViews'
 import { useState, useMemo } from 'react'
 import { ChevronDown } from 'lucide-react'
@@ -660,6 +661,8 @@ export default function StatsPage({ settings, onOpenCadeira }) {
       })()}
 
       {/* Day of week breakdown */}
+      <BestHours />
+
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <span className="card-title">Horas por dia da semana</span>
