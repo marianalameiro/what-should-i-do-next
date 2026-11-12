@@ -1,3 +1,5 @@
+import { WeeklyQuizStats } from './QuizViews'
+import QuizImport from './QuizImport'
 import ExamTopicsPlan from './ExamTopicsPlan'
 import { useState, useEffect } from "react"
 import { Plus, X, ChevronDown, ChevronUp, Trash2, GripVertical, Pencil } from "lucide-react"
@@ -395,6 +397,8 @@ Usa APENAS datas entre ${todayISO} e ${examDateISO || "o futuro próximo"}. Os n
       </div>
 
       <ExamTopicsPlan />
+      <WeeklyQuizStats />
+      <QuizImport />
 
       {/* ── Add form ── */}
       {showForm && (

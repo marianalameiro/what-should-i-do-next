@@ -1,3 +1,4 @@
+import { ErrorNotebook } from './QuizViews'
 import { useState } from 'react'
 import { ArrowLeft, Clock, Target, Trophy, ChevronDown, ChevronUp, NotebookPen, BookOpen, ArchiveX, ArchiveRestore } from 'lucide-react'
 import { getMondayOfWeek } from '../utils/dates'
@@ -217,6 +218,8 @@ export default function CadeiraPage({ subjectKey, settings, setSettings, onBack,
           )
         })()}
       </div>
+
+      <ErrorNotebook subjectKey={subjectKey} />
 
       {/* ── Exams ── */}
       {subjectExams.length > 0 && (

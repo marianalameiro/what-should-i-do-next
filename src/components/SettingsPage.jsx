@@ -173,7 +173,7 @@ export default function SettingsPage({ settings, setSettings }) {
       'study-sessions', 'exams', 'projects-v2', 'diary-entries',
       'weekly-reviews', 'subject-targets', 'user-settings',
       'calendar-events', 'extra-tasks', 'eisenhower-overrides',
-      'energy-levels', 'gcal-config', 'gcal-events', 'groq-key', 'topics', 'topic-reviews',
+      'energy-levels', 'gcal-config', 'gcal-events', 'groq-key', 'topics', 'topic-reviews','quiz-log', 'error-notebook',
     ]
     const data = {}
     staticKeys.forEach(k => {
@@ -206,7 +206,7 @@ export default function SettingsPage({ settings, setSettings }) {
           throw new Error('Estrutura inválida: o ficheiro deve ser um objeto JSON')
 
         // Schema validation for known array/object keys
-        const ARRAY_KEYS = ['study-sessions','exams','extra-tasks','diary-entries','weekly-reviews','projects-v2','calendar-events','gcal-events','quick-links','topic-reviews']
+        const ARRAY_KEYS = ['study-sessions','exams','extra-tasks','diary-entries','weekly-reviews','projects-v2','calendar-events','gcal-events','quick-links','topic-reviews','quiz-log', 'error-notebook']
         const OBJECT_KEYS = ['subject-targets','eisenhower-overrides','energy-levels','topics','user-settings']
         const errors = []
         ARRAY_KEYS.forEach(k => { if (data[k] !== undefined && !Array.isArray(data[k])) errors.push(`"${k}" deve ser uma lista`) })
@@ -227,7 +227,7 @@ export default function SettingsPage({ settings, setSettings }) {
           'diary-entries','weekly-reviews','projects-v2','household-tasks',
           'subject-targets','eisenhower-overrides','energy-levels','show-matrix',
           'groq-key','user-settings','calendar-events','gcal-events',
-          'quick-links','schedule-blocks','daily-study-targets','topic-reviews',
+          'quick-links','schedule-blocks','daily-study-targets','topic-reviews','quiz-log', 'error-notebook',
         ])
         Object.entries(data).forEach(([key, value]) => {
           const allowed = ALLOWED_KEYS.has(key)
