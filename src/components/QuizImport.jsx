@@ -1,24 +1,27 @@
 import { useState } from 'react'
 import { analyseQuiz, commitQuiz, buildPrompt } from '../lib/quizImport'
 
-const LABEL = { little: 'Sei pouco', good: 'Sei bem', unknown: 'Não sei', great: 'Sei muito bem' }
+const LABEL = { unknown: 'Não sei', little: 'Sei pouco', good: 'Sei bem', great: 'Sei muito bem' }
 
 export default function QuizImport() {
   const [text, setText] = useState('')
   const [an, setAn] = useState(null)
   const [accepted, setAccepted] = useState({})
+  const [acceptedNew, setAcceptedNew] = useState({})
   const [msg, setMsg] = useState('')
 
   const analyse = () => {
     const a = analyseQuiz(text)
     setAn(a); setMsg('')
     setAccepted(Object.fromEntries((a.suggestions || []).map(s => [String(s.topicId), true])))
+    setAcceptedNew(Object.fromEntries((a.newTopics || []).map(n => [n.name, true])))
   }
   const save = () => {
-    const r = commitQuiz(an, Object.keys(accepted).filter(k => accepted[k]))
-    setMsg(`Guardado · ${r.errors} erro(s) no caderno, ${r.doubts} dúvida(s), ${r.reviews} tópico(s) com revisões agendadas.`)
+    const r = commitQuiz(an, Object.keys(accepted).filter(k => accepted[k]), Object.keys(acceptedNew).filter(k => acceptedNew[k]))
+    setMsg(`Guardado · ${r.errors} erro(s) no caderno, ${r.doubts} dúvida(s), ${r.reviews} tópico(s) com revisões agendadas${r.added ? `, ${r.added} tópico(s) novo(s)` : ''}.`)
     setText(''); setAn(null)
   }
+  const note = { fontSize: 'var(--t-caption)', color: 'var(--gray-500)', margin: 0 }
 
   return (
     <div className="card" style={{ marginBottom: 20 }}>
@@ -28,10 +31,10 @@ export default function QuizImport() {
           onChange={e => { setText(e.target.value); setAn(null); setMsg('') }} style={{ fontFamily: 'inherit', resize: 'vertical' }} />
         <div style={{ display: 'flex', gap: 8 }}>
           {!an && <button className="btn btn-primary" disabled={!text.trim()} onClick={analyse}>Ler</button>}
-          <button className="btn btn-ghost" onClick={() => { navigator.clipboard.writeText(buildPrompt()); setMsg('Prompt copiado. Cola-o no Gemini uma vez.') }}>Copiar prompt para o Gemini</button>
+          <button className="btn btn-ghost" onClick={() => { navigator.clipboard.writeText(buildPrompt()); setMsg('Prompt copiado. Cola-o no Gemini depois do quiz.') }}>Copiar prompt para o Gemini</button>
         </div>
-        {msg && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-500)', margin: 0 }}>{msg}</p>}
-        {an && !an.ok && <p style={{ fontSize: 'var(--t-caption)', color: 'var(--red-500)', margin: 0 }}>{an.error}</p>}
+        {msg && <p style={note}>{msg}</p>}
+        {an && !an.ok && <p style={{ ...note, color: 'var(--red-500)' }}>{an.error}</p>}
         {an?.ok && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <p style={{ fontSize: 'var(--t-body)', color: 'var(--gray-800)', margin: 0 }}>
@@ -39,15 +42,22 @@ export default function QuizImport() {
               {' '}{an.parsed.erros.length} erro(s) · {an.parsed.duvidas.length} dúvida(s)
             </p>
             {an.unmatched.length > 0 && (
-              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', margin: 0 }}>
+              <p style={{ ...note, color: 'var(--gray-400)' }}>
                 Tópicos que não existem na cadeira (ficam no caderno, sem revisão): {an.unmatched.join(', ')}
               </p>
             )}
             {an.suggestions.map(s => (
-              <label key={s.topicId} style={{ display: 'flex', gap: 8, fontSize: 'var(--t-caption)', color: 'var(--gray-500)', cursor: 'pointer' }}>
+              <label key={s.topicId} style={{ display: 'flex', gap: 8, ...note, cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!accepted[String(s.topicId)]}
                   onChange={e => setAccepted({ ...accepted, [String(s.topicId)]: e.target.checked })} />
                 Passar “{s.name}” para {LABEL[s.to]} ({s.why})
+              </label>
+            ))}
+            {an.newTopics.map(n => (
+              <label key={n.name} style={{ display: 'flex', gap: 8, ...note, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!acceptedNew[n.name]}
+                  onChange={e => setAcceptedNew({ ...acceptedNew, [n.name]: e.target.checked })} />
+                Acrescentar o tópico novo “{n.name}” ({LABEL[n.to]})
               </label>
             ))}
             <div style={{ display: 'flex', gap: 8 }}>

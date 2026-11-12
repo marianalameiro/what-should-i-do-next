@@ -1,14 +1,15 @@
-// Lê o bloco "QUIZ" devolvido pelo Gemini e guarda-o.
-// Chaves novas: 'quiz-log' (um registo por quiz) e 'error-notebook' (erros e dúvidas).
+// Lê o bloco "QUIZ" devolvido pelo Gemini (ou outra ferramenta) e guarda-o.
+// Chaves: 'quiz-log' (um registo por quiz) e 'error-notebook' (erros e dúvidas).
 import { scheduleReviews } from './reviews'
 
 const norm = s => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 const read = (k, f) => { try { return JSON.parse(localStorage.getItem(k)) ?? f } catch { return f } }
 const write = (k, v) => localStorage.setItem(k, JSON.stringify(v))
 const num = v => { const n = parseInt(String(v).replace(/[^\d]/g, ''), 10); return Number.isFinite(n) ? n : 0 }
+const LEVELS = ['unknown', 'little', 'good', 'great']
 
 export function parseQuiz(text) {
-  const out = { cadeira: '', data: '', feitas: 0, certas: 0, topicos: [], erros: [], duvidas: [] }
+  const out = { cadeira: '', data: '', feitas: 0, certas: 0, topicos: [], erros: [], duvidas: [], niveis: [] }
   let section = null
   for (const raw of text.split('\n')) {
     const line = raw.trim()
@@ -24,6 +25,7 @@ export function parseQuiz(text) {
       else if (k === 'topicos') section = 'topicos'
       else if (k === 'erros') section = 'erros'
       else if (k === 'duvidas') section = 'duvidas'
+      else if (k === 'niveis') section = 'niveis'
       continue
     }
     if (section && isItem) {
@@ -31,6 +33,7 @@ export function parseQuiz(text) {
       if (section === 'topicos' && p[0]) out.topicos.push({ name: p[0], done: num(p[1]), correct: num(p[2]) })
       if (section === 'erros' && p[0]) out.erros.push({ topic: p[0], question: p[1] || '', answered: p[2] || '', right: p[3] || '' })
       if (section === 'duvidas' && p[0]) out.duvidas.push({ topic: p[0], text: p[1] || '' })
+      if (section === 'niveis' && p[0]) { const n = parseInt(p[1], 10); out.niveis.push({ name: p[0], level: n >= 1 && n <= 4 ? n : 0 }) }
     }
   }
   return out
@@ -64,6 +67,7 @@ export function analyseQuiz(text) {
   const unmatched = new Set()
   const suggestions = []
   const lookup = name => { const t = findTopic(list, name); if (!t) unmatched.add(name); return t }
+
   parsed.topicos.forEach(x => {
     const t = lookup(x.name)
     if (!t || x.done < 2) return
@@ -76,10 +80,25 @@ export function analyseQuiz(text) {
   })
   parsed.erros.forEach(x => lookup(x.topic))
   parsed.duvidas.forEach(x => lookup(x.topic))
-  return { ok: true, parsed, subject, storeKey, unmatched: [...unmatched], suggestions }
+
+  // Níveis indicados pelo Gemini (1 a 4; em branco = ignorar). Sobrepõem-se à sugestão pelas notas.
+  const newTopics = []
+  parsed.niveis.forEach(x => {
+    if (!x.level) return
+    const to = LEVELS[x.level - 1]
+    const t = findTopic(list, x.name)
+    if (!t) {
+      if (!newTopics.some(n => norm(n.name) === norm(x.name))) newTopics.push({ name: x.name, to })
+      return
+    }
+    const i = suggestions.findIndex(s => s.topicId === t.id)
+    if (i >= 0) suggestions.splice(i, 1)
+    if ((t.confidence || 'unknown') !== to) suggestions.push({ topicId: t.id, name: t.name, to, why: 'nível indicado pelo Gemini' })
+  })
+  return { ok: true, parsed, subject, storeKey, unmatched: [...unmatched], suggestions, newTopics }
 }
 
-export function commitQuiz(an, acceptedTopicIds = []) {
+export function commitQuiz(an, acceptedTopicIds = [], acceptedNew = []) {
   const { parsed, subject, storeKey } = an
   const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.data) ? parsed.data : new Date().toISOString().slice(0, 10)
   const quizId = `${subject.key}-${date}-${parsed.feitas}-${parsed.certas}`
@@ -108,13 +127,20 @@ export function commitQuiz(an, acceptedTopicIds = []) {
   parsed.topicos.forEach(x => { const t = findTopic(list, x.name); if (t && x.done >= 2 && x.correct / x.done < 0.7) toReview.set(t.id, t) })
   toReview.forEach(t => { try { scheduleReviews(subject.key, t) } catch {} })
 
+  let next = list, changed = false
   const acc = new Set(acceptedTopicIds.map(String))
   if (acc.size > 0) {
     const sug = new Map(an.suggestions.map(s => [String(s.topicId), s.to]))
-    topicsMap[storeKey] = list.map(t => acc.has(String(t.id)) && sug.has(String(t.id)) ? { ...t, confidence: sug.get(String(t.id)) } : t)
-    write('topics', topicsMap)
+    next = next.map(t => acc.has(String(t.id)) && sug.has(String(t.id)) ? { ...t, confidence: sug.get(String(t.id)) } : t)
+    changed = true
   }
-  return { errors: parsed.erros.length, doubts: parsed.duvidas.length, reviews: toReview.size }
+  const add = an.newTopics.filter(n => acceptedNew.includes(n.name))
+  if (add.length > 0) {
+    next = [...next, ...add.map((n, i) => ({ id: Date.now() + i, name: n.name, confidence: n.to }))]
+    changed = true
+  }
+  if (changed) { topicsMap[storeKey] = next; write('topics', topicsMap) }
+  return { errors: parsed.erros.length, doubts: parsed.duvidas.length, reviews: toReview.size, added: add.length }
 }
 
 export function resolveNotebookEntry(id) {
@@ -144,7 +170,7 @@ export function weeklyQuizStats(now = new Date()) {
   }
 }
 
-// Prompt para dar ao Gemini (ou outra ferramenta), com as cadeiras e tópicos de cada pessoa.
+// Prompt único para dar ao Gemini depois de cada quiz, com as cadeiras e tópicos de cada pessoa.
 export function buildPrompt() {
   const subs = (read('user-settings', {}).subjects || []).filter(s => !s.closed)
   const topics = read('topics', {})
@@ -152,7 +178,7 @@ export function buildPrompt() {
     const t = (topics[s.key] || topics[s.name] || []).map(x => x.name)
     return `- ${s.name}${t.length ? ` (tópicos: ${t.join('; ')})` : ''}`
   })
-  return `No fim de cada quiz, quando eu escrever "resumo", responde APENAS com este bloco, sem mais texto:
+  return `Com base neste quiz (e nos quizzes anteriores desta conversa), responde APENAS com este bloco, sem mais texto:
 
 QUIZ
 cadeira: <nome da cadeira>
@@ -165,5 +191,9 @@ erros:
 - <tópico> | <enunciado resumido> | <o que respondi> | <resposta certa>
 dúvidas:
 - <tópico> | <dúvida em uma frase>
-${lines.length ? `\nUsa exatamente estes nomes de cadeira e de tópicos:\n${lines.join('\n')}\n` : ''}`
+níveis:
+- <tópico> | <1 a 4>
+
+Regras para "níveis": 1 = Não sei, 2 = Sei pouco, 3 = Sei bem, 4 = Sei muito bem. Inclui os tópicos sobre os quais tens evidência nos quizzes, incluindo tópicos novos que ainda não estejam na lista. Se não tiveres a certeza, deixa o número em branco. Não inventes.
+${lines.length ? `\nUsa exatamente estes nomes de cadeira e de tópicos quando existirem:\n${lines.join('\n')}\n` : ''}`
 }
