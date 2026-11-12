@@ -202,6 +202,20 @@ export default function CadeiraPage({ subjectKey, settings, setSettings, onBack,
         <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500, marginTop: 5 }}>
           {pct}% da meta semestral · {targetH}h total
         </p>
+        {subjectTopics.length > 0 && (() => {
+          const seen = subjectTopics.filter(t => ['good', 'great'].includes(t.confidence)).length
+          const tp = Math.round(seen / subjectTopics.length * 100)
+          return (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ height: 8, borderRadius: 99, background: 'var(--gray-100)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${tp}%`, background: color, borderRadius: 99, transition: 'width 0.4s ease' }} />
+              </div>
+              <p style={{ fontSize: 'var(--t-caption)', color: 'var(--gray-400)', fontWeight: 500, marginTop: 5 }}>
+                {seen} de {subjectTopics.length} tópicos que sabes bem · {tp}%
+              </p>
+            </div>
+          )
+        })()}
       </div>
 
       {/* ── Exams ── */}
